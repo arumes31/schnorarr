@@ -52,6 +52,11 @@ type Engine struct {
 	lastSourceManifest *Manifest // Cached source manifest for quick polling comparison
 	targetManifest     *Manifest // In-memory cache of receiver state
 	syncMu             stdsync.Mutex
+
+	// Deletion Approval Safety Lock
+	pendingDeletions   []string
+	waitingForApproval bool
+	deletionAllowed    bool
 }
 
 // GetConfig returns the engine configuration
@@ -215,6 +220,25 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		e.lastSourceManifest = sourceManifest
 		return nil
 	}
+
+	// SAFETY LOCK: Intercept deletions
+	hasDeletions := len(plan.FilesToDelete) > 0 || len(plan.DirsToDelete) > 0
+	e.pausedMu.Lock()
+	if hasDeletions && !e.deletionAllowed {
+		e.waitingForApproval = true
+		e.pendingDeletions = append(plan.FilesToDelete, plan.DirsToDelete...)
+		e.pausedMu.Unlock()
+		log.Printf("[%s] SAFETY LOCK: %d deletions detected. Pausing for approval.", e.config.ID, len(e.pendingDeletions))
+		return nil
+	}
+	// If proceeding, reset approval state
+	if e.deletionAllowed {
+		e.deletionAllowed = false
+		e.waitingForApproval = false
+		e.pendingDeletions = nil
+		log.Printf("[%s] SAFETY LOCK: Deletions approved. Proceeding.", e.config.ID)
+	}
+	e.pausedMu.Unlock()
 
 	log.Printf("[%s] Starting sync: %s -> %s", e.config.ID, e.config.SourceDir, e.config.TargetDir)
 
@@ -610,4 +634,33 @@ func (e *Engine) GetStatus() string {
 		e.config.TargetDir,
 		e.lastSyncTime.Format("15:04:05"),
 	)
+}
+
+// ApproveDeletions allows the next sync to perform deletions
+func (e *Engine) ApproveDeletions() {
+	e.pausedMu.Lock()
+	e.deletionAllowed = true
+	e.waitingForApproval = false // Clear waiting state immediately so UI updates
+	e.pausedMu.Unlock()
+	log.Printf("[%s] Deletions approved by user. Triggering sync.", e.config.ID)
+
+	// Trigger immediate sync
+	go e.RunSync(nil)
+}
+
+// IsWaitingForApproval returns true if the engine is stopped due to pending deletions
+func (e *Engine) IsWaitingForApproval() bool {
+	e.pausedMu.RLock()
+	defer e.pausedMu.RUnlock()
+	return e.waitingForApproval
+}
+
+// GetPendingDeletions returns the list of files waiting to be deleted
+func (e *Engine) GetPendingDeletions() []string {
+	e.pausedMu.RLock()
+	defer e.pausedMu.RUnlock()
+	if e.pendingDeletions == nil {
+		return []string{}
+	}
+	return e.pendingDeletions
 }

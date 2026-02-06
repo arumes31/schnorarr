@@ -115,25 +115,32 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			LastSync                   string
 			TrafficToday, TrafficTotal string
 			Rule                       string
+			PendingDeletions           int
+			WaitingForApproval         bool
 		}
 		var engineViews []EngineView
 		for _, engine := range h.engines {
 			cfg := engine.GetConfig()
 			stats := database.GetEngineTrafficStats(cfg.ID)
 			engineViews = append(engineViews, EngineView{
-				ID:           cfg.ID,
-				Source:       cfg.SourceDir,
-				Target:       cfg.TargetDir,
-				Status:       engine.GetStatus(),
-				State:        "ACTIVE", // Default to ACTIVE
-				IsPaused:     engine.IsPaused(),
-				LastSync:     engine.GetLastSyncTime().Format("15:04:05"),
-				TrafficToday: database.FormatBytes(stats.Today),
-				TrafficTotal: database.FormatBytes(stats.Total),
-				Rule:         cfg.Rule,
+				ID:                 cfg.ID,
+				Source:             cfg.SourceDir,
+				Target:             cfg.TargetDir,
+				Status:             engine.GetStatus(),
+				State:              "ACTIVE", // Default to ACTIVE
+				IsPaused:           engine.IsPaused(),
+				LastSync:           engine.GetLastSyncTime().Format("15:04:05"),
+				TrafficToday:       database.FormatBytes(stats.Today),
+				TrafficTotal:       database.FormatBytes(stats.Total),
+				Rule:               cfg.Rule,
+				PendingDeletions:   len(engine.GetPendingDeletions()),
+				WaitingForApproval: engine.IsWaitingForApproval(),
 			})
 			if engine.IsPaused() {
 				engineViews[len(engineViews)-1].State = "PAUSED"
+			}
+			if engine.IsWaitingForApproval() {
+				engineViews[len(engineViews)-1].State = "WAITING_APPROVAL"
 			}
 		}
 
@@ -469,6 +476,8 @@ func (h *Handlers) EngineAction(w http.ResponseWriter, r *http.Request) {
 			}
 			log.Printf("[Dashboard] Triggering AJAX sync for engine %s", id)
 			go engine.RunSync(nil)
+		case "approve":
+			engine.ApproveDeletions()
 		default:
 			http.Error(w, "Invalid action", http.StatusBadRequest)
 			return

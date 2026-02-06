@@ -357,13 +357,17 @@ func checkReceiverHealth(healthState *health.State) {
 	check := func() {
 		resp, err := client.Get(targetURL)
 		if err != nil {
-			healthState.ReportReceiverError(fmt.Sprintf("Unreachable (%s): %v", destHost, err))
+			errMsg := fmt.Sprintf("Unreachable (%s): %v", destHost, err)
+			log.Printf("[Health] Receiver check failed: %s", errMsg)
+			healthState.ReportReceiverError(errMsg)
 			return
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			healthState.ReportReceiverError(fmt.Sprintf("Status: %s", resp.Status))
+			errMsg := fmt.Sprintf("Status: %s", resp.Status)
+			log.Printf("[Health] Receiver returned non-200: %s", errMsg)
+			healthState.ReportReceiverError(errMsg)
 		} else {
 			healthState.ReportReceiverSuccess()
 		}
