@@ -669,9 +669,14 @@
         <header class="action-bar">
             <div>
                 <h1 style="font-size: 32px; font-weight: 800; margin: 0;">Sync Center</h1>
-                <p style="color: var(--text-muted); margin: 5px 0 0 0;">System state: <span id="main-status-badge"
-                        class="status-pill {{if eq .State " ACTIVE"}}pill-active{{else if eq .State "PAUSED"
-                        }}pill-paused{{else}}pill-critical{{end}}">{{.State}}</span></p>
+                <p style="color: var(--text-muted); margin: 5px 0 0 0;">
+                    System: <span id="main-status-badge" class="status-pill {{if eq .State " ACTIVE"}}pill-active{{else
+                        if eq .State "PAUSED" }}pill-paused{{else}}pill-critical{{end}}">{{.State}}</span>
+                    <span style="margin: 0 8px; color: var(--border-glass);">|</span>
+                    Receiver: <span
+                        class="status-pill {{if .ReceiverHealthy}}pill-active{{else}}pill-critical{{end}}">{{if
+                        .ReceiverHealthy}}ONLINE{{else}}OFFLINE{{end}}</span>
+                </p>
             </div>
             <div style="display: flex; gap: 12px;">
                 <a href="/sync" class="btn-premium btn-sync-all">

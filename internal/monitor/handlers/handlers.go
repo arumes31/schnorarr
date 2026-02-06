@@ -142,7 +142,7 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 
 		data := struct {
 			Time, LastErrorMsg, Progress, LsyncdStatus string
-			Healthy                                    bool
+			Healthy, ReceiverHealthy                   bool
 			State                                      string
 			Queued                                     int
 			History                                    []database.HistoryItem
@@ -166,6 +166,10 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			ETA:          eta,
 			SyncMode:     database.GetSetting("sync_mode", "dry"),
 			Engines:      engineViews,
+			ReceiverHealthy: func() bool {
+				h, _ := h.healthState.GetReceiverStatus()
+				return h
+			}(),
 		}
 
 		funcMap := template.FuncMap{

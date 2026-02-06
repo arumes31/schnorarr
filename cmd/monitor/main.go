@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -89,6 +90,9 @@ func main() {
 
 		// 4. Status broadcaster for sync engines
 		go startSyncStatusBroadcaster(wsHub)
+
+		// 5. Receiver Health Checker
+		go checkReceiverHealth(healthState)
 	}
 
 	// HTTP server with handlers
@@ -96,6 +100,7 @@ func main() {
 
 	// Register routes
 	http.HandleFunc("/", h.Index)
+	http.HandleFunc("/health", h.Health)
 	http.HandleFunc("/history", h.History)
 	http.HandleFunc("/sync", h.ManualSync)
 	http.HandleFunc("/pause", h.GlobalPause)
@@ -324,5 +329,49 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub) {
 			"status":  progress,
 			"engines": len(syncEngines),
 		})
+	}
+}
+
+// checkReceiverHealth polls the receiver's health endpoint
+func checkReceiverHealth(healthState *health.State) {
+	destHost := os.Getenv("DEST_HOST")
+	if destHost == "" {
+		return
+	}
+
+	targetURL := fmt.Sprintf("http://%s:8080/health", destHost)
+	if strings.Contains(destHost, "http") || strings.Contains(destHost, ":") {
+		targetURL = fmt.Sprintf("%s/health", destHost)
+		if !strings.HasPrefix(targetURL, "http") {
+			targetURL = "http://" + targetURL
+		}
+	}
+
+	client := http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	check := func() {
+		resp, err := client.Get(targetURL)
+		if err != nil {
+			healthState.ReportReceiverError(fmt.Sprintf("Unreachable (%s): %v", destHost, err))
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			healthState.ReportReceiverError(fmt.Sprintf("Status: %s", resp.Status))
+		} else {
+			healthState.ReportReceiverSuccess()
+		}
+	}
+
+	check()
+
+	for range ticker.C {
+		check()
 	}
 }

@@ -10,11 +10,13 @@ const MaxConsecutiveErrors = 5
 
 // State tracks the system health state
 type State struct {
-	Healthy       bool
-	ErrorCount    int
-	LastErrorTime time.Time
-	LastErrorMsg  string
-	mu            sync.Mutex
+	Healthy          bool
+	ErrorCount       int
+	LastErrorTime    time.Time
+	LastErrorMsg     string
+	ReceiverHealthy  bool
+	ReceiverErrorMsg string
+	mu               sync.Mutex
 }
 
 // NotifyFunc is a callback for sending notifications
@@ -23,7 +25,8 @@ type NotifyFunc func(msg, msgType string)
 // New creates a new health state tracker
 func New() *State {
 	return &State{
-		Healthy: true,
+		Healthy:         true,
+		ReceiverHealthy: true, // Optimistic default
 	}
 }
 
@@ -59,9 +62,34 @@ func (s *State) ReportSuccess(notifyFn NotifyFunc) {
 	s.LastErrorMsg = ""
 }
 
+// ReportReceiverError records a receiver error
+func (s *State) ReportReceiverError(msg string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.ReceiverHealthy = false
+	s.ReceiverErrorMsg = msg
+}
+
+// ReportReceiverSuccess clears receiver errors
+func (s *State) ReportReceiverSuccess() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.ReceiverHealthy = true
+	s.ReceiverErrorMsg = ""
+}
+
 // GetStatus returns the current health status (thread-safe)
 func (s *State) GetStatus() (healthy bool, lastErr string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.Healthy, s.LastErrorMsg
+}
+
+// GetReceiverStatus returns the current receiver status (thread-safe)
+func (s *State) GetReceiverStatus() (healthy bool, lastErr string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ReceiverHealthy, s.ReceiverErrorMsg
 }
