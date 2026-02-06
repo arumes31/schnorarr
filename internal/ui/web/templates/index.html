@@ -917,9 +917,13 @@
 
             fetch('/settings/sync-mode', {
                 method: 'POST',
+                headers: { 'Accept': 'application/json' },
                 body: formData
             })
-                .then(r => r.json())
+                .then(r => {
+                    if (!r.ok) throw new Error(r.statusText);
+                    return r.json();
+                })
                 .then(data => {
                     if (data.status === 'success') toast(`Sync Mode: ${mode.toUpperCase()} enabled`, 'success');
                     else { toast("Failed to update mode", "error"); checkbox.checked = !checkbox.checked; }
@@ -948,8 +952,13 @@
             document.getElementById('preview-body').style.display = 'none';
             document.getElementById('preview-id').innerText = id;
 
-            fetch(`/api/engine/${id}/preview`)
-                .then(r => r.json())
+            fetch(`/api/engine/${id}/preview`, {
+                headers: { 'Accept': 'application/json' }
+            })
+                .then(r => {
+                    if (!r.ok) throw new Error(r.statusText);
+                    return r.json();
+                })
                 .then(plan => {
                     document.getElementById('preview-loading').style.display = 'none';
                     document.getElementById('preview-body').style.display = 'block';

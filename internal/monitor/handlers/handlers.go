@@ -490,13 +490,15 @@ func (h *Handlers) UpdateSyncMode(w http.ResponseWriter, r *http.Request) {
 		}
 
 		log.Printf("[Dashboard] Sync mode updated to: %s", mode)
-		// Return success as JSON if AJAX
-		if r.Header.Get("X-Requested-With") == "XMLHttpRequest" {
+
+		// Return JSON for AJAX requests (detected by header or if it's likely an API-style call)
+		if r.Header.Get("X-Requested-With") == "XMLHttpRequest" || r.Header.Get("Accept") == "application/json" {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"status": "success", "mode": mode})
 			return
 		}
 
+		// Fallback for direct form submissions
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
