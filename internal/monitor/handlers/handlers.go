@@ -114,6 +114,7 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			IsPaused                   bool
 			LastSync                   string
 			TrafficToday, TrafficTotal string
+			Rule                       string
 		}
 		var engineViews []EngineView
 		for _, engine := range h.engines {
@@ -129,6 +130,7 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 				LastSync:     engine.GetLastSyncTime().Format("15:04:05"),
 				TrafficToday: database.FormatBytes(stats.Today),
 				TrafficTotal: database.FormatBytes(stats.Total),
+				Rule:         cfg.Rule,
 			})
 			if engine.IsPaused() {
 				engineViews[len(engineViews)-1].State = "PAUSED"

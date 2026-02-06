@@ -251,6 +251,13 @@
             letter-spacing: 0.5px;
         }
 
+        .pill-rule {
+            background: rgba(147, 51, 234, 0.15);
+            /* Purple tint */
+            color: #d8b4fe;
+            border: 1px solid rgba(147, 51, 234, 0.3);
+        }
+
         .pill-active {
             background: rgba(0, 255, 173, 0.1);
             color: var(--accent-primary);
@@ -707,8 +714,11 @@
             <div id="engine-card-{{.ID}}" class="engine-card">
                 <div class="engine-header">
                     <div class="engine-title">Engine #{{.ID}}</div>
-                    <span id="engine-status-{{.ID}}" class="status-pill {{if eq .State " ACTIVE"}}pill-active{{else if
-                        eq .State "PAUSED" }}pill-paused{{else}}pill-critical{{end}}">{{.State}}</span>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        {{if .Rule}}<span class="status-pill pill-rule">{{.Rule}}</span>{{end}}
+                        <span id="engine-status-{{.ID}}" class="status-pill {{if eq .State " ACTIVE"}}pill-active{{else
+                            if eq .State "PAUSED" }}pill-paused{{else}}pill-critical{{end}}">{{.State}}</span>
+                    </div>
                 </div>
 
                 <div class="path-box">

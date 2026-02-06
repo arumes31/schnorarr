@@ -19,6 +19,8 @@ type SyncConfig struct {
 	SourceDir string
 	// TargetDir is the destination directory
 	TargetDir string
+	// Rule describes the sync strategy (e.g., "flat", "series")
+	Rule string
 	// ExcludePatterns are glob patterns to exclude from syncing
 	ExcludePatterns []string
 	// BandwidthLimit in bytes per second (0 = unlimited)

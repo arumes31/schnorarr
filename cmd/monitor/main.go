@@ -173,6 +173,7 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			ID:              strconv.Itoa(i),
 			SourceDir:       src,
 			TargetDir:       resolvedTgt,
+			Rule:            rule,
 			ExcludePatterns: excludePatterns,
 			BandwidthLimit:  bwlimitBytes,
 			WatchInterval:   3 * time.Hour, // Full scan every 3 hours
