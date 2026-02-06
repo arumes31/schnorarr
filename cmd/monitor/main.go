@@ -50,7 +50,7 @@ func main() {
 	logTailer := tailer.New(
 		func(timestamp, action, path string, size int64) {
 			// Log to database
-			if err := database.LogEvent(timestamp, action, path, size); err != nil {
+			if err := database.LogEvent(timestamp, action, path, size, "Legacy"); err != nil {
 				log.Printf("Failed to log event: %v", err)
 			}
 
@@ -182,7 +182,8 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			},
 			OnSyncEvent: func(timestamp, action, path string, size int64) {
 				// Log to database
-				if err := database.LogEvent(timestamp, action, path, size); err != nil {
+				engineID := strconv.Itoa(i)
+				if err := database.LogEvent(timestamp, action, path, size, engineID); err != nil {
 					log.Printf("Failed to log event: %v", err)
 				}
 

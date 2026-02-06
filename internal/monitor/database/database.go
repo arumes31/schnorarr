@@ -16,10 +16,11 @@ var DB *sql.DB
 
 // HistoryItem represents a single sync event
 type HistoryItem struct {
-	Time   string
-	Action string
-	Path   string
-	Size   string // Formatted size
+	Time     string
+	Action   string
+	Path     string
+	Size     string // Formatted size
+	EngineID string
 }
 
 // TrafficStats holds traffic statistics
@@ -109,6 +110,7 @@ func Init() error {
 
 		// Migration for existing DBs (ignore errors)
 		_, _ = DB.Exec("ALTER TABLE history ADD COLUMN size_bytes INTEGER DEFAULT 0")
+		_, _ = DB.Exec("ALTER TABLE history ADD COLUMN engine_id TEXT DEFAULT ''")
 
 		// Success!
 		log.Println("Database initialized successfully")
@@ -119,17 +121,17 @@ func Init() error {
 }
 
 // LogEvent logs a sync event to the database
-func LogEvent(timestamp, action, filePath string, size int64) error {
+func LogEvent(timestamp, action, path string, size int64, engineID string) error {
 	// Simple deduplication check
 	var exists int
 	err := DB.QueryRow("SELECT id FROM history WHERE timestamp=? AND action=? AND file_path=?",
-		timestamp, action, filePath).Scan(&exists)
+		timestamp, action, path).Scan(&exists)
 	if err == nil {
 		return nil // Already exists
 	}
 
-	_, err = DB.Exec("INSERT INTO history (timestamp, action, file_path, size_bytes) VALUES (?, ?, ?, ?)",
-		timestamp, action, filePath, size)
+	_, err = DB.Exec("INSERT INTO history (timestamp, action, file_path, size_bytes, engine_id) VALUES (?, ?, ?, ?, ?)",
+		timestamp, action, path, size, engineID)
 	if err != nil {
 		return fmt.Errorf("DB insert error: %w", err)
 	}
@@ -139,7 +141,7 @@ func LogEvent(timestamp, action, filePath string, size int64) error {
 
 // GetHistory retrieves history items with optional filtering
 func GetHistory(limit int, queryStr string) ([]HistoryItem, error) {
-	query := "SELECT timestamp, action, file_path, size_bytes FROM history"
+	query := "SELECT timestamp, action, file_path, size_bytes, COALESCE(engine_id, '') FROM history"
 	var args []interface{}
 
 	if queryStr != "" {
@@ -163,7 +165,7 @@ func GetHistory(limit int, queryStr string) ([]HistoryItem, error) {
 	for rows.Next() {
 		var item HistoryItem
 		var sizeBytes int64
-		if err := rows.Scan(&item.Time, &item.Action, &item.Path, &sizeBytes); err != nil {
+		if err := rows.Scan(&item.Time, &item.Action, &item.Path, &sizeBytes, &item.EngineID); err != nil {
 			log.Printf("Row Scan Error: %v", err)
 			continue
 		}
@@ -187,6 +189,25 @@ func GetTrafficStats() TrafficStats {
 	if err := DB.QueryRow("SELECT COALESCE(SUM(size_bytes), 0) FROM history WHERE action='Added' AND timestamp LIKE ?",
 		todayPrefix+"%").Scan(&s.Today); err != nil {
 		log.Printf("DB Today Stats Error: %v", err)
+	}
+
+	return s
+}
+
+// GetEngineTrafficStats returns traffic statistics for a specific engine
+func GetEngineTrafficStats(engineID string) TrafficStats {
+	var s TrafficStats
+
+	// Total
+	if err := DB.QueryRow("SELECT COALESCE(SUM(size_bytes), 0) FROM history WHERE action='Added' AND engine_id=?", engineID).Scan(&s.Total); err != nil {
+		// Ignore error, return 0
+	}
+
+	// Today
+	todayPrefix := time.Now().Format("2006/01/02")
+	if err := DB.QueryRow("SELECT COALESCE(SUM(size_bytes), 0) FROM history WHERE action='Added' AND engine_id=? AND timestamp LIKE ?",
+		engineID, todayPrefix+"%").Scan(&s.Today); err != nil {
+		// Ignore error
 	}
 
 	return s

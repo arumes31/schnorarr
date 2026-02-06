@@ -718,6 +718,25 @@
                     <div class="path-value">{{.Target}}</div>
                 </div>
 
+                <div style="display: flex; gap: 10px; margin-top: 12px; margin-bottom: 12px;">
+                    <div
+                        style="flex: 1; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
+                        <div
+                            style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">
+                            Today</div>
+                        <div style="font-size: 13px; font-weight: bold; color: var(--text-main);">{{.TrafficToday}}
+                        </div>
+                    </div>
+                    <div
+                        style="flex: 1; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
+                        <div
+                            style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">
+                            Total</div>
+                        <div style="font-size: 13px; font-weight: bold; color: var(--accent-secondary);">
+                            {{.TrafficTotal}}</div>
+                    </div>
+                </div>
+
                 <div style="font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between;">
                     <span>Last Sync:</span>
                     <span id="engine-lastsync-{{.ID}}" style="color: var(--text-main);">{{.LastSync}}</span>
