@@ -209,7 +209,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 
 	// 3. Compare
 	plan := CompareManifests(sourceManifest, e.targetManifest)
-	if len(plan.FilesToSync) == 0 && len(plan.FilesToDelete) == 0 && len(plan.DirsToCreate) == 0 && len(plan.DirsToDelete) == 0 {
+	if len(plan.FilesToSync) == 0 && len(plan.FilesToDelete) == 0 && len(plan.DirsToCreate) == 0 && len(plan.DirsToDelete) == 0 && len(plan.Renames) == 0 {
 		log.Printf("[%s] Sync skipped: No changes detected", e.config.ID)
 		e.lastSyncTime = time.Now()
 		e.lastSourceManifest = sourceManifest
@@ -496,7 +496,7 @@ func (e *Engine) sourcePollLoop() {
 			// If we have a previous manifest, compare them
 			if e.lastSourceManifest != nil {
 				plan := CompareManifests(currentSource, e.lastSourceManifest)
-				if len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.DirsToCreate) > 0 || len(plan.DirsToDelete) > 0 {
+				if len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.DirsToCreate) > 0 || len(plan.DirsToDelete) > 0 || len(plan.Renames) > 0 {
 					log.Printf("[%s] Polling detected changes on source, triggering sync", e.config.ID)
 					if err := e.RunSync(currentSource); err != nil {
 						log.Printf("[%s] Polling-triggered sync error: %v", e.config.ID, err)
