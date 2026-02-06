@@ -92,20 +92,28 @@ func main() {
 	}
 
 	// HTTP server with handlers
-	h := handlers.New(cfg, healthState, wsHub, database.DB, notifier)
+	h := handlers.New(cfg, healthState, wsHub, database.DB, notifier, syncEngines)
 
 	// Register routes
 	http.HandleFunc("/", h.Index)
 	http.HandleFunc("/history", h.History)
-	http.HandleFunc("/health", h.Health)
 	http.HandleFunc("/sync", h.ManualSync)
+	http.HandleFunc("/pause", h.GlobalPause)
+	http.HandleFunc("/resume", h.GlobalResume)
 	http.HandleFunc("/ws", h.WebSocket)
-	http.HandleFunc("/pause", makeAuthSyncHandler("pause"))
-	http.HandleFunc("/resume", makeAuthSyncHandler("resume"))
-	http.HandleFunc("/settings/bwlimit", makeBandwidthHandler(h))
-	http.HandleFunc("/settings/notifications", h.SetNotifications)
-	http.HandleFunc("/settings/scheduler", h.SetScheduler)
 	http.HandleFunc("/test-notify", h.TestNotify)
+	http.HandleFunc("/settings/scheduler", h.SetScheduler)
+	http.HandleFunc("/settings/notifications", h.SetNotifications)
+	http.HandleFunc("/settings/sync-mode", h.UpdateSyncMode)
+
+	// New engine-specific routes
+	http.HandleFunc("/api/engine/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/preview") {
+			h.EnginePreview(w, r)
+		} else {
+			h.EngineAction(w, r)
+		}
+	})
 
 	log.Printf("Monitor starting on port %s", Port)
 	log.Fatal(http.ListenAndServe(":"+Port, nil))
@@ -125,7 +133,13 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			continue
 		}
 
-		log.Printf("Configuring sync engine %d: %s -> %s (rule: %s)", i, src, tgt, rule)
+		// Resolve target path if it's an rsync string
+		resolvedTgt := sync.ResolveTargetPath(tgt, os.Getenv("DEST_HOST"), os.Getenv("DEST_MODULE"))
+		if resolvedTgt != tgt {
+			log.Printf("Resolved target %s to local path %s", tgt, resolvedTgt)
+		}
+
+		log.Printf("Configuring sync engine %d: %s -> %s (rule: %s)", i, src, resolvedTgt, rule)
 
 		// Determine exclusion patterns based on rule
 		var excludePatterns []string
@@ -146,13 +160,26 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			}
 		}
 
+		// Get poll interval
+		pollInterval := 10 * time.Second
+		if pollStr := os.Getenv("POLL_INTERVAL"); pollStr != "" {
+			if pi, err := strconv.Atoi(pollStr); err == nil && pi > 0 {
+				pollInterval = time.Duration(pi) * time.Second
+			}
+		}
+
 		// Create sync engine
 		engine := sync.NewEngine(sync.SyncConfig{
+			ID:              strconv.Itoa(i),
 			SourceDir:       src,
-			TargetDir:       tgt,
+			TargetDir:       resolvedTgt,
 			ExcludePatterns: excludePatterns,
 			BandwidthLimit:  bwlimitBytes,
-			WatchInterval:   60 * time.Second, // Full scan every 60 seconds
+			WatchInterval:   3 * time.Hour, // Full scan every 3 hours
+			PollInterval:    pollInterval,  // Fast source-only polling
+			DryRunFunc: func() bool {
+				return database.GetSetting("sync_mode", "dry") == "dry"
+			},
 			OnSyncEvent: func(timestamp, action, path string, size int64) {
 				// Log to database
 				if err := database.LogEvent(timestamp, action, path, size); err != nil {
@@ -261,18 +288,38 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub) {
 
 	for range ticker.C {
 		// Build status summary
-		status := "Idle"
+		status := "No sync engines active."
+		progress := "System Idle"
+		state := "ACTIVE"
+
 		if len(syncEngines) > 0 {
-			isPaused := syncEngines[0].IsPaused()
-			if isPaused {
-				status = "Paused"
+			var sb strings.Builder
+			allPaused := true
+			for _, engine := range syncEngines {
+				sb.WriteString(engine.GetStatus() + "\n")
+				if !engine.IsPaused() {
+					allPaused = false
+				}
+			}
+			status = sb.String()
+
+			if allPaused {
+				state = "PAUSED"
+				progress = "Sync Paused"
 			} else {
-				status = "Running"
+				progress = "Monitoring..."
 			}
 		}
 
+		wsHub.Broadcast("progress", map[string]interface{}{
+			"status": status,
+			"speed":  "0 B/s",
+			"eta":    "Done",
+			"state":  state,
+		})
+
 		wsHub.Broadcast("sync_status", map[string]interface{}{
-			"status":  status,
+			"status":  progress,
 			"engines": len(syncEngines),
 		})
 	}

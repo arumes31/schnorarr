@@ -97,6 +97,16 @@ func Init() error {
 			continue
 		}
 
+		// Settings table
+		_, err = DB.Exec(`CREATE TABLE IF NOT EXISTS settings (
+			key TEXT PRIMARY KEY,
+			value TEXT
+		);`)
+		if err != nil {
+			DB.Close()
+			continue
+		}
+
 		// Migration for existing DBs (ignore errors)
 		_, _ = DB.Exec("ALTER TABLE history ADD COLUMN size_bytes INTEGER DEFAULT 0")
 
@@ -231,6 +241,22 @@ func GetDailyTraffic(days int) []DailyTraffic {
 	}
 
 	return results
+}
+
+// SaveSetting saves or updates a setting in the database
+func SaveSetting(key, value string) error {
+	_, err := DB.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value)
+	return err
+}
+
+// GetSetting retrieves a setting from the database, returns default if not found
+func GetSetting(key, defaultValue string) string {
+	var value string
+	err := DB.QueryRow("SELECT value FROM settings WHERE key=?", key).Scan(&value)
+	if err != nil {
+		return defaultValue
+	}
+	return value
 }
 
 // FormatBytes converts bytes to human-readable format

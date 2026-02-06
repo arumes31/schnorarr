@@ -5,7 +5,6 @@ services:
       - MODE=sender
       - DEST_HOST=${DEST_HOST:-receiver}
       - DEST_MODULE=video-sync
-      - DRY_RUN=${DRY_RUN:-false}
       - RSYNC_USER=${RSYNC_USER:-syncuser}
       - RSYNC_PASSWORD=${RSYNC_PASSWORD:-secretpassword}
       - BWLIMIT_MBPS=${BWLIMIT_MBPS:-50}

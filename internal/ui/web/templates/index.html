@@ -1,194 +1,517 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <title>schnorarr Dashboard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>schnorarr | Sync Dashboard</title>
     <style>
+        :root {
+            --bg-deep: #0a0b10;
+            --bg-glass: rgba(25, 27, 38, 0.7);
+            --bg-card: rgba(35, 38, 55, 0.5);
+            --border-glass: rgba(255, 255, 255, 0.1);
+            --accent-primary: #00ffad;
+            --accent-secondary: #0079d3;
+            --accent-warning: #ffb300;
+            --accent-error: #ff3d00;
+            --text-main: #e0e6ed;
+            --text-muted: #94a3b8;
+            --sidebar-width: 260px;
+            --glass-blur: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a1b;
-            color: #d7dadc;
-            padding: 40px;
-            line-height: 1.6;
-        }
-
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-
-        pre {
-            background: #272729;
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid #343536;
-            overflow: auto;
-            font-size: 12px;
-            color: #818384;
-        }
-
-        h1 {
-            color: #ff4500;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-deep);
+            background-image:
+                radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
+                radial-gradient(at 50% 0%, hsla(225, 39%, 10%, 1) 0, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(339, 49%, 10%, 1) 0, transparent 50%);
+            color: var(--text-main);
             margin: 0;
-        }
-
-        h2 {
-            color: #d7dadc;
-            margin-top: 40px;
-            border-left: 4px solid #4caf50;
-            padding-left: 15px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 18px;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        .status-bar {
-            background: #272729;
-            padding: 15px 25px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border: 1px solid #343536;
-        }
-
-        .status-badge {
-            background: #0079d3;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        .file-list {
-            list-style: none;
-            padding: 0;
-        }
-
-        .timestamp {
-            color: #818384;
-        }
-
-        .badge {
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: bold;
-            color: white;
-            text-transform: uppercase;
-        }
-
-        .badge-added {
-            background: #4caf50;
-        }
-
-        .badge-deleted {
-            background: #f44336;
-        }
-
-        .path-cell {
-            color: #0079d3;
-            word-break: break-all;
-        }
-
-        .history-link {
-            font-size: 12px;
-            color: #0079d3;
-            text-decoration: none;
-            font-weight: bold;
-            border: 1px solid #343536;
-            padding: 4px 10px;
-            border-radius: 4px;
-        }
-
-        .history-link:hover {
-            background: #343536;
-        }
-
-        /* Chart CSS */
-        .chart-container {
-            display: flex;
-            align-items: flex-end;
-            height: 150px;
-            gap: 10px;
-            padding: 10px;
-            border: 1px solid #343536;
-            background: #272729;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        .chart-bar {
-            flex: 1;
-            background: #4caf50;
-            border-radius: 4px 4px 0 0;
-            transition: height 0.3s ease;
-            position: relative;
-            min-height: 4px;
-            /* Ensure 0 values have a line */
-        }
-
-        .chart-bar:hover {
-            background: #66bb6a;
-        }
-
-        .chart-label {
-            text-align: center;
-            font-size: 10px;
-            color: #818384;
-            margin-top: 5px;
-        }
-
-        .chart-value {
-            position: absolute;
-            top: -20px;
-            width: 100%;
-            text-align: center;
-            font-size: 10px;
-            color: white;
-            display: none;
-        }
-
-        .chart-bar:hover .chart-value {
-            display: block;
-        }
-
-        /* UX: Toast Notification */
-        #toast-container {
+        /* Sidebar Navigation */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: rgba(10, 11, 16, 0.8);
+            backdrop-filter: blur(var(--glass-blur));
+            border-right: 1px solid var(--border-glass);
+            height: 100vh;
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            left: 0;
+            top: 0;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            padding: 30px 20px;
             z-index: 1000;
         }
 
-        .toast {
-            background: #272729;
-            color: #d7dadc;
-            padding: 12px 20px;
-            border-radius: 4px;
-            border-left: 4px solid #0079d3;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 50px;
+        }
+
+        .logo-area h1 {
+            font-size: 20px;
+            font-weight: 800;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 0;
+        }
+
+        .nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 10px;
+            color: var(--text-muted);
+            text-decoration: none;
             font-size: 14px;
-            animation: slideIn 0.3s ease-out;
-            min-width: 200px;
+            font-weight: 500;
         }
 
-        .toast.success {
-            border-left-color: #4caf50;
+        .nav-link:hover,
+        .nav-link.active {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
         }
 
-        .toast.error {
-            border-left-color: #f44336;
+        .nav-link svg {
+            width: 18px;
+            height: 18px;
+            opacity: 0.7;
         }
 
-        .toast.warning {
-            border-left-color: #ffa726;
+        /* Sync Mode Toggle in Sidebar */
+        .sidebar-footer {
+            margin-top: auto;
+            border-top: 1px solid var(--border-glass);
+            padding-top: 20px;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            padding: 40px;
+            max-width: 1400px;
+        }
+
+        /* Top Bar Stats */
+        .top-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: var(--bg-glass);
+            backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::after {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at center, rgba(255, 255, 255, 0.03) 0, transparent 70%);
+            pointer-events: none;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent-primary);
+        }
+
+        /* Action Bar */
+        .action-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .btn-premium {
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-sync-all {
+            background: linear-gradient(135deg, #00C853, #64DD17);
+            color: #000;
+            box-shadow: 0 4px 15px rgba(100, 221, 23, 0.3);
+        }
+
+        .btn-sync-all:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(100, 221, 23, 0.5);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border-color: var(--border-glass);
+            color: var(--text-main);
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Engine Grid */
+        .engine-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 25px;
+            margin-bottom: 50px;
+        }
+
+        .engine-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            position: relative;
+        }
+
+        .engine-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: scale(1.02);
+            background: rgba(45, 48, 65, 0.6);
+        }
+
+        .engine-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .engine-title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .status-pill {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .pill-active {
+            background: rgba(0, 255, 173, 0.1);
+            color: var(--accent-primary);
+            border: 1px solid rgba(0, 255, 173, 0.3);
+        }
+
+        .pill-paused {
+            background: rgba(255, 179, 0, 0.1);
+            color: var(--accent-warning);
+            border: 1px solid rgba(255, 179, 0, 0.3);
+        }
+
+        .pill-critical {
+            background: rgba(255, 61, 0, 0.1);
+            color: var(--accent-error);
+            border: 1px solid rgba(255, 61, 0, 0.3);
+        }
+
+        .path-box {
+            background: rgba(10, 11, 16, 0.4);
+            border-radius: 12px;
+            padding: 12px;
+            font-size: 12px;
+        }
+
+        .path-label {
+            color: var(--text-muted);
+            font-size: 10px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .path-value {
+            font-family: 'JetBrains Mono', monospace;
+            word-break: break-all;
+            color: var(--accent-secondary);
+        }
+
+        .engine-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .ctrl-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-glass);
+            border-radius: 8px;
+            padding: 8px;
+            color: var(--text-main);
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .ctrl-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .ctrl-btn-sync {
+            color: var(--accent-primary);
+        }
+
+        .ctrl-btn-preview {
+            color: var(--accent-secondary);
+        }
+
+        /* Sync Mode Toggle - Premium */
+        .mode-toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 12px;
+            margin-top: 20px;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 80px;
+            height: 32px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-deep);
+            border: 1px solid var(--border-glass);
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 24px;
+            width: 36px;
+            left: 4px;
+            bottom: 3px;
+            background-color: var(--text-muted);
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        input:checked+.slider {
+            border-color: var(--accent-primary);
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(34px);
+            background-color: var(--accent-primary);
+        }
+
+        /* Terminal CSS */
+        .terminal-window {
+            background: #0d0f14;
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .terminal-header {
+            background: #1a1c22;
+            padding: 8px 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border-glass);
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .dot-red {
+            background: #ff5f56;
+        }
+
+        .dot-yellow {
+            background: #ffbd2e;
+        }
+
+        .dot-green {
+            background: #27c93f;
+        }
+
+        .terminal-body {
+            height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+            font-size: 13px;
+            color: #00ff00;
+            line-height: 1.5;
+        }
+
+        /* Activity List */
+        .activity-card {
+            background: var(--bg-glass);
+            border-radius: 16px;
+            border: 1px solid var(--border-glass);
+            padding: 24px;
+        }
+
+        .activity-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            border: 1px solid transparent;
+        }
+
+        .activity-item:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: var(--border-glass);
+        }
+
+        .action-badge {
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 10px;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .badge-added {
+            background: rgba(0, 255, 173, 0.1);
+            color: var(--accent-primary);
+        }
+
+        .badge-deleted {
+            background: rgba(255, 61, 0, 0.1);
+            color: var(--accent-error);
+        }
+
+        .badge-renamed {
+            background: rgba(255, 179, 0, 0.1);
+            color: var(--accent-warning);
+        }
+
+        .badge-dry {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            border: 1px dashed var(--border-glass);
+        }
+
+        /* Toasts */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background: #1a1c22;
+            border: 1px solid var(--border-glass);
+            border-left: 4px solid var(--accent-secondary);
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: var(--text-main);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            min-width: 250px;
         }
 
         @keyframes slideIn {
@@ -203,401 +526,510 @@
             }
         }
 
-        /* UX: Skeleton Loading */
-        .skeleton {
-            background: linear-gradient(90deg, #272729 25%, #343536 50%, #272729 75%);
-            background-size: 200% 100%;
-            animation: loading 1.5s infinite;
-            color: transparent !important;
-            border-radius: 4px;
-        }
-
-        @keyframes loading {
+        /* Keyframes */
+        @keyframes loading-pulse {
             0% {
-                background-position: 200% 0;
+                opacity: 0.5;
+            }
+
+            50% {
+                opacity: 1;
             }
 
             100% {
-                background-position: -200% 0;
+                opacity: 0.5;
             }
         }
 
-        /* UX: Mobile Layout */
-        @media (max-width: 768px) {
-            body {
-                padding: 15px;
+        .sync-pulse {
+            animation: loading-pulse 1.5s infinite;
+        }
+
+        /* Responsiveness */
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 80px;
+                padding: 20px 10px;
+                align-items: center;
             }
 
-            .container {
-                width: 100%;
-                margin: 0;
+            .logo-area h1,
+            .nav-link span,
+            .sidebar-footer div {
+                display: none;
             }
 
-            h1 {
-                font-size: 24px;
+            .nav-link {
+                padding: 12px;
+                justify-content: center;
             }
 
-            .status-bar {
-                flex-direction: column;
-                gap: 10px;
-                align-items: flex-start;
+            .main-content {
+                margin-left: 80px;
+                padding: 20px;
             }
 
-            /* Stack Grids */
-            div[style*="grid-template-columns"] {
-                grid-template-columns: 1fr !important;
+            .top-stats {
+                grid-template-columns: 1fr;
             }
+        }
 
-            /* Adjust Chart */
-            .chart-container {
-                height: 100px;
-            }
+        /* Modal Redesign */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
 
-            /* Buttons */
-            a[href="/sync"],
-            a[href="/history"] {
-                padding: 6px 12px !important;
-                font-size: 12px !important;
-            }
+        .modal-content {
+            background: var(--bg-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 24px;
+            width: 100%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
         }
     </style>
-    <link rel="icon" type="image/x-icon" href="data:image/x-icon;base64,">
-    <!-- <meta http-equiv="refresh" content="5"> Removed for WS -->
 </head>
 
 <body>
-    <div id="toast-container"></div>
-    <div class="container">
-        <div
-            style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #343536; margin-bottom: 30px; padding-bottom: 10px;">
-            <h1>schnorarr Sync Center</h1>
-            <div style="display: flex; gap: 15px;">
-                <a href="/test-notify"
-                    style="padding: 8px 15px; font-size: 12px; border: 1px solid #343536; border-radius: 4px; color: #818384; text-decoration: none;">🔔
-                    TEST ALERT</a>
-                <a href="/history" class="history-link" style="padding: 8px 20px; font-size: 14px;">📜 FULL HISTORY</a>
-                <a href="/sync"
-                    style="background: #4caf50; color: white; text-decoration: none; padding: 8px 20px; border-radius: 5px; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">⚡
-                    SYNC NOW</a>
-            </div>
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Navigation Sidebar -->
+    <aside class="sidebar">
+        <div class="logo-area">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="var(--accent-primary)" />
+                <path d="M2 17L12 22L22 17" stroke="var(--accent-secondary)" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <path d="M2 12L12 17L22 12" stroke="var(--accent-secondary)" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+            </svg>
+            <h1>schnorarr</h1>
         </div>
 
-        <div class="status-bar" style="justify-content: space-between;">
-            <div style="display: flex; gap: 10px; align-items: center;">
-                {{if .Healthy}}
-                <span>Status: <span class='status-badge'>ACTIVE</span></span>
-                {{else}}
-                <span>Status: <span class='status-badge' style='background: #f44336;'>CRITICAL ERROR</span></span>
-                {{end}}
-                <a href="/pause" style="margin-left: 10px; font-size: 11px; color: #ffa726; text-decoration: none;">⏸️
-                    PAUSE</a>
-                <a href="/resume" style="font-size: 11px; color: #4caf50; text-decoration: none;">▶️ RESUME</a>
-            </div>
-            <span class="timestamp" style='font-size: 13px;'>Server Time: {{.Time}}</span>
-        </div>
+        <nav class="nav-items">
+            <a href="#" class="nav-link active">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                <span>Dashboard</span>
+            </a>
+            <a href="/history" class="nav-link">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>History</span>
+            </a>
+            <a href="#logs" class="nav-link">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Live Logs</span>
+            </a>
+        </nav>
 
-        <!-- Traffic Stats -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-            <div
-                style="background: #272729; padding: 20px; border-radius: 8px; border: 1px solid #343536; text-align: center;">
-                <div style="font-size: 12px; color: #818384; text-transform: uppercase; margin-bottom: 5px;">Traffic
-                    Today</div>
-                <div style="font-size: 12px; color: #818384; text-transform: uppercase; margin-bottom: 5px;">Traffic
-                    Today</div>
-                <div id="stat-today" class="skeleton" style="font-size: 24px; color: #4caf50; font-weight: bold;">--
-                </div>
-            </div>
-            <div
-                style="background: #272729; padding: 20px; border-radius: 8px; border: 1px solid #343536; text-align: center;">
-                <div style="font-size: 12px; color: #818384; text-transform: uppercase; margin-bottom: 5px;">Total
-                    Traffic</div>
-                <div id="stat-total" class="skeleton" style="font-size: 24px; color: #0079d3; font-weight: bold;">--
-                </div>
+        <div class="sidebar-footer">
+            <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">
+                Safety Mode</div>
+            <div class="mode-toggle-container">
+                <span id="mode-label" style="font-size: 12px; font-weight: bold; color: var(--text-muted);">DRY
+                    RUN</span>
+                <label class="switch">
+                    <input type="checkbox" id="sync-mode-toggle" onchange="updateSyncMode(this)" {{if eq
+                        .SyncMode "auto" }}checked{{end}}>
+                    <span class="slider"></span>
+                </label>
             </div>
         </div>
+    </aside>
 
-        <!-- Current Speed (Added for Fix) -->
-        <div
-            style="background: #272729; padding: 20px; border-radius: 8px; border: 1px solid #343536; text-align: center; margin-bottom: 30px;">
-            <div style="font-size: 12px; color: #818384; text-transform: uppercase; margin-bottom: 5px;">Current Speed
-            </div>
-            <div id="stat-speed" style="font-size: 32px; color: #e91e63; font-weight: bold;">{{.CurrentSpeed}}</div>
-        </div>
-
-        {{if not .Healthy}}
-        <div
-            style="background: #3e1b1b; color: #ff8a80; padding: 15px; border-radius: 8px; border: 1px solid #c62828; margin-bottom: 20px;">
-            <strong>⚠️ SYSTEM ALERT:</strong> {{.LastErrorMsg}}
-        </div>
-        {{end}}
-
-        <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 30px;">
+    <!-- Main Content -->
+    <main class="main-content">
+        <header class="action-bar">
             <div>
-                <h2>Recent Activity</h2>
-                <ul id="history-list" class="file-list">
+                <h1 style="font-size: 32px; font-weight: 800; margin: 0;">Sync Center</h1>
+                <p style="color: var(--text-muted); margin: 5px 0 0 0;">System state: <span id="main-status-badge"
+                        class="status-pill {{if eq .State " ACTIVE"}}pill-active{{else if eq .State "PAUSED"
+                        }}pill-paused{{else}}pill-critical{{end}}">{{.State}}</span></p>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <a href="/sync" class="btn-premium btn-sync-all">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    SYNC ALL
+                </a>
+                <div style="display: flex; gap: 8px;">
+                    <a href="/pause" class="btn-premium btn-outline" title="Pause All">⏸️</a>
+                    <a href="/resume" class="btn-premium btn-outline" title="Resume All">▶️</a>
+                    <a href="/test-notify" class="btn-premium btn-outline" title="Test Notification">🔔</a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Stats Overview -->
+        <section class="top-stats">
+            <div class="stat-card">
+                <div class="stat-label">Traffic Today</div>
+                <div id="stat-today" class="stat-value">{{.TrafficToday}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Traffic</div>
+                <div id="stat-total" class="stat-value" style="color: var(--accent-secondary);">{{.TrafficTotal}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Transfer Speed</div>
+                <div id="stat-speed" class="stat-value" style="color: #FF00E5;">{{.CurrentSpeed}}</div>
+            </div>
+        </section>
+
+        <!-- Engine Grid -->
+        <h2
+            style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 20px;">
+            Active Sync Engines</h2>
+        <section class="engine-grid">
+            {{range .Engines}}
+            <div id="engine-card-{{.ID}}" class="engine-card">
+                <div class="engine-header">
+                    <div class="engine-title">Engine #{{.ID}}</div>
+                    <span id="engine-status-{{.ID}}" class="status-pill {{if eq .State " ACTIVE"}}pill-active{{else if
+                        eq .State "PAUSED" }}pill-paused{{else}}pill-critical{{end}}">{{.State}}</span>
+                </div>
+
+                <div class="path-box">
+                    <div class="path-label">Source</div>
+                    <div class="path-value">{{.Source}}</div>
+                    <div class="path-label" style="margin-top: 8px;">Target</div>
+                    <div class="path-value">{{.Target}}</div>
+                </div>
+
+                <div style="font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between;">
+                    <span>Last Sync:</span>
+                    <span id="engine-lastsync-{{.ID}}" style="color: var(--text-main);">{{.LastSync}}</span>
+                </div>
+
+                <div class="engine-controls">
+                    <button onclick="engineAction('{{.ID}}', 'sync')" class="ctrl-btn ctrl-btn-sync">
+                        ⚡ Sync
+                    </button>
+                    <button onclick="showPreview('{{.ID}}')" class="ctrl-btn ctrl-btn-preview">
+                        🔍 Preview
+                    </button>
+                    <button id="engine-btn-toggle-{{.ID}}"
+                        onclick="engineAction('{{.ID}}', '{{if .IsPaused}}resume{{else}}pause{{end}}')"
+                        class="ctrl-btn">
+                        {{if .IsPaused}}▶️ Resume{{else}}⏸️ Pause{{end}}
+                    </button>
+                </div>
+            </div>
+            {{end}}
+        </section>
+
+        <!-- Lower Panel: Activity & Logs -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: start;">
+            <!-- Activity -->
+            <section class="activity-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0; font-size: 18px;">Recent Activity</h2>
+                    <a href="/history"
+                        style="color: var(--accent-secondary); font-size: 12px; text-decoration: none; font-weight: bold;">View
+                        All →</a>
+                </div>
+                <ul id="history-list" class="activity-list">
                     {{range .History}}
-                    <li
-                        style="display: flex; flex-direction: column; background: #272729; margin-bottom: 15px; padding: 15px; border-radius: 6px; border: 1px solid #343536; border-left: 4px solid #4caf50;">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                            <span class='badge badge-{{.Action}}'>{{.Action}}</span>
-                            <span class='timestamp' style='font-size: 11px; color: #818384;'>{{.Time}}</span>
+                    <li class="activity-item">
+                        <span class="action-badge badge-{{lower .Action}}">{{.Action}}</span>
+                        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            {{.Path}} <span style="color: var(--text-muted); font-size: 11px;">({{.Size}})</span>
                         </div>
-                        <div class='path-cell' style='font-size: 14px; font-weight: 500; letter-spacing: 0.3px;'>
-                            {{.Path}}</div>
+                        <span
+                            style="font-family: monospace; font-size: 11px; color: var(--text-muted);">{{.Time}}</span>
                     </li>
                     {{else}}
-                    <li>No files synced recently.</li>
+                    <li style="color: var(--text-muted); text-align: center; padding: 20px;">No recent sync activity.
+                    </li>
                     {{end}}
                 </ul>
-            </div>
-            <div>
-                <h2>Live Progress</h2>
-                {{if .Progress}}
-                <div
-                    style="background: #272729; padding: 25px; border-radius: 8px; border: 1px solid #343536; border-top: 4px solid #ffa726;">
-                    <h3 style="margin-top: 0; color: #ffa726; font-size: 14px; text-transform: uppercase;">Active
-                        Transfer</h3>
-                    <div
-                        style="font-family: monospace; font-size: 13px; color: #ffd54f; margin-bottom: 15px; background: #1a1a1b; padding: 10px; border-radius: 4px; overflow-wrap: break-word;">
-                        {{.Progress}}
-                    </div>
-                    <div style="font-size: 12px; color: #818384; display: flex; justify-content: space-between;">
-                        <span>Queue Status: <strong>{{.Queued}} batch(es) pending</strong></span>
-                        <span id="eta-display" style="color: #4caf50; font-weight: bold;">ETA: Calculating...</span>
+            </section>
+
+            <!-- Live Logs -->
+            <section id="logs" class="terminal-window">
+                <header class="terminal-header">
+                    <div class="dot dot-red"></div>
+                    <div class="dot dot-yellow"></div>
+                    <div class="dot dot-green"></div>
+                    <span style="font-size: 11px; color: var(--text-muted); margin-left: 10px; font-weight: bold;">LIVE
+                        LOG STREAM</span>
+                </header>
+                <div class="terminal-body" id="log-container">
+                    <div style="color: var(--text-muted);">[SYSTEM] Connected to schnorarr-monitor. Awaiting logs...
                     </div>
                 </div>
-                {{else}}
-                <div
-                    style="background: #272729; padding: 25px; border-radius: 8px; border: 1px solid #343536; border-top: 4px solid #818384; text-align: center; color: #818384;">
-                    <div style="font-size: 32px; margin-bottom: 10px;">💤</div>
-                    <div style="font-weight: bold;">System Idle</div>
-                    <div style="font-size: 12px; margin-top: 5px;">Queue is empty or waiting for changes.</div>
-                </div>
-                {{end}}
-            </div>
+            </section>
         </div>
 
-        <!-- Settings -->
-        <div
-            style="background: #272729; padding: 20px; border-radius: 8px; border: 1px solid #343536; margin-bottom: 30px;">
-            <h3 style="margin-top: 0; color: #d7dadc; border-bottom: 1px solid #343536; padding-bottom: 10px;">⚙️ Sync
-                Settings</h3>
+        <!-- System Settings Section -->
+        <h2
+            style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 50px 0 20px 0;">
+            Advanced Settings</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+            <div class="activity-card">
+                <h3 style="margin-top: 0; font-size: 16px;">📅 Sync Scheduler</h3>
+                <form action="/settings/scheduler" method="POST"
+                    style="display: flex; flex-direction: column; gap: 15px;">
+                    <div>
+                        <label style="font-size: 12px; color: var(--text-muted);">Quiet Hours (e.g. 08:00-18:00)</label>
+                        <input type="text" name="quiet_hours" placeholder="HH:MM-HH:MM"
+                            style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
+                    </div>
+                    <button type="submit" class="btn-premium btn-outline"
+                        style="width: 100%; justify-content: center;">Save Schedule</button>
+                </form>
+            </div>
+            <div class="activity-card">
+                <h3 style="margin-top: 0; font-size: 16px;">📧 Notifications</h3>
+                <form action="/settings/notifications" method="POST"
+                    style="display: flex; flex-direction: column; gap: 15px;">
+                    <div>
+                        <label style="font-size: 12px; color: var(--text-muted);">Discord Webhook URL</label>
+                        <input type="text" name="webhook_url" placeholder="https://discord.com/api/webhooks/..."
+                            style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
+                    </div>
+                    <button type="submit" class="btn-premium btn-outline"
+                        style="width: 100%; justify-content: center;">Save Webhook</button>
+                </form>
+            </div>
+        </div>
+    </main>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
-                <!-- BW Limit -->
-                <div>
-                    <form action="/settings/bwlimit" method="POST"
-                        style="display: flex; flex-direction: column; gap: 10px;">
-                        <label style="font-size: 13px; color: #818384; font-weight: bold;">Bandwidth Limit</label>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="number" name="bwlimit" placeholder="Mbps"
-                                style="padding: 8px; border-radius: 4px; border: 1px solid #343536; background: #1a1a1b; color: white; flex: 1;">
-                            <button type="submit"
-                                style="padding: 8px; border-radius: 4px; border: none; background: #0079d3; color: white; cursor: pointer;">Set</button>
-                        </div>
-                    </form>
+    <!-- Preview Modal -->
+    <div id="modal-container" style="display: none;">
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;">
+                    <h2 style="margin: 0; color: var(--accent-secondary);">Sync Preview: <span id="preview-id"></span>
+                    </h2>
+                    <button onclick="closeModal()"
+                        style="background: transparent; border: none; color: white; font-size: 24px; cursor: pointer;">&times;</button>
                 </div>
 
-                <!-- Scheduler -->
-                <div>
-                    <form action="/settings/scheduler" method="POST"
-                        style="display: flex; flex-direction: column; gap: 10px;">
-                        <label style="font-size: 13px; color: #818384; font-weight: bold;">Quiet Hours Scheduler</label>
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <input type="checkbox" name="scheduler_enabled"> <span>Enable</span>
-                        </div>
-                        <div style="display: flex; gap: 5px;">
-                            <input type="time" name="quiet_start" title="Start Time"
-                                style="background:#1a1a1b; color:white; border:1px solid #343536; border-radius:4px;">
-                            <span>to</span>
-                            <input type="time" name="quiet_end" title="End Time"
-                                style="background:#1a1a1b; color:white; border:1px solid #343536; border-radius:4px;">
-                        </div>
-                        <div style="display: flex; gap: 5px; align-items: center;">
-                            <span style="font-size: 12px;">Limit:</span>
-                            <input type="number" name="quiet_limit" placeholder="Mbps"
-                                style="width: 60px; background:#1a1a1b; color:white; border:1px solid #343536; border-radius:4px;">
-                            <button type="submit"
-                                style="padding: 4px 8px; border-radius: 4px; border: none; background: #4caf50; color: white; cursor: pointer; font-size: 11px;">Save</button>
-                        </div>
-                    </form>
+                <div id="preview-loading" style="text-align:center; padding: 40px; color: var(--text-muted);">
+                    <div class="sync-pulse" style="font-size: 32px; margin-bottom: 15px;">🔄</div>
+                    Analyzing filesystem changes...
                 </div>
 
-                <!-- Notifications -->
-                <div>
-                    <form action="/settings/notifications" method="POST"
-                        style="display: flex; flex-direction: column; gap: 10px;">
-                        <label style="font-size: 13px; color: #818384; font-weight: bold;">Notifications</label>
-                        <input type="text" name="discord_webhook" placeholder="Discord Webhook URL"
-                            style="padding: 6px; border-radius: 4px; border: 1px solid #343536; background: #1a1a1b; color: white;">
-                        <div style="display: flex; gap: 5px;">
-                            <input type="text" name="telegram_token" placeholder="TG Bot Token"
-                                style="padding: 6px; flex:1; border-radius: 4px; border: 1px solid #343536; background: #1a1a1b; color: white;">
-                            <input type="text" name="telegram_chat_id" placeholder="Chat ID"
-                                style="padding: 6px; width: 60px; border-radius: 4px; border: 1px solid #343536; background: #1a1a1b; color: white;">
-                        </div>
-                        <button type="submit"
-                            style="padding: 6px; border-radius: 4px; border: none; background: #7289da; color: white; cursor: pointer;">Update</button>
-                    </form>
+                <div id="preview-body" style="display:none;">
+                    <div id="preview-stats"
+                        style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:25px;">
+                        <!-- JS populated -->
+                    </div>
+                    <div id="preview-details"
+                        style="max-height: 400px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 20px; border: 1px solid var(--border-glass);">
+                        <!-- JS populated -->
+                    </div>
+                </div>
+
+                <div style="margin-top:30px; display: flex; justify-content: flex-end; gap: 12px;">
+                    <button class="btn-premium btn-outline" onclick="closeModal()">Dismiss</button>
+                    <button id="preview-confirm-btn" class="btn-premium btn-sync-all"
+                        onclick="confirmSyncFromPreview()">Execute Now ⚡</button>
                 </div>
             </div>
         </div>
-
-        <h2 style="border-left-color: #818384;">Raw Engine Status</h2>
-        <pre id="raw-status">{{.LsyncdStatus}}</pre>
     </div>
 
     <script>
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = wsProtocol + '//' + window.location.host + '/ws';
-        let socket;
+        // WebSocket Connection
+        const socket = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws');
+        const logContainer = document.getElementById('log-container');
 
-        function connect() {
-            socket = new WebSocket(wsUrl);
+        socket.onmessage = function (event) {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'progress') updateProgress(msg.data);
+            else if (msg.type === 'history') addHistoryItem(msg.data);
+            else if (msg.type === 'log') addLogLine(msg.data);
+        };
 
-            socket.onopen = function () {
-                console.log("WS Connected");
-                showToast("Connected to Server", "success");
-                updateFavicon("active");
-            };
+        function addLogLine(data) {
+            const line = document.createElement('div');
+            const timeStr = new Date().toLocaleTimeString();
+            let color = '#00FFAD';
+            if (data.level === 'error') color = '#ff3d00';
+            if (data.level === 'warn') color = '#ffb300';
 
-            socket.onmessage = function (event) {
-                const msg = JSON.parse(event.data);
-                if (msg.type === "progress") {
-                    updateProgress(msg.data);
-                } else if (msg.type === "stats") {
-                    const today = document.getElementById('stat-today');
-                    const total = document.getElementById('stat-total');
-
-                    // Remove skeleton
-                    today.classList.remove('skeleton');
-                    total.classList.remove('skeleton');
-
-                    today.innerText = formatBytes(msg.data.Today);
-                    total.innerText = formatBytes(msg.data.Total);
-                } else if (msg.type === "daily") {
-                    renderChart(msg.data);
-                } else if (msg.type === "history_new") {
-                    addHistoryItem(msg.data);
-                }
-            };
-
-            socket.onclose = function (e) {
-                showToast("Connection Lost", "error");
-                updateFavicon("error");
-                setTimeout(function () {
-                    connect();
-                }, 1000);
-            };
-        }
-
-        function showToast(msg, type = 'info') {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerText = msg;
-
-            container.appendChild(toast);
-
-            // Remove after 3s
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
-        }
-
-        function updateFavicon(status) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 32;
-            canvas.height = 32;
-            const ctx = canvas.getContext('2d');
-
-            // Draw Circle
-            ctx.beginPath();
-            ctx.arc(16, 16, 16, 0, 2 * Math.PI);
-
-            if (status === 'active') ctx.fillStyle = '#4caf50'; // Green
-            else if (status === 'error') ctx.fillStyle = '#f44336'; // Red
-            else if (status === 'paused') ctx.fillStyle = '#ffa726'; // Orange
-            else ctx.fillStyle = '#818384'; // Gray
-
-            ctx.fill();
-
-            const link = document.querySelector("link[rel*='icon']") || document.createElement('link');
-            link.type = 'image/x-icon';
-            link.rel = 'icon';
-            link.href = canvas.toDataURL();
-            document.getElementsByTagName('head')[0].appendChild(link);
+            line.innerHTML = `<span style="color: #4B5563;">[${timeStr}]</span> <span style="color: ${color};">${data.msg || data}</span>`;
+            logContainer.appendChild(line);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            if (logContainer.childNodes.length > 300) logContainer.removeChild(logContainer.firstChild);
         }
 
         function updateProgress(data) {
-            const speedEl = document.getElementById('stat-speed');
-            if (speedEl) speedEl.innerText = data.speed;
-            const rawEl = document.getElementById('raw-status');
-            if (rawEl) rawEl.innerText = data.status;
-
-            const etaEl = document.getElementById('eta-display');
-            if (etaEl) etaEl.innerText = "ETA: " + data.eta;
+            if (data.state) {
+                const badge = document.getElementById('main-status-badge');
+                badge.innerText = data.state;
+                badge.className = `status-pill pill-${data.state.toLowerCase()}`;
+            }
+            if (data.speed) document.getElementById('stat-speed').innerText = data.speed;
         }
 
-        function addHistoryItem(item) {
+        function addHistoryItem(data) {
             const list = document.getElementById('history-list');
-            if (!list) return;
             const li = document.createElement('li');
-            li.style = "display: flex; flex-direction: column; background: #272729; margin-bottom: 15px; padding: 15px; border-radius: 6px; border: 1px solid #343536; border-left: 4px solid #4caf50;";
+            li.className = 'activity-item';
+
+            const actionClass = data.action.toLowerCase().replace('dry-', 'dry');
+            const actionLabel = data.action.startsWith('DRY-') ? data.action.substring(4) : data.action;
+            const isDry = data.action.startsWith('DRY-');
+
             li.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                    <span class='badge badge-${item.Action}'>${item.Action}</span>
-                    <span class='timestamp' style='font-size: 11px; color: #818384;'>${item.Time}</span>
+                <span class="action-badge badge-${actionClass} ${isDry ? 'badge-dry' : ''}">${data.action}</span>
+                <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    ${data.path} <span style="color: var(--text-muted); font-size: 11px;">(${data.size || '0 B'})</span>
                 </div>
-                <div class='path-cell' style='font-size: 14px; font-weight: 500; letter-spacing: 0.3px;'>
-                    ${item.Path} <span style="font-size:10px; color:#818384;">(${item.Size})</span>
-                </div>
+                <span style="font-family: monospace; font-size: 11px; color: var(--text-muted);">${data.time}</span>
             `;
             list.insertBefore(li, list.firstChild);
-            if (list.children.length > 20) list.removeChild(list.lastChild);
+            if (list.childNodes.length > 12) list.removeChild(list.lastChild);
         }
 
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        function updateSyncMode(checkbox) {
+            const mode = checkbox.checked ? 'auto' : 'dry';
+            document.getElementById('mode-label').innerText = mode.toUpperCase() + (mode === 'dry' ? ' RUN' : '');
+
+            const formData = new FormData();
+            formData.append('mode', mode);
+
+            fetch('/settings/sync-mode', {
+                method: 'POST',
+                body: formData
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') toast(`Sync Mode: ${mode.toUpperCase()} enabled`, 'success');
+                    else { toast("Failed to update mode", "error"); checkbox.checked = !checkbox.checked; }
+                });
         }
 
-        function renderChart(data) {
-            const container = document.getElementById('traffic-chart');
-            if (!container) return;
-            container.innerHTML = ''; // Clear loading
+        function engineAction(id, action) {
+            fetch(`/api/engine/${id}/${action}`, { method: 'POST' })
+                .then(r => {
+                    if (r.ok) {
+                        toast(`${action.toUpperCase()} action triggered for Engine ${id}`, 'success');
+                        setTimeout(() => window.location.reload(), 1000);
+                    } else if (r.status === 409) {
+                        toast(`Engine ${id} is already busy syncing`, 'warn');
+                    } else {
+                        toast(`Error: ${r.statusText}`, 'error');
+                    }
+                });
+        }
 
-            if (!data || data.length === 0) {
-                container.innerHTML = '<div style="width:100%; text-align:center; color:#818384; align-self:center;">No data yet</div>';
-                return;
+        let currentPreviewId = null;
+        function showPreview(id) {
+            currentPreviewId = id;
+            document.getElementById('modal-container').style.display = 'block';
+            document.getElementById('preview-loading').style.display = 'block';
+            document.getElementById('preview-body').style.display = 'none';
+            document.getElementById('preview-id').innerText = id;
+
+            fetch(`/api/engine/${id}/preview`)
+                .then(r => r.json())
+                .then(plan => {
+                    document.getElementById('preview-loading').style.display = 'none';
+                    document.getElementById('preview-body').style.display = 'block';
+                    renderPreview(plan);
+                });
+        }
+
+        function renderPreview(plan) {
+            const stats = document.getElementById('preview-stats');
+            const details = document.getElementById('preview-details');
+
+            const count = (arr) => (arr || []).length;
+            const renames = Object.keys(plan.Renames || {}).length;
+
+            stats.innerHTML = `
+                <div class="stat-card" style="padding: 12px; text-align: center;">
+                    <div class="stat-label" style="font-size: 8px;">Syncs</div>
+                    <div style="color: var(--accent-primary); font-weight: bold;">${count(plan.FilesToSync)}</div>
+                </div>
+                <div class="stat-card" style="padding: 12px; text-align: center;">
+                    <div class="stat-label" style="font-size: 8px;">Deletes</div>
+                    <div style="color: var(--accent-error); font-weight: bold;">${count(plan.FilesToDelete)}</div>
+                </div>
+                <div class="stat-card" style="padding: 12px; text-align: center;">
+                    <div class="stat-label" style="font-size: 8px;">Renames</div>
+                    <div style="color: var(--accent-warning); font-weight: bold;">${renames}</div>
+                </div>
+                <div class="stat-card" style="padding: 12px; text-align: center;">
+                    <div class="stat-label" style="font-size: 8px;">Dirs</div>
+                    <div style="color: var(--accent-secondary); font-weight: bold;">${count(plan.DirsToCreate)}</div>
+                </div>
+            `;
+
+            let html = '';
+            if (renames > 0) {
+                html += '<div style="margin-bottom: 20px;"><div class="path-label">Renames</div>';
+                for (const [o, n] of Object.entries(plan.Renames)) {
+                    html += `<div style="font-size: 11px; color: var(--accent-warning); margin-bottom: 4px;">🔄 ${o} &rarr; ${n}</div>`;
+                }
+                html += '</div>';
             }
-
-            data.forEach(item => {
-                const wrapper = document.createElement('div');
-                wrapper.style = "flex: 1; display: flex; flex-direction: column; height: 100%; justify-content: flex-end;";
-
-                // Calculate height percentage. item.HeightPercent comes from backend 0-100
-                // Use backend calculation for consistency
-
-                wrapper.innerHTML = `
-                    <div class="chart-bar" style="height: ${item.HeightPercent}%;">
-                        <div class="chart-value">${item.Size}</div>
-                    </div>
-                    <div class="chart-label">${item.Date.slice(5)}</div> 
-                `; // slice(5) to remove Year, show MM-DD
-
-                container.appendChild(wrapper);
-            });
+            if (count(plan.FilesToSync) > 0) {
+                html += '<div style="margin-bottom: 20px;"><div class="path-label">Adds / Updates</div>';
+                plan.FilesToSync.forEach(f => {
+                    html += `<div style="font-size: 11px; color: var(--accent-primary); margin-bottom: 4px;">➕ ${f.Path} (${formatBytes(f.Size)})</div>`;
+                });
+                html += '</div>';
+            }
+            if (count(plan.FilesToDelete) > 0) {
+                html += '<div><div class="path-label">Deletions</div>';
+                plan.FilesToDelete.forEach(f => {
+                    html += `<div style="font-size: 11px; color: var(--accent-error); margin-bottom: 4px;">❌ ${f}</div>`;
+                });
+                html += '</div>';
+            }
+            if (!html) html = '<div style="text-align: center; color: var(--text-muted);">No changes detected.</div>';
+            details.innerHTML = html;
         }
 
+        function closeModal() { document.getElementById('modal-container').style.display = 'none'; }
+        function confirmSyncFromPreview() { if (currentPreviewId) { engineAction(currentPreviewId, 'sync'); closeModal(); } }
 
+        function toast(msg, type = 'info') {
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.style.borderLeftColor = type === 'success' ? 'var(--accent-primary)' : (type === 'warn' ? 'var(--accent-warning)' : 'var(--accent-error)');
+            t.innerText = msg;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 4000);
+        }
 
-        connect();
+        function formatBytes(b) {
+            if (b === 0) return '0 B';
+            const k = 1024, s = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(b) / Math.log(k));
+            return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + s[i];
+        }
+
+        // Init label
+        document.getElementById('mode-label').innerText = document.getElementById('sync-mode-toggle').checked ? 'AUTO' : 'DRY RUN';
     </script>
 </body>
 

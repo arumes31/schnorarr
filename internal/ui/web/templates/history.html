@@ -55,12 +55,12 @@
             font-weight: bold;
         }
 
-        .badge-Added {
+        .badge-added {
             background: #2e7d32;
             color: white;
         }
 
-        .badge-Deleted {
+        .badge-deleted {
             background: #c62828;
             color: white;
         }
@@ -94,10 +94,10 @@
                 </tr>
             </thead>
             <tbody>
-                {{range .}}
+                {{range .History}}
                 <tr>
                     <td class='timestamp'>{{.Time}}</td>
-                    <td><span class='badge badge-{{.Action}}'>{{.Action}}</span></td>
+                    <td><span class='badge badge-{{lower .Action}}'>{{.Action}}</span></td>
                     <td class='path-cell'>{{.Path}}</td>
                 </tr>
                 {{else}}

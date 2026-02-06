@@ -42,8 +42,7 @@ elif [ "$MODE" = "sender" ]; then
         chmod 600 /config/rsync.pass
     fi
 
-    # Start Monitoring Dashboard & Polling (Go Binary)
-    /usr/local/bin/monitor > /proc/1/fd/1 2>&1 &
+    # Monitor will be started at the end with exec
 
     # Disk space check
     AVAILABLE_SPACE_GB=$(df -BG /data | awk 'NR==2 {print $4}' | sed 's/G//')

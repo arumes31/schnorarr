@@ -20,6 +20,8 @@ type Config struct {
 	QuietEnd         string `json:"quiet_end"`    // HH:MM
 	QuietLimit       int    `json:"quiet_limit"`  // Mbps
 	NormalLimit      int    `json:"normal_limit"` // Mbps (Restore to this)
+
+	// Sync
 }
 
 // Load reads configuration from file and falls back to environment variables

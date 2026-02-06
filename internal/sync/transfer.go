@@ -199,6 +199,20 @@ func (t *Transferer) DeleteDir(path string) error {
 	return nil
 }
 
+// RenameFile renames a file (or moves it)
+func (t *Transferer) RenameFile(oldPath, newPath string) error {
+	// Create destination directory if needed
+	dstDir := filepath.Dir(newPath)
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return fmt.Errorf("failed to rename %s to %s: %w", oldPath, newPath, err)
+	}
+	return nil
+}
+
 // SetBandwidthLimit updates the bandwidth limit
 func (t *Transferer) SetBandwidthLimit(limit int64) {
 	t.opts.BandwidthLimit = limit

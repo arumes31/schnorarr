@@ -8,8 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -20,12 +18,8 @@ import (
 	"schnorarr/internal/monitor/health"
 	"schnorarr/internal/monitor/notification"
 	ws "schnorarr/internal/monitor/websocket"
+	"schnorarr/internal/sync"
 	"schnorarr/internal/ui"
-)
-
-const (
-	StatusFile   = "/tmp/lsyncd.status"
-	ProgressFile = "/tmp/current_sync.tmp"
 )
 
 var (
@@ -45,10 +39,11 @@ type Handlers struct {
 	wsHub       *ws.Hub
 	db          *sql.DB
 	notifier    *notification.Service
+	engines     []*sync.Engine
 }
 
 // New creates a new handlers instance
-func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.DB, notifier *notification.Service) *Handlers {
+func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.DB, notifier *notification.Service, engines []*sync.Engine) *Handlers {
 	// Load auth settings from env
 	AuthEnabled = os.Getenv("AUTH_ENABLED") == "true"
 	AdminUser = os.Getenv("ADMIN_USER")
@@ -66,6 +61,7 @@ func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.D
 		wsHub:       wsHub,
 		db:          db,
 		notifier:    notifier,
+		engines:     engines,
 	}
 }
 
@@ -92,25 +88,47 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
 		healthy, lastErr := h.healthState.GetStatus()
 
-		progress := ""
-		if b, err := os.ReadFile(ProgressFile); err == nil {
-			progress = strings.TrimSpace(string(b))
+		progress, currentSpeed, eta, queued, status := h.GetProgressInfo()
+
+		// Determine overall state for the badge
+		state := "ACTIVE"
+		if !healthy {
+			state = "CRITICAL"
+		} else if len(h.engines) > 0 {
+			allPaused := true
+			for _, e := range h.engines {
+				if !e.IsPaused() {
+					allPaused = false
+					break
+				}
+			}
+			if allPaused {
+				state = "PAUSED"
+			}
 		}
 
-		status := "No status available yet."
-		if b, err := os.ReadFile(StatusFile); err == nil {
-			status = string(b)
+		// Prepare engine data for the template
+		type EngineView struct {
+			ID, Source, Target string
+			Status, State      string
+			IsPaused           bool
+			LastSync           string
 		}
-
-		queued := 0
-		queued = len(regexp.MustCompile(`(?:Wait list|DelayedSyncs).*?\n\n`).FindAllString(status, -1))
-
-		// Extract Speed from Progress
-		currentSpeed := "0 B/s"
-		reSpeed := regexp.MustCompile(`(\d+(?:\.\d+)?[kKMGT]?B/s)`)
-		matches := reSpeed.FindStringSubmatch(progress)
-		if len(matches) > 1 {
-			currentSpeed = matches[1]
+		var engineViews []EngineView
+		for _, engine := range h.engines {
+			cfg := engine.GetConfig()
+			engineViews = append(engineViews, EngineView{
+				ID:       cfg.ID,
+				Source:   cfg.SourceDir,
+				Target:   cfg.TargetDir,
+				Status:   engine.GetStatus(),
+				State:    "ACTIVE", // Default to ACTIVE
+				IsPaused: engine.IsPaused(),
+				LastSync: engine.GetLastSyncTime().Format("15:04:05"),
+			})
+			if engine.IsPaused() {
+				engineViews[len(engineViews)-1].State = "PAUSED"
+			}
 		}
 
 		traffic := database.GetTrafficStats()
@@ -119,13 +137,18 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 		data := struct {
 			Time, LastErrorMsg, Progress, LsyncdStatus string
 			Healthy                                    bool
+			State                                      string
 			Queued                                     int
 			History                                    []database.HistoryItem
 			TrafficToday, TrafficTotal                 string
 			CurrentSpeed                               string
+			ETA                                        string
+			SyncMode                                   string
+			Engines                                    []EngineView
 		}{
 			Time:         time.Now().Format("2006-01-02 15:04:05"),
 			Healthy:      healthy,
+			State:        state,
 			LastErrorMsg: lastErr,
 			Progress:     progress,
 			LsyncdStatus: status,
@@ -134,9 +157,16 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			TrafficToday: database.FormatBytes(traffic.Today),
 			TrafficTotal: database.FormatBytes(traffic.Total),
 			CurrentSpeed: currentSpeed,
+			ETA:          eta,
+			SyncMode:     database.GetSetting("sync_mode", "dry"),
+			Engines:      engineViews,
 		}
 
-		t, err := template.ParseFS(ui.TemplateFS, "web/templates/index.html")
+		funcMap := template.FuncMap{
+			"lower": strings.ToLower,
+		}
+
+		t, err := template.New("index.html").Funcs(funcMap).ParseFS(ui.TemplateFS, "web/templates/index.html")
 		if err != nil {
 			http.Error(w, "Template Error: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -161,7 +191,11 @@ func (h *Handlers) History(w http.ResponseWriter, r *http.Request) {
 			Query:   query,
 		}
 
-		t, err := template.ParseFS(ui.TemplateFS, "web/templates/history.html")
+		funcMap := template.FuncMap{
+			"lower": strings.ToLower,
+		}
+
+		t, err := template.New("history.html").Funcs(funcMap).ParseFS(ui.TemplateFS, "web/templates/history.html")
 		if err != nil {
 			http.Error(w, "Template Error: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -176,9 +210,6 @@ func (h *Handlers) History(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	status := "healthy"
-	if _, err := os.Stat(StatusFile); os.IsNotExist(err) {
-		status = "initializing"
-	}
 	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status": status,
 		"time":   time.Now().String(),
@@ -187,37 +218,57 @@ func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ManualSync triggers a manual sync
+// ManualSync triggers a manual sync on all active engines
 func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("[Dashboard] Manual sync triggered for %d engines", len(h.engines))
+
+		// Run syncs in background to avoid blocking redirect
 		go func() {
-			if err := filepath.Walk("/data", func(path string, info os.FileInfo, err error) error {
-				if err == nil && info.IsDir() {
-					if err := os.Chtimes(path, time.Now(), time.Now()); err != nil {
-						log.Printf("Failed to touch %s: %v", path, err)
-					}
+			for _, engine := range h.engines {
+				log.Printf("[Dashboard] Triggering manual sync for engine %s", engine.GetConfig().ID)
+				if err := engine.RunSync(nil); err != nil {
+					log.Printf("[Dashboard] Manual sync error for engine %s: %v", engine.GetConfig().ID, err)
 				}
-				return nil
-			}); err != nil {
-				log.Printf("Manual Sync Walk Error: %v", err)
 			}
 		}()
+
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})(w, r)
+}
+
+// GlobalPause pauses all engines
+func (h *Handlers) GlobalPause(w http.ResponseWriter, r *http.Request) {
+	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		for _, engine := range h.engines {
+			engine.Pause()
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})(w, r)
+}
+
+// GlobalResume resumes all engines
+func (h *Handlers) GlobalResume(w http.ResponseWriter, r *http.Request) {
+	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		for _, engine := range h.engines {
+			engine.Resume()
+		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
 
 // WebSocket handler
 func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
-	ws, err := upgrader.Upgrade(w, r, nil)
+	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	h.wsHub.Register(ws)
+	h.wsHub.Register(wsConn)
 
 	// Send initial state
-	if err := ws.WriteJSON(struct {
+	if err := wsConn.WriteJSON(struct {
 		Type string
 		Data string
 	}{Type: "init", Data: "Connected"}); err != nil {
@@ -226,9 +277,9 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Keep alive / Read loop
 	for {
-		_, _, err := ws.ReadMessage()
+		_, _, err := wsConn.ReadMessage()
 		if err != nil {
-			h.wsHub.Unregister(ws)
+			h.wsHub.Unregister(wsConn)
 			break
 		}
 	}
@@ -253,12 +304,6 @@ func (h *Handlers) SetBandwidthLimit(w http.ResponseWriter, r *http.Request) {
 		h.config.NormalLimit = l
 		if err := h.config.Save(); err != nil {
 			log.Printf("Failed to save config: %v", err)
-		}
-
-		err := os.WriteFile("/config/bwlimit", []byte(limit), 0644)
-		if err != nil {
-			http.Error(w, "Failed to write config: "+err.Error(), http.StatusInternalServerError)
-			return
 		}
 
 		// Reload logic handled in main.go
@@ -311,89 +356,147 @@ func (h *Handlers) TestNotify(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-// GetProgressInfo retrieves current sync progress information
-func GetProgressInfo() (progress, speed, eta string, queued int, status string) {
-	progress = ""
-	if b, err := os.ReadFile(ProgressFile); err == nil {
-		progress = strings.TrimSpace(string(b))
+// GetProgressInfo retrieves current sync progress information from active engines
+func (h *Handlers) GetProgressInfo() (progress, speed, eta string, queued int, status string) {
+	status = "No sync engines active."
+	allPaused := true
+	if len(h.engines) > 0 {
+		var sb strings.Builder
+		for _, engine := range h.engines {
+			sb.WriteString(engine.GetStatus() + "\n")
+			if !engine.IsPaused() {
+				allPaused = false
+			}
+		}
+		status = sb.String()
 	}
 
-	status = "No status available yet."
-	if b, err := os.ReadFile(StatusFile); err == nil {
-		status = string(b)
+	progress = "System Idle"
+	if allPaused && len(h.engines) > 0 {
+		progress = "Sync Paused"
 	}
-
-	// Speed
 	speed = "0 B/s"
-	reSpeed := regexp.MustCompile(`(\d+(?:\.\d+)?[kKMGT]?B/s)`)
-	matches := reSpeed.FindStringSubmatch(progress)
-	if len(matches) > 1 {
-		speed = matches[1]
-	}
+	eta = "Done"
+	queued = 0
 
-	// ETA Calculation
-	eta = "Calculating..."
-	var queuedBytes int64 = 0
-
-	// Parse Queued Files from Status
-	statusParts := strings.Split(status, "Wait list")
-	if len(statusParts) > 1 {
-		waitList := statusParts[1]
-		rePath := regexp.MustCompile(`/\S+`)
-		paths := rePath.FindAllString(waitList, -1)
-		for _, p := range paths {
-			fullP := filepath.Join("/data", strings.Trim(p, `"'`))
-			if info, err := os.Stat(fullP); err == nil {
-				queuedBytes += info.Size()
+	if len(h.engines) > 0 && !allPaused {
+		for _, engine := range h.engines {
+			if !engine.IsPaused() {
+				// For the dashboard overview, we just report that we are monitoring
+				progress = "Sync engine monitoring active..."
+				break
 			}
 		}
 	}
 
-	speedBytes := ParseSpeed(speed)
-	if speedBytes > 0 && queuedBytes > 0 {
-		seconds := float64(queuedBytes) / float64(speedBytes)
-		duration := time.Duration(seconds) * time.Second
-		eta = duration.Round(time.Second).String()
-	} else if queuedBytes == 0 {
-		eta = "Done"
-	}
-
-	queued = len(regexp.MustCompile(`(?:Wait list|DelayedSyncs).*?\n\n`).FindAllString(status, -1))
-
 	return progress, speed, eta, queued, status
 }
 
-// ParseSpeed converts speed string to bytes/sec
-func ParseSpeed(s string) int64 {
-	s = strings.TrimSpace(s)
-	s = strings.TrimSuffix(s, "/s")
-	if len(s) == 0 {
-		return 0
-	}
+// EnginePreview returns a preview of what would be synced for a specific engine
+func (h *Handlers) EnginePreview(w http.ResponseWriter, r *http.Request) {
+	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/api/engine/")
+		id = strings.TrimSuffix(id, "/preview")
 
-	unit := s[len(s)-2:]
-	valStr := s[:len(s)-2]
+		var engine *sync.Engine
+		for _, e := range h.engines {
+			if e.GetConfig().ID == id {
+				engine = e
+				break
+			}
+		}
 
-	// Handle single char unit like "B"
-	if strings.ToUpper(s[len(s)-1:]) == "B" && !strings.Contains("KMGTP", strings.ToUpper(s[len(s)-2:len(s)-1])) {
-		unit = "B"
-		valStr = s[:len(s)-1]
-	}
+		if engine == nil {
+			http.Error(w, "Engine not found", http.StatusNotFound)
+			return
+		}
 
-	var val float64
-	if _, err := fmt.Sscanf(valStr, "%f", &val); err != nil {
-		return 0
-	}
+		plan, err := engine.PreviewSync()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-	switch strings.ToUpper(unit) {
-	case "KB", "K":
-		return int64(val * 1024)
-	case "MB", "M":
-		return int64(val * 1024 * 1024)
-	case "GB", "G":
-		return int64(val * 1024 * 1024 * 1024)
-	case "B":
-		return int64(val)
-	}
-	return int64(val)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(plan)
+	})(w, r)
+}
+
+// EngineAction handles per-engine actions like pause, resume, sync
+func (h *Handlers) EngineAction(w http.ResponseWriter, r *http.Request) {
+	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(parts) < 4 {
+			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+
+		id := parts[2]
+		action := parts[3]
+
+		var engine *sync.Engine
+		for _, e := range h.engines {
+			if e.GetConfig().ID == id {
+				engine = e
+				break
+			}
+		}
+
+		if engine == nil {
+			http.Error(w, "Engine not found", http.StatusNotFound)
+			return
+		}
+
+		switch action {
+		case "pause":
+			engine.Pause()
+		case "resume":
+			engine.Resume()
+		case "sync":
+			if engine.IsBusy() {
+				http.Error(w, "Sync already in progress for this engine", http.StatusConflict)
+				return
+			}
+			log.Printf("[Dashboard] Triggering AJAX sync for engine %s", id)
+			go engine.RunSync(nil)
+		default:
+			http.Error(w, "Invalid action", http.StatusBadRequest)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Action %s initiated for engine %s", action, id)
+	})(w, r)
+}
+
+// UpdateSyncMode handler
+func (h *Handlers) UpdateSyncMode(w http.ResponseWriter, r *http.Request) {
+	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		mode := r.FormValue("mode")
+		if mode != "dry" && mode != "auto" {
+			http.Error(w, "Invalid mode", http.StatusBadRequest)
+			return
+		}
+
+		if err := database.SaveSetting("sync_mode", mode); err != nil {
+			log.Printf("Failed to save sync_mode: %v", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("[Dashboard] Sync mode updated to: %s", mode)
+		// Return success as JSON if AJAX
+		if r.Header.Get("X-Requested-With") == "XMLHttpRequest" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "success", "mode": mode})
+			return
+		}
+
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})(w, r)
 }
