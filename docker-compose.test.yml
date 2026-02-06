@@ -1,0 +1,53 @@
+services:
+  receiver:
+    build: .
+    environment:
+      - MODE=receiver
+      - RSYNC_USER=syncuser
+      - RSYNC_PASSWORD=secretpassword
+    volumes:
+      # Map shared test root to /data so subdirs land in correct place
+      - ./testfiles:/data
+    restart: always
+
+  sender:
+    build: .
+    depends_on:
+      - receiver
+    environment:
+      - MODE=sender
+      - RSYNC_USER=syncuser
+      - RSYNC_PASSWORD=secretpassword
+      - BWLIMIT_MBPS=500
+      - POLL_INTERVAL=10
+      - DEST_HOST=receiver
+
+      # 1. Sender 1 -> Receiver 1 (Series Profile)
+      - SYNC_1_SOURCE=/data/sender1
+      - SYNC_1_TARGET=syncuser@receiver::video-sync/receiver1
+      - SYNC_1_RULE=series
+
+      # 2. Sender 2 -> Receiver 2 (Series Profile)
+      - SYNC_2_SOURCE=/data/sender2
+      - SYNC_2_TARGET=syncuser@receiver::video-sync/receiver2
+      - SYNC_2_RULE=series
+
+      # 3. Sender 3 -> Receiver 3 (Movies Profile)
+      - SYNC_3_SOURCE=/data/sender3
+      - SYNC_3_TARGET=syncuser@receiver::video-sync/receiver3
+      - SYNC_3_RULE=flat
+
+      # 4. Sender 4 -> Receiver 4 (Movies Profile)
+      - SYNC_4_SOURCE=/data/sender4
+      - SYNC_4_TARGET=syncuser@receiver::video-sync/receiver4
+      - SYNC_4_RULE=flat
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      # Map same shared test root so we can seed sources from host
+      - ./testfiles:/data
+      # Separate config for sender (prevents database lock contention with receiver)
+      - ./testfiles/sender_config:/config
+    restart: always

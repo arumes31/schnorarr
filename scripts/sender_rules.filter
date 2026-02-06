@@ -1,0 +1,11 @@
+# Protect Series and Season folders from deletion
+P /*/
+P /*/*/
+
+# Include logic
++ /*/
++ /*/[Ss][Ee][Aa][Ss][Oo][Nn]*/
++ /*/[Ss][Ee][Aa][Ss][Oo][Nn]*/***
+
+# Exclude everything else by default
+- *

@@ -1,0 +1,21 @@
+services:
+  receiver:
+    build: .
+    environment:
+      - MODE=receiver
+      - RSYNC_USER=${RSYNC_USER:-syncuser}
+      - RSYNC_PASSWORD=${RSYNC_PASSWORD:-secretpassword}
+      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
+      # - TS_HOSTNAME=schnorarr-receiver
+      # - TAILSCALE_UP_ARGS=--accept-routes
+    volumes:
+      - ./receiver:/data
+      - receiver_config:/config
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    restart: unless-stopped
+
+volumes:
+  receiver_config:

@@ -1,0 +1,57 @@
+services:
+  receiver:
+    build: .
+    environment:
+      - MODE=receiver
+      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
+      # - TS_HOSTNAME=schnorarr-receiver
+      # - TAILSCALE_UP_ARGS=--accept-routes
+      - RSYNC_USER=syncuser
+      - RSYNC_PASSWORD=secretpassword
+    volumes:
+      - ./receiver:/data
+      - receiver_config:/config
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    restart: unless-stopped
+
+  sender:
+    build: .
+    environment:
+      - MODE=sender
+      - DEST_HOST=receiver
+      - DEST_MODULE=video-sync
+      - DRY_RUN=false
+      - RSYNC_USER=syncuser
+      - RSYNC_PASSWORD=secretpassword
+      - BWLIMIT_MBPS=50
+      - MIN_DISK_SPACE_GB=0
+      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
+      # - TS_HOSTNAME=schnorarr-sender
+      # - TAILSCALE_UP_ARGS=--accept-dns=false
+      - DISCORD_WEBHOOK_URL=
+      - TELEGRAM_BOT_TOKEN=
+      - TELEGRAM_CHAT_ID=
+      - TELEGRAM_CHAT_ID=
+      - POLL_INTERVAL=60
+      - AUTH_ENABLED=true
+      - ADMIN_USER=admin
+      - ADMIN_PASS=schnorarr
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./sender:/data
+      - sender_config:/config
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    depends_on:
+      - receiver
+    restart: unless-stopped
+
+volumes:
+  sender_config:
+  receiver_config:

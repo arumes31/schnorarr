@@ -1,0 +1,35 @@
+services:
+  sender:
+    build: .
+    environment:
+      - MODE=sender
+      - DEST_HOST=${DEST_HOST:-receiver}
+      - DEST_MODULE=video-sync
+      - DRY_RUN=${DRY_RUN:-false}
+      - RSYNC_USER=${RSYNC_USER:-syncuser}
+      - RSYNC_PASSWORD=${RSYNC_PASSWORD:-secretpassword}
+      - BWLIMIT_MBPS=${BWLIMIT_MBPS:-50}
+      - MIN_DISK_SPACE_GB=${MIN_DISK_SPACE_GB:-0}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - POLL_INTERVAL=${POLL_INTERVAL:-60}
+      - AUTH_ENABLED=${AUTH_ENABLED:-true}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASS=${ADMIN_PASS:-schnorarr}
+      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
+      # - TS_HOSTNAME=schnorarr-sender
+      # - TAILSCALE_UP_ARGS=--accept-dns=false
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./sender:/data
+      - sender_config:/config
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    restart: unless-stopped
+
+volumes:
+  sender_config:

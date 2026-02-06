@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Sync History - schnorarr</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1a1a1b;
+            color: #d7dadc;
+            padding: 40px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #ff4500;
+            border-bottom: 2px solid #343536;
+            padding-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #343536;
+        }
+
+        th {
+            background: #272729;
+            color: #818384;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .timestamp {
+            color: #818384;
+            font-family: monospace;
+            white-space: nowrap;
+        }
+
+        .badge {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .badge-Added {
+            background: #2e7d32;
+            color: white;
+        }
+
+        .badge-Deleted {
+            background: #c62828;
+            color: white;
+        }
+
+        .path-cell {
+            word-break: break-all;
+            color: #0079d3;
+            font-weight: 500;
+        }
+
+        .back-btn {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #0079d3;
+            text-decoration: none;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <a href="/" class="back-btn">← DASHBOARD</a>
+        <h1>Full Sync History</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>File Path</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .}}
+                <tr>
+                    <td class='timestamp'>{{.Time}}</td>
+                    <td><span class='badge badge-{{.Action}}'>{{.Action}}</span></td>
+                    <td class='path-cell'>{{.Path}}</td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan='3'>No history available yet.</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</body>
+
+</html>
