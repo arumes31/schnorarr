@@ -160,7 +160,7 @@ func (e *Engine) PreviewSync() (*SyncPlan, error) {
 	}
 
 	// Compare
-	return CompareManifests(sourceManifest, e.targetManifest), nil
+	return CompareManifests(sourceManifest, e.targetManifest, e.config.Rule), nil
 }
 
 // RunSync performs a one-time sync operation
@@ -208,7 +208,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	}
 
 	// 3. Compare
-	plan := CompareManifests(sourceManifest, e.targetManifest)
+	plan := CompareManifests(sourceManifest, e.targetManifest, e.config.Rule)
 	if len(plan.FilesToSync) == 0 && len(plan.FilesToDelete) == 0 && len(plan.DirsToCreate) == 0 && len(plan.DirsToDelete) == 0 && len(plan.Renames) == 0 {
 		log.Printf("[%s] Sync skipped: No changes detected", e.config.ID)
 		e.lastSyncTime = time.Now()
@@ -495,7 +495,7 @@ func (e *Engine) sourcePollLoop() {
 
 			// If we have a previous manifest, compare them
 			if e.lastSourceManifest != nil {
-				plan := CompareManifests(currentSource, e.lastSourceManifest)
+				plan := CompareManifests(currentSource, e.lastSourceManifest, e.config.Rule)
 				if len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.DirsToCreate) > 0 || len(plan.DirsToDelete) > 0 || len(plan.Renames) > 0 {
 					log.Printf("[%s] Polling detected changes on source, triggering sync", e.config.ID)
 					if err := e.RunSync(currentSource); err != nil {

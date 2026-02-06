@@ -15,7 +15,7 @@ type SyncPlan struct {
 }
 
 // CompareManifests compares sender and receiver manifests and creates a sync plan
-func CompareManifests(sender, receiver *Manifest) *SyncPlan {
+func CompareManifests(sender, receiver *Manifest, rule string) *SyncPlan {
 	plan := &SyncPlan{
 		FilesToSync:   make([]*FileInfo, 0),
 		FilesToDelete: make([]string, 0),
@@ -41,7 +41,7 @@ func CompareManifests(sender, receiver *Manifest) *SyncPlan {
 	}
 
 	// Step 2: Find files/dirs to delete (smart deletion logic)
-	plan.FilesToDelete, plan.DirsToDelete = identifyDeletions(sender, receiver)
+	plan.FilesToDelete, plan.DirsToDelete = identifyDeletions(sender, receiver, rule)
 
 	// Step 3: Detect renames (match deletes with syncs)
 	plan.detectRenames(receiver)
@@ -105,22 +105,26 @@ func (p *SyncPlan) detectRenames(receiver *Manifest) {
 
 // identifyDeletions implements smart deletion logic
 // Only deletes from receiver directories that originated from sender
-func identifyDeletions(sender, receiver *Manifest) (filesToDelete, dirsToDelete []string) {
+func identifyDeletions(sender, receiver *Manifest, rule string) (filesToDelete, dirsToDelete []string) {
 	filesToDelete = make([]string, 0)
 	dirsToDelete = make([]string, 0)
 
 	// Identify receiver-only top-level directories
 	receiverOnlyDirs := make(map[string]bool)
-	for dir := range receiver.Dirs {
-		// Get top-level directory
-		topLevel := getTopLevelDir(dir)
-		if topLevel == "" {
-			continue
-		}
 
-		// Check if this top-level dir exists on sender
-		if !sender.HasDir(topLevel) && !sender.HasFile(topLevel) {
-			receiverOnlyDirs[topLevel] = true
+	// In "flat" mode, we act as a pure mirror, so we don't protect receiver-only dirs
+	if rule != "flat" {
+		for dir := range receiver.Dirs {
+			// Get top-level directory
+			topLevel := getTopLevelDir(dir)
+			if topLevel == "" {
+				continue
+			}
+
+			// Check if this top-level dir exists on sender
+			if !sender.HasDir(topLevel) && !sender.HasFile(topLevel) {
+				receiverOnlyDirs[topLevel] = true
+			}
 		}
 	}
 

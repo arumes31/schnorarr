@@ -20,7 +20,7 @@ func TestCompareManifests_FilesToSync(t *testing.T) {
 	receiver.Add(&FileInfo{Path: "modified_file.txt", Size: 100, ModTime: now.Add(-1 * time.Hour)})
 	receiver.Add(&FileInfo{Path: "unchanged_file.txt", Size: 50, ModTime: now})
 
-	plan := CompareManifests(sender, receiver)
+	plan := CompareManifests(sender, receiver, "series")
 
 	// Should sync new_file.txt and modified_file.txt
 	if len(plan.FilesToSync) != 2 {
@@ -49,7 +49,7 @@ func TestCompareManifests_SmartDeletion(t *testing.T) {
 	receiver.Add(&FileInfo{Path: "test12/season1", IsDir: true})
 	receiver.Add(&FileInfo{Path: "test12/season1/episode.mkv", Size: 200, ModTime: now})
 
-	plan := CompareManifests(sender, receiver)
+	plan := CompareManifests(sender, receiver, "series")
 
 	// Should delete old_file.mkv (in sender-originated directory)
 	if len(plan.FilesToDelete) != 1 {
@@ -71,6 +71,31 @@ func TestCompareManifests_SmartDeletion(t *testing.T) {
 		if len(path) >= 6 && path[:6] == "test12" {
 			t.Errorf("Should not delete receiver-only directory: %s", path)
 		}
+	}
+}
+
+func TestCompareManifests_FlatSync(t *testing.T) {
+	sender := NewManifest("/sender")
+	receiver := NewManifest("/receiver")
+
+	// Sender is empty
+	// Receiver has a folder that should be deleted in flat mode
+	receiver.Add(&FileInfo{Path: "test12", IsDir: true})
+	receiver.Add(&FileInfo{Path: "test12/file.txt", Size: 100})
+
+	// Rule: flat
+	plan := CompareManifests(sender, receiver, "flat")
+
+	// Should delete everything
+	found := false
+	for _, path := range plan.DirsToDelete {
+		if path == "test12" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected test12 directory to be deleted in flat mode")
 	}
 }
 
