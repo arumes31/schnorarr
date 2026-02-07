@@ -576,10 +576,10 @@ body {
     background: var(--bg-terminal);
     border: 1px solid var(--border-glass);
     border-radius: 12px;
-    border-radius: 12px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    max-height: 500px;
 }
 
 .terminal-header {
@@ -902,7 +902,19 @@ input:checked+.slider:before {
     border-radius: 16px;
     border: 1px solid var(--border-glass);
     padding: 24px;
+    display: flex;
+    flex-direction: column;
+    max-height: 500px;
 }
+
+.activity-list {
+    flex: 1;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
 
 .activity-item {
     display: flex;
