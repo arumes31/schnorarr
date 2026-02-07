@@ -36,36 +36,53 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 
 	// Mutex for manifest map writes
 	var mu sync.Mutex
-	
+
 	// Semaphore to limit concurrency (prevent opening too many file descriptors)
 	sem := make(chan struct{}, 32)
 	var wg sync.WaitGroup
 
-	// Error channel
+	// Error handling with cancellation
 	errCh := make(chan error, 1)
+	done := make(chan struct{})
+	var errOnce sync.Once
 
 	// Helper to process a directory
 	var walkDir func(string)
 	walkDir = func(dir string) {
 		defer wg.Done()
 
+		// Check for cancellation
+		select {
+		case <-done:
+			return
+		default:
+		}
+
 		// Acquire semaphore
-		sem <- struct{}{}
+		select {
+		case sem <- struct{}{}:
+		case <-done:
+			return
+		}
 		defer func() { <-sem }()
 
 		entries, err := os.ReadDir(dir)
 		if err != nil {
-			select {
-			case errCh <- fmt.Errorf("failed to read dir %s: %w", dir, err):
-			default:
-			}
+			errOnce.Do(func() {
+				// Non-blocking send
+				select {
+				case errCh <- fmt.Errorf("failed to read dir %s: %w", dir, err):
+				default:
+				}
+				close(done) // Signal cancellation
+			})
 			return
 		}
 
 		for _, d := range entries {
-			// Check for abort
+			// Check for cancellation
 			select {
-			case <-errCh:
+			case <-done:
 				return
 			default:
 			}
@@ -118,18 +135,27 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 	wg.Add(1)
 	go walkDir(root)
 
-	// Wait for completion or error
-	done := make(chan struct{})
+	// Wait for completion in background
 	go func() {
 		wg.Wait()
-		close(done)
+		// Only close errCh if not already cancelled/closed via error
+		select {
+		case <-done:
+		default:
+			close(errCh)
+		}
 	}()
 
+	// Wait for first error or completion
 	select {
-	case <-done:
-		// Success
 	case err := <-errCh:
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
+		// If err is nil (closed channel), we are done success
+	case <-done:
+		// Cancelled (should have error in errCh)
+		return nil, <-errCh
 	}
 
 	log.Printf("[Scanner] Finished scan of %s: found %d items", root, len(manifest.Files)+len(manifest.Dirs))

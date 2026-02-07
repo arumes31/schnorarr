@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"net/http"
 	"os"
 
@@ -30,8 +32,9 @@ type Handlers struct {
 	healthState *health.State
 	wsHub       *ws.Hub
 	db          *sql.DB
-	notifier    *notification.Service
-	engines     []*sync.Engine
+	notifier     *notification.Service
+	engines      []*sync.Engine
+	sessionToken string
 }
 
 // New creates a new handlers instance
@@ -47,12 +50,21 @@ func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.D
 		AdminPass = "schnorarr"
 	}
 
+	// Generate random session token
+	token := make([]byte, 32)
+	if _, err := rand.Read(token); err != nil {
+		// Fallback (should not happen)
+		copy(token, []byte("fallback-secret"))
+	}
+	sessionToken := hex.EncodeToString(token)
+
 	return &Handlers{
-		config:      cfg,
-		healthState: healthState,
-		wsHub:       wsHub,
-		db:          db,
-		notifier:    notifier,
-		engines:     engines,
+		config:       cfg,
+		healthState:  healthState,
+		wsHub:        wsHub,
+		db:           db,
+		notifier:     notifier,
+		engines:      engines,
+		sessionToken: sessionToken,
 	}
 }

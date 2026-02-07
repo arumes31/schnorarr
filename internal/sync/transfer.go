@@ -68,7 +68,7 @@ func (t *Transferer) CopyFile(src, dst string) error {
 	}
 
 	tmpDst := dst + ".tmp"
-	
+
 	// We only support parallel transfers for new files > threshold
 	// Resumption currently falls back to sequential for simplicity
 	useParallel := totalSize > ParallelThreshold && t.opts.BandwidthLimit == 0
@@ -83,6 +83,13 @@ func (t *Transferer) CopyFile(src, dst string) error {
 			sleep := time.Duration(1<<uint(i)) * time.Second
 			log.Printf("[Transferer] Retry %d/%d for %s...", i, maxRetries, src)
 			time.Sleep(sleep)
+
+			// Reset for retry
+			if _, err := srcFile.Seek(0, io.SeekStart); err != nil {
+				copyErr = fmt.Errorf("failed to seek to start: %w", err)
+				break
+			}
+			bytesTransferred = 0
 		}
 
 		dstFile, err := os.Create(tmpDst)
@@ -110,7 +117,7 @@ func (t *Transferer) CopyFile(src, dst string) error {
 		if copyErr == nil {
 			break
 		}
-		
+
 		if copyErr.Error() == "transfer interrupted by pause" {
 			break
 		}
@@ -121,6 +128,7 @@ func (t *Transferer) CopyFile(src, dst string) error {
 		if t.opts.OnComplete != nil {
 			t.opts.OnComplete(filepath.Base(src), bytesTransferred, copyErr)
 		}
+		_ = os.Remove(tmpDst) // Cleanup temp file
 		return copyErr
 	}
 
@@ -141,7 +149,7 @@ func (t *Transferer) CopyFile(src, dst string) error {
 func (t *Transferer) copyParallel(filename string, srcFile, dstFile *os.File, totalSize int64) (int64, error) {
 	numStreams := DefaultNumStreams
 	chunkSize := (totalSize + int64(numStreams) - 1) / int64(numStreams)
-	
+
 	var wg sync.WaitGroup
 	var errOnce sync.Once
 	var firstErr error
@@ -154,20 +162,20 @@ func (t *Transferer) copyParallel(filename string, srcFile, dstFile *os.File, to
 		wg.Add(1)
 		go func(streamID int) {
 			defer wg.Done()
-			
+
 			start := int64(streamID) * chunkSize
 			end := start + chunkSize
 			if end > totalSize {
 				end = totalSize
 			}
-			
+
 			if start >= totalSize {
 				return
 			}
 
 			buf := make([]byte, ChunkSize)
 			offset := start
-			
+
 			for offset < end {
 				if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
 					errOnce.Do(func() { firstErr = fmt.Errorf("transfer interrupted by pause") })
@@ -186,7 +194,7 @@ func (t *Transferer) copyParallel(filename string, srcFile, dstFile *os.File, to
 						errOnce.Do(func() { firstErr = ew })
 						return
 					}
-					
+
 					mu.Lock()
 					totalWritten += int64(nw)
 					currentTotal := totalWritten
@@ -232,8 +240,12 @@ func (t *Transferer) copyWithProgress(filename string, src io.Reader, dst io.Wri
 				return written, ew
 			}
 		}
-		if err == io.EOF { break }
-		if err != nil { return written, err }
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return written, err
+		}
 	}
 	return written, nil
 }
@@ -257,13 +269,21 @@ func (t *Transferer) copyWithBandwidthLimit(filename string, src io.Reader, dst 
 					t.opts.OnProgress(filename, offset+written, totalSize)
 				}
 				elapsed := time.Since(lastTime)
-				if elapsed < sleepDuration { time.Sleep(sleepDuration - elapsed) }
+				if elapsed < sleepDuration {
+					time.Sleep(sleepDuration - elapsed)
+				}
 				lastTime = time.Now()
 			}
-			if ew != nil { return written, ew }
+			if ew != nil {
+				return written, ew
+			}
 		}
-		if err == io.EOF { break }
-		if err != nil { return written, err }
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return written, err
+		}
 	}
 	return written, nil
 }
@@ -271,17 +291,23 @@ func (t *Transferer) copyWithBandwidthLimit(filename string, src io.Reader, dst 
 func (t *Transferer) CreateDir(path string) error { return os.MkdirAll(path, 0755) }
 func (t *Transferer) DeleteFile(path string) error {
 	err := os.Remove(path)
-	if err != nil && os.IsNotExist(err) { return nil }
+	if err != nil && os.IsNotExist(err) {
+		return nil
+	}
 	return err
 }
 func (t *Transferer) DeleteDir(path string) error {
 	err := os.Remove(path)
-	if err != nil && os.IsNotExist(err) { return nil }
+	if err != nil && os.IsNotExist(err) {
+		return nil
+	}
 	return err
 }
 func (t *Transferer) RenameFile(oldPath, newPath string) error {
 	dstDir := filepath.Dir(newPath)
-	if err := os.MkdirAll(dstDir, 0755); err != nil { return err }
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return err
+	}
 	return os.Rename(oldPath, newPath)
 }
 func (t *Transferer) SetBandwidthLimit(limit int64) { t.opts.BandwidthLimit = limit }

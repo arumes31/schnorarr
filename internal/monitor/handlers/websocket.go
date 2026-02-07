@@ -7,6 +7,14 @@ import (
 
 // WebSocket handler
 func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
+	if AuthEnabled {
+		cookie, err := r.Cookie("schnorarr_session")
+		if err != nil || cookie.Value != h.sessionToken {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
+
 	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)

@@ -3,6 +3,7 @@ package database
 import (
 	"log"
 	"strconv"
+	"time"
 )
 
 // HistoryItem represents a single sync event
@@ -17,6 +18,14 @@ type HistoryItem struct {
 func LogEvent(timestamp, action, path string, size int64, engineID string) error {
 	_, err := DB.Exec("INSERT INTO history (timestamp, action, file_path, size_bytes, engine_id) VALUES (?, ?, ?, ?, ?)",
 		timestamp, action, path, size, engineID)
+	return err
+}
+
+// LogSystemEvent saves a system/admin event to the database
+func LogSystemEvent(user, action, details string) error {
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	_, err := DB.Exec("INSERT INTO history (timestamp, action, file_path, size_bytes, engine_id) VALUES (?, ?, ?, ?, ?)",
+		timestamp, action, details, 0, "SYSTEM")
 	return err
 }
 
@@ -76,12 +85,15 @@ func GetHistoryCount(query string) (int, error) {
 func GetTopFiles() []HistoryItem {
 	q := "SELECT timestamp, action, file_path, size_bytes FROM history WHERE action='Added' AND timestamp > datetime('now', '-1 day') ORDER BY size_bytes DESC LIMIT 5"
 	rows, err := DB.Query(q)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	defer rows.Close()
 
 	var items []HistoryItem
 	for rows.Next() {
-		var i HistoryItem; var sz int64
+		var i HistoryItem
+		var sz int64
 		_ = rows.Scan(&i.Time, &i.Action, &i.Path, &sz)
 		i.Size = FormatBytes(sz)
 		items = append(items, i)

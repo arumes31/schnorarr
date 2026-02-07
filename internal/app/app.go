@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -30,12 +31,20 @@ type App struct {
 
 func New() (*App, error) {
 	cfg := config.Load()
-	if err := database.Init(); err != nil { return nil, fmt.Errorf("db init failed: %w", err) }
+	if err := database.Init(); err != nil {
+		return nil, fmt.Errorf("db init failed: %w", err)
+	}
 	app := &App{
 		Config: cfg, HealthState: health.New(), WSHub: websocket.New(),
 		Notifier: notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
 	}
-	log.SetOutput(io.MultiWriter(os.Stdout, websocket.NewLogWriter(app.WSHub)))
+
+	// Setup structured logging
+	wsWriter := websocket.NewLogWriter(app.WSHub)
+	multiWriter := io.MultiWriter(os.Stdout, wsWriter)
+	logger := slog.New(slog.NewJSONHandler(multiWriter, nil))
+	slog.SetDefault(logger)
+	log.SetOutput(multiWriter) // Keep standard log output redirected for legacy calls
 	return app, nil
 }
 
@@ -43,7 +52,9 @@ func (a *App) Start(port string) error {
 	database.StartTrafficManager()
 	a.startLogTailer()
 	go a.startHousekeeping()
-	if os.Getenv("MODE") == "sender" { a.startSenderServices() }
+	if os.Getenv("MODE") == "sender" {
+		a.startSenderServices()
+	}
 
 	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.SyncEngines)
 	mux := http.NewServeMux()
@@ -64,7 +75,11 @@ func (a *App) Start(port string) error {
 	mux.HandleFunc("/settings/sender-override", h.UpdateSenderOverride)
 
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" { h.Login(w, r) } else { h.LoginPage(w, r) }
+		if r.Method == "POST" {
+			h.Login(w, r)
+		} else {
+			h.LoginPage(w, r)
+		}
 	})
 	mux.HandleFunc("/logout", h.Logout)
 
@@ -97,8 +112,12 @@ func (a *App) startLogTailer() {
 }
 
 func (a *App) startHousekeeping() {
-	if err := database.PruneHistory(30); err != nil { log.Printf("Housekeeping error: %v", err) }
+	if err := database.PruneHistory(30); err != nil {
+		log.Printf("Housekeeping error: %v", err)
+	}
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
-	for range ticker.C { _ = database.PruneHistory(30) }
+	for range ticker.C {
+		_ = database.PruneHistory(30)
+	}
 }

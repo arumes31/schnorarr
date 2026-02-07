@@ -5,6 +5,8 @@ import (
 	"embed"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -78,9 +80,19 @@ func runMigrations() error {
 		return err
 	}
 
-	for i, file := range files {
-		version := i + 1
-		
+	for _, file := range files {
+		// Parse version from filename (e.g., "001_init.sql" -> 1)
+		parts := strings.SplitN(file.Name(), "_", 2)
+		if len(parts) < 2 {
+			log.Printf("[Database] Skipping invalid migration file: %s", file.Name())
+			continue
+		}
+		version, err := strconv.Atoi(parts[0])
+		if err != nil {
+			log.Printf("[Database] Skipping invalid migration version: %s", file.Name())
+			continue
+		}
+
 		// Check if migration already run
 		var exists int
 		_ = DB.QueryRow("SELECT 1 FROM schema_migrations WHERE version = ?", version).Scan(&exists)
@@ -88,19 +100,33 @@ func runMigrations() error {
 			continue
 		}
 
-		log.Printf("[Database] Running migration: %s", file.Name())
+		log.Printf("[Database] Running migration %d: %s", version, file.Name())
 		content, err := migrationFS.ReadFile("migrations/" + file.Name())
 		if err != nil {
 			return err
 		}
 
-		if _, err := DB.Exec(string(content)); err != nil {
-			// Design note: Migration 002 might fail if the user's DB was already repaired 
-			// by previous turn's repair logic. We log a warning and continue.
-			log.Printf("[Database] Warning: migration %s failed (may have already run): %v", file.Name(), err)
+		// Execute in transaction
+		tx, err := DB.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction: %w", err)
 		}
 
-		_, _ = DB.Exec("INSERT INTO schema_migrations (version) VALUES (?)", version)
+		if _, err := tx.Exec(string(content)); err != nil {
+			_ = tx.Rollback()
+			// If it's an "already exists" error on create table, we might want to ignore it if we are sure,
+			// but for safety we fail. The user can manually fix if needed.
+			return fmt.Errorf("migration %s failed: %w", file.Name(), err)
+		}
+
+		if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES (?)", version); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("failed to record migration version: %w", err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit migration: %w", err)
+		}
 	}
 
 	return nil

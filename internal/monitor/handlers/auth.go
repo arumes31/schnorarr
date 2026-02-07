@@ -19,7 +19,7 @@ func (h *Handlers) auth(next http.HandlerFunc) http.HandlerFunc {
 
 		// Check for session cookie
 		cookie, err := r.Cookie("schnorarr_session")
-		if err != nil || cookie.Value != "authenticated" {
+		if err != nil || cookie.Value != h.sessionToken {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
@@ -54,7 +54,7 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 		// Set simple session cookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "schnorarr_session",
-			Value:    "authenticated",
+			Value:    h.sessionToken,
 			Path:     "/",
 			HttpOnly: true,
 			Expires:  time.Now().Add(24 * time.Hour),
