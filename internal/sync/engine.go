@@ -152,7 +152,11 @@ func NewEngine(config SyncConfig) *Engine {
 	return e
 }
 
-func (e *Engine) SetHealthState(s *health.State) { e.healthState = s }
+func (e *Engine) SetHealthState(s *health.State) {
+	e.pausedMu.Lock()
+	defer e.pausedMu.Unlock()
+	e.healthState = s
+}
 
 func (e *Engine) Start() error {
 	watcher, err := fsnotify.NewWatcher()
@@ -207,22 +211,20 @@ func (e *Engine) PreviewSync() (*SyncPlan, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan source: %w", err)
 	}
+	// Lock to protect targetManifest initialization
+	e.pausedMu.Lock()
 	if e.targetManifest == nil {
-
-		// Lock to protect targetManifest initialization
-		e.pausedMu.Lock()
-		if e.targetManifest == nil { // Double check
-			cachePath := e.getCachePath()
-			e.targetManifest, err = LoadFromFile(cachePath)
+		cachePath := e.getCachePath()
+		var err error
+		e.targetManifest, err = LoadFromFile(cachePath)
+		if err != nil {
+			e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
 			if err != nil {
-				e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
-				if err != nil {
-					e.targetManifest = NewManifest(e.config.TargetDir)
-				}
+				e.targetManifest = NewManifest(e.config.TargetDir)
 			}
 		}
-		e.pausedMu.Unlock()
 	}
+	e.pausedMu.Unlock()
 	plan := CompareManifests(sourceManifest, e.targetManifest, e.config.Rule)
 	return plan, nil
 }
@@ -230,6 +232,7 @@ func (e *Engine) PreviewSync() (*SyncPlan, error) {
 func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	e.pausedMu.RLock()
 	isPaused := e.paused
+	healthState := e.healthState
 	e.pausedMu.RUnlock()
 	if isPaused {
 		return fmt.Errorf("sync is paused")
@@ -271,17 +274,22 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 			return fmt.Errorf("failed to scan source: %w", err)
 		}
 	}
+	e.pausedMu.Lock()
 	if e.targetManifest == nil {
 		cachePath := e.getCachePath()
 		var err error
-		e.targetManifest, err = LoadFromFile(cachePath)
+		target, err := LoadFromFile(cachePath)
 		if err != nil {
-			e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
+			target, err = e.scanner.ScanLocal(e.config.TargetDir)
 			if err != nil {
-				e.targetManifest = NewManifest(e.config.TargetDir)
+				target = NewManifest(e.config.TargetDir)
 			}
 		}
+		e.targetManifest = target
 	}
+	// Capture targetManifest to local variable to use outside lock
+	targetManifest := e.targetManifest
+	e.pausedMu.Unlock()
 
 	plan := CompareManifests(sourceManifest, e.targetManifest, e.config.Rule)
 
@@ -319,7 +327,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		e.pausedMu.Unlock()
 		return nil
 	}
-	if len(plan.Conflicts) > 0 && !e.deletionAllowed && e.healthState != nil && !e.healthState.IsOverrideEnabled() {
+	if len(plan.Conflicts) > 0 && !e.deletionAllowed && healthState != nil && !healthState.IsOverrideEnabled() {
 		e.waitingForApproval = true
 		e.pendingDeletions = nil
 		for _, c := range plan.Conflicts {
@@ -491,13 +499,20 @@ func (e *Engine) sourcePollLoop() {
 			if err != nil {
 				continue
 			}
-			if e.lastSourceManifest != nil {
-				plan := CompareManifests(currentSource, e.lastSourceManifest, e.config.Rule)
+			e.pausedMu.Lock()
+			lastSource := e.lastSourceManifest
+			if lastSource == nil {
+				e.lastSourceManifest = currentSource
+				e.pausedMu.Unlock()
+				continue
+			}
+			e.pausedMu.Unlock()
+
+			if lastSource != nil {
+				plan := CompareManifests(currentSource, lastSource, e.config.Rule)
 				if len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.DirsToCreate) > 0 || len(plan.DirsToDelete) > 0 || len(plan.Renames) > 0 {
 					go func() { _ = e.RunSync(currentSource) }()
 				}
-			} else {
-				e.lastSourceManifest = currentSource
 			}
 		}
 	}

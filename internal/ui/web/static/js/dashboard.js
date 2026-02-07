@@ -168,16 +168,16 @@ function updateProgress(data) {
             }
         }
     }
-    if (data.speed) {
+    if (Object.prototype.hasOwnProperty.call(data, 'speed')) {
         const el = document.getElementById('stat-speed'); if (el) el.innerText = data.speed;
         const val = parseBytes(data.speed);
         const bar = document.getElementById('speed-bar'); if (bar) bar.style.width = Math.min((val / (100 * 1024 * 1024)) * 100, 100) + '%';
     }
-    if (data.traffic_today) {
+    if (Object.prototype.hasOwnProperty.call(data, 'traffic_today')) {
         const todayEl = document.getElementById('stat-today');
         if (todayEl) todayEl.innerText = data.traffic_today;
     }
-    if (data.traffic_total) {
+    if (Object.prototype.hasOwnProperty.call(data, 'traffic_total')) {
         const totalEl = document.getElementById('stat-total');
         if (totalEl) totalEl.innerText = data.traffic_total;
     }
@@ -309,28 +309,62 @@ function filterEngines() {
     });
 }
 
-function cycleSyncMode() {
+async function cycleSyncMode() {
     const el = document.getElementById('sync-mode-switch'); if (!el) return;
     const current = el.getAttribute('data-val');
     let next = current === 'dry' ? 'manual' : (current === 'manual' ? 'auto' : 'dry');
-    el.setAttribute('data-val', next);
+
     const formData = new FormData(); formData.append('mode', next);
-    fetch('/settings/sync-mode', { method: 'POST', body: formData }).then(() => toast(`Mode: ${next.toUpperCase()}`, 'info'));
+    try {
+        const resp = await fetch('/settings/sync-mode', { method: 'POST', body: formData });
+        if (resp.ok) {
+            el.setAttribute('data-val', next);
+            toast(`Mode: ${next.toUpperCase()}`, 'info');
+        } else {
+            const txt = await resp.text();
+            toast(`Error: ${txt}`, 'error');
+        }
+    } catch (e) {
+        toast(`Request failed: ${e.message}`, 'error');
+    }
 }
 
-function updateAutoApprove(checkbox) {
+async function updateAutoApprove(checkbox) {
     const val = checkbox.checked ? 'on' : 'off';
     const formData = new FormData(); formData.append('auto_approve', val);
-    fetch('/settings/auto-approve', { method: 'POST', body: formData }).then(() => toast(`Auto-Approve: ${val.toUpperCase()}`, 'info'));
+    try {
+        const resp = await fetch('/settings/auto-approve', { method: 'POST', body: formData });
+        if (resp.ok) {
+            toast(`Auto-Approve: ${val.toUpperCase()}`, 'info');
+        } else {
+            checkbox.checked = !checkbox.checked; // Revert
+            const txt = await resp.text();
+            toast(`Error: ${txt}`, 'error');
+        }
+    } catch (e) {
+        checkbox.checked = !checkbox.checked; // Revert
+        toast(`Request failed: ${e.message}`, 'error');
+    }
 }
 
-function cycleOverrideMode() {
+async function cycleOverrideMode() {
     const el = document.getElementById('override-switch'); if (!el) return;
     const current = el.getAttribute('data-val');
     const next = current === 'override' ? 'ask' : 'override';
-    el.setAttribute('data-val', next);
+
     const formData = new FormData(); formData.append('enabled', next === 'override');
-    fetch('/settings/sender-override', { method: 'POST', body: formData }).then(() => toast(`Conflicts: ${next.toUpperCase()}`, 'info'));
+    try {
+        const resp = await fetch('/settings/sender-override', { method: 'POST', body: formData });
+        if (resp.ok) {
+            el.setAttribute('data-val', next);
+            toast(`Conflicts: ${next.toUpperCase()}`, 'info');
+        } else {
+            const txt = await resp.text();
+            toast(`Error: ${txt}`, 'error');
+        }
+    } catch (e) {
+        toast(`Request failed: ${e.message}`, 'error');
+    }
 }
 
 // --- 5. Engine Actions ---
@@ -410,7 +444,7 @@ async function showPreview(id, mode = 'preview') {
 
         const renderRow = (type, path, details, badgeClass, isChecked = true) => {
             return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-                <td style="padding:10px;"><input type="checkbox" class="preview-select" value="${escapeHtml(path)}" ${isChecked ? 'checked' : ''}></td>
+                <td style="padding:10px;"><input type="checkbox" class="preview-select" value="${encodeURIComponent(path)}" ${isChecked ? 'checked' : ''}></td>
                 <td style="padding:10px;"><span class="action-badge ${badgeClass}">${type}</span></td>
                 <td style="word-break: break-all;">${escapeHtml(path)}</td>
                 <td>${details}</td>
@@ -458,7 +492,7 @@ async function confirmSyncFromPreview() {
     if (!currentPreviewId) return;
 
     // Gather selected files
-    const selected = Array.from(document.querySelectorAll('.preview-select:checked')).map(cb => cb.value);
+    const selected = Array.from(document.querySelectorAll('.preview-select:checked')).map(cb => decodeURIComponent(cb.value));
     if (selected.length === 0) {
         toast("No changes selected", "warning");
         return;
