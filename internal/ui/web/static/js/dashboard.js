@@ -93,8 +93,15 @@ function filterLogs() {
     }
 }
 
+function getThemeColor(varName, fallback) {
+    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || fallback;
+}
+
 function updateFavicon(status) {
-    let color = '#00ffad'; if (status === 'critical') color = '#ff3d00'; if (status === 'paused') color = '#ffb300';
+    let color = getThemeColor('--accent-primary', '#00ffad');
+    if (status === 'critical') color = getThemeColor('--accent-error', '#ff3d00');
+    if (status === 'paused') color = getThemeColor('--accent-warning', '#ffb300');
+
     const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'><path d='M12 2L2 7L12 12L22 7L12 2Z' fill='${encodeURIComponent(color)}'/><path d='M2 17L12 22L22 17' stroke='${encodeURIComponent(color)}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><path d='M2 12L12 17L22 12' stroke='${encodeURIComponent(color)}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
     const link = document.querySelector("link[rel*='icon']") || document.createElement('link');
     link.type = 'image/svg+xml'; link.rel = 'shortcut icon'; link.href = 'data:image/svg+xml,' + svg;
@@ -117,6 +124,9 @@ function drawSparkline(canvasId, data, color, minMax = 1024) {
         d += ` L ${x} ${y}`;
     });
     path.setAttribute('d', d);
+    // If color is not provided, use primary accent
+    if (!color) color = getThemeColor('--accent-primary', '#00ffad');
+    path.setAttribute('stroke', color);
 }
 
 function updateLatencySparkline(val) {
@@ -128,7 +138,7 @@ function updateLatencySparkline(val) {
     history.push(val); if (history.length > 30) history.shift();
     sl.setAttribute('data-history', history.join(','));
     // Use 50ms as minMax for latency to make graphs visible
-    drawSparkline('latency-sparkline', history, '#ffb300', 50);
+    drawSparkline('latency-sparkline', history, getThemeColor('--accent-warning', '#ffb300'), 50);
 }
 
 function updateProgress(data) {
