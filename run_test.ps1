@@ -5,6 +5,13 @@ if (!(Test-Path $root)) {
     Write-Host "Warning: $root directory not found. Docker may create it as root if volumes are mounted."
 }
 
+# Clean validation cache to ensure fresh test state
+$configDir = "$root/sender_config"
+if (Test-Path $configDir) {
+    Remove-Item "$configDir/receiver_cache_*.json" -ErrorAction SilentlyContinue
+    Write-Host "Cleaned previous receiver cache."
+}
+
 # Run Docker Compose
 Write-Host "Starting 4-Way Sync Test..."
 docker compose -f docker-compose.test.yml up --build -d
