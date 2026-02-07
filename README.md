@@ -140,6 +140,54 @@ go build -o schnorarr ./cmd/monitor
 ./schnorarr
 ```
 
+## 📊 Dashboard Guide
+
+The Schnorarr dashboard is designed for high-density information display:
+
+*   **Real-Time Status**: View total accumulated traffic and "Traffic Today" at a glance.
+*   **Active Engines**: Each sync engine shows its current speed, percentage progress, ETA, and a 60-second speed sparkline.
+*   **Node Map**: A real-time visualization of file transfer activity across all engines.
+*   **Daily Traffic**: A 7-day bar chart showing data transfer volume trends.
+*   **Top Files**: Rankings of the most frequently synced or largest files.
+*   **Log Terminal**: A live-streaming terminal with ANSI color support and level filtering (INFO, WARN, ERROR).
+
+## 🎛️ Advanced Configuration
+
+Beyond the basic setup, you can fine-tune Schnorarr using these environment variables:
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `MIN_DISK_SPACE_GB` | (Sender) Stop syncing if source disk space falls below this. | `0` (Disabled) |
+| `MAX_RETRIES` | (Sender) Number of attempts to connect to receiver before failing. | `30` |
+| `CONFIG_DIR` | Path to store logs and cached manifests. | `/config` |
+| `BWLIMIT_MBPS` | Global bandwidth limit for all transfers in Mbps. | `0` (Unlimited) |
+| `RSYNC_PASSWORD` | Optional: Password for authenticated rsync transfers. | - |
+
+### Sync Engine Tuning (Code Level)
+Schnorarr is optimized for low CPU usage:
+- **Scan Concurrency**: 8 parallel workers (reduced from 32).
+- **Polling Interval**: Full "safety" scan runs every 60 seconds.
+- **Full Refresh**: Massive reconciliation scan runs every 12 hours.
+
+## 🔌 API Reference
+
+Power users can interact with Schnorarr via its REST API:
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/health` | `GET` | Returns JSON status of sender and receiver. |
+| `/history` | `GET` | Returns the last 50 sync events. |
+| `/api/engines/bulk` | `POST` | `{"action": "pause"\|"resume"}` - Controls all engines. |
+| `/api/engine/:id/sync` | `POST` | Triggers immediate manual sync for engine `id`. |
+| `/api/engine/:id/pause` | `POST` | Pauses a specific engine. |
+| `/api/engine/:id/preview` | `GET` | Returns JSON list of files that *would* be synced (Dry Run). |
+
+## 🛠️ Troubleshooting
+
+*   **Receiver Offline**: Ensure `DEST_HOST` is reachable from the sender container and port `873` (rsync) and `8080` (health) are open.
+*   **Permission Denied**: Check `PUID`/`PGID` settings. Ensure the container has write access to the mounted volumes.
+*   **Stuck Sync**: Use the **"Reset Engine"** button in the dashboard to clear the local manifest cache and force a full re-scan.
+
 ## 🖼️ Screenshots
 
 <div align="center">
