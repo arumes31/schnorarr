@@ -6,6 +6,8 @@
 schnorarr
 server
 monitor
+main_new
+.qodo/
 
 # Test binaries
 *.test
@@ -38,6 +40,7 @@ build/
 
 # Logs
 *.log
+scripts/debug_rules_*.filter
 
 # Temporary files
 tmp/
