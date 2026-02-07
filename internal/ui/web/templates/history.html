@@ -287,9 +287,14 @@
                 <h1 style="font-size: 32px; font-weight: 800; margin: 0;">Sync History</h1>
                 <p style="color: var(--text-muted); margin: 5px 0 0 0;">View all past synchronization events</p>
             </div>
-            <a href="/"
-                style="color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 600;">&larr; Back
-                to Dashboard</a>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <a href="/history/export" class="btn-premium btn-sync-all" style="font-size: 12px; padding: 8px 16px;">
+                    📥 Export CSV
+                </a>
+                <a href="/"
+                    style="color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 600;">&larr; Back
+                    to Dashboard</a>
+            </div>
         </header>
 
         <!-- Search Bar -->
@@ -339,6 +344,25 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Pagination -->
+        {{if gt .TotalPages 1}}
+        <div style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 30px;">
+            {{if gt .CurrentPage 1}}
+            <a href="/history?page={{.PrevPage}}{{if .Query}}&q={{.Query}}{{end}}" class="btn-premium btn-outline" style="padding: 8px 16px;">&larr; Previous</a>
+            {{else}}
+            <span class="btn-premium btn-outline" style="opacity: 0.3; cursor: not-allowed; padding: 8px 16px;">&larr; Previous</span>
+            {{end}}
+
+            <span style="font-size: 14px; font-weight: bold; color: var(--text-muted);">Page {{.CurrentPage}} of {{.TotalPages}}</span>
+
+            {{if lt .CurrentPage .TotalPages}}
+            <a href="/history?page={{.NextPage}}{{if .Query}}&q={{.Query}}{{end}}" class="btn-premium btn-outline" style="padding: 8px 16px;">Next &rarr;</a>
+            {{else}}
+            <span class="btn-premium btn-outline" style="opacity: 0.3; cursor: not-allowed; padding: 8px 16px;">Next &rarr;</span>
+            {{end}}
+        </div>
+        {{end}}
     </main>
 </body>
 

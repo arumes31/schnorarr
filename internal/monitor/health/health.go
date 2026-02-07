@@ -1,95 +1,76 @@
 package health
 
 import (
-	"fmt"
 	"sync"
-	"time"
 )
 
-const MaxConsecutiveErrors = 5
-
-// State tracks the system health state
-type State struct {
-	Healthy          bool
-	ErrorCount       int
-	LastErrorTime    time.Time
-	LastErrorMsg     string
-	ReceiverHealthy  bool
-	ReceiverErrorMsg string
-	mu               sync.Mutex
+type ReceiverStatus struct {
+	Healthy bool
+	Message string
+	Version string
+	Uptime  string
 }
 
-// NotifyFunc is a callback for sending notifications
-type NotifyFunc func(msg, msgType string)
+type State struct {
+	mu              sync.RWMutex
+	healthy         bool
+	lastError       string
+	receiver        ReceiverStatus
+	senderOverride  bool
+}
 
-// New creates a new health state tracker
 func New() *State {
 	return &State{
-		Healthy:         true,
-		ReceiverHealthy: true, // Optimistic default
+		healthy: true,
 	}
 }
 
-// ReportError records an error and triggers unhealthy state if threshold exceeded
-func (s *State) ReportError(msg string, notifyFn NotifyFunc) {
+func (s *State) ReportSuccess(notify func(string, string)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.healthy = true
+	s.lastError = ""
+}
 
-	s.ErrorCount++
-	s.LastErrorTime = time.Now()
-	s.LastErrorMsg = msg
-
-	if s.Healthy && s.ErrorCount >= MaxConsecutiveErrors {
-		s.Healthy = false
-		if notifyFn != nil {
-			go notifyFn(fmt.Sprintf("System Unhealthy: %s", msg), "ERROR")
-		}
+func (s *State) ReportError(msg string, notify func(string, string)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.healthy = false
+	s.lastError = msg
+	if notify != nil {
+		go notify("System Error: "+msg, "CRITICAL")
 	}
 }
 
-// ReportSuccess clears errors and marks system as healthy
-func (s *State) ReportSuccess(notifyFn NotifyFunc) {
+func (s *State) ReportReceiverStatus(healthy bool, msg string, version, uptime string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if !s.Healthy {
-		s.Healthy = true
-		if notifyFn != nil {
-			go notifyFn("System Recovered. Syncing normally.", "SUCCESS")
-		}
-	}
-	s.ErrorCount = 0
-	s.LastErrorMsg = ""
+	s.receiver.Healthy = healthy
+	s.receiver.Message = msg
+	s.receiver.Version = version
+	s.receiver.Uptime = uptime
 }
 
-// ReportReceiverError records a receiver error
-func (s *State) ReportReceiverError(msg string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.ReceiverHealthy = false
-	s.ReceiverErrorMsg = msg
+func (s *State) GetStatus() (bool, string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.healthy, s.lastError
 }
 
-// ReportReceiverSuccess clears receiver errors
-func (s *State) ReportReceiverSuccess() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.ReceiverHealthy = true
-	s.ReceiverErrorMsg = ""
+func (s *State) GetReceiverStatus() (bool, string, string, string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.receiver.Healthy, s.receiver.Message, s.receiver.Version, s.receiver.Uptime
 }
 
-// GetStatus returns the current health status (thread-safe)
-func (s *State) GetStatus() (healthy bool, lastErr string) {
+func (s *State) SetSenderOverride(enabled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.Healthy, s.LastErrorMsg
+	s.senderOverride = enabled
 }
 
-// GetReceiverStatus returns the current receiver status (thread-safe)
-func (s *State) GetReceiverStatus() (healthy bool, lastErr string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.ReceiverHealthy, s.ReceiverErrorMsg
+func (s *State) IsOverrideEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.senderOverride
 }

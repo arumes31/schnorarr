@@ -8,6 +8,8 @@ import (
 type SyncConfig struct {
 	// ID is a unique identifier for this sync engine (used for caching)
 	ID string
+	// Alias is a user-friendly name for the engine
+	Alias string
 	// SourceDir is the directory to watch and sync from
 	SourceDir string
 	// TargetDir is the destination directory
