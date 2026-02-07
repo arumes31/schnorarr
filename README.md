@@ -140,6 +140,36 @@ go build -o schnorarr ./cmd/monitor
 ./schnorarr
 ```
 
+## 🛣️ Path Mapping Guide
+
+It is important to understand how Schnorarr constructs the final rsync destination path. The formula is:
+`RECIEVER_IP / DEST_MODULE / SYNC_N_TARGET`
+
+| Variable | Scope | Example Value | Resulting Path |
+| :--- | :--- | :--- | :--- |
+| `DEST_HOST` | Global | `192.168.1.50` | `192.168.1.50::...` |
+| `DEST_MODULE` | Global | `media` | `192.168.1.50::media/...` |
+| `SYNC_1_TARGET` | Engine 1 | `movies` | `192.168.1.50::media/movies` |
+| `SYNC_2_TARGET` | Engine 2 | `series/anime` | `192.168.1.50::media/series/anime` |
+
+> [!TIP]
+> Ensure the `DEST_MODULE` exists in the Receiver's `rsyncd.conf` (usually mapped to a physical path like `/data`).
+
+## 🔔 Notification Setup (Pro)
+
+Schnorarr can send real-time alerts to Discord and Telegram. Here is how to get your credentials:
+
+### Discord
+1.  Open **Server Settings** -> **Integrations** -> **Webhooks**.
+2.  Click **New Webhook**, select the target channel.
+3.  Click **Copy Webhook URL** and paste it into `DISCORD_WEBHOOK_URL`.
+
+### Telegram
+1.  **Bot Token**: Message [@BotFather](https://t.me/botfather) and use `/newbot` to get your API Token.
+2.  **Chat ID**: 
+    - Message [@getIDbot](https://t.me/getidbot) to get your personal `Chat ID`.
+    - Or, add your bot to a group and message [@myidbot](https://t.me/myidbot) inside the group.
+
 ## 🏗️ Architecture
 
 Schnorarr operates as a distributed system with two specialized roles:
