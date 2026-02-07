@@ -288,10 +288,10 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		e.targetManifest = target
 	}
 	// Capture targetManifest to local variable to use outside lock
-	targetManifest := e.targetManifest
+	localTarget := e.targetManifest
 	e.pausedMu.Unlock()
 
-	plan := CompareManifests(sourceManifest, e.targetManifest, e.config.Rule)
+	plan := CompareManifests(sourceManifest, localTarget, e.config.Rule)
 
 	if len(plan.FilesToSync) == 0 && len(plan.FilesToDelete) == 0 && len(plan.DirsToCreate) == 0 && len(plan.DirsToDelete) == 0 && len(plan.Renames) == 0 {
 		e.lastSyncTime = time.Now()
