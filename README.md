@@ -85,6 +85,20 @@ services:
     restart: unless-stopped
 ```
 
+## 🔄 Sync Capabilities & Rules
+
+Schnorarr uses a **Smart Sync** strategy designed specifically for media libraries, minimizing the risk of accidental data loss.
+
+### The "Smart Deletion" Logic
+Regardless of the configured rule name (`series`, `flat`, etc.), the engine currently applies a unified safety logic:
+
+1.  **Updates & Additions**: Files are transferred if they are new or if the source version is newer/different in size.
+2.  **Protected Archives**: if a **top-level directory** exists on the Receiver but *not* on the Sender, it is treated as an "Archive" and **ignored**.
+    *   *Example*: You delete `/source/movies/Matrix_Trilogy` locally to save space. Schnorarr sees `Matrix_Trilogy` on the receiver is unique and **will not delete it**.
+3.  **Standard Deletions**: If a directory exists on *both* sides, but a file inside it is deleted from source, it **will be deleted** from the receiver.
+    *   *Example*: You delete `movie.nfo` inside `/source/movies/Avatar/`. Since `/source/movies/Avatar/` still exists, `movie.nfo` is deleted from the receiver.
+4.  **Directory Safety**: The sync engine currently **never deletes directories**, only files. This prevents recursive deletion accidents. Empty directories may remain on the receiver.
+
 ## ⚙️ Configuration (Environment Variables)
 
 ### General
