@@ -61,7 +61,7 @@ services:
       - BWLIMIT_MBPS=100
       - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
       # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
-      # - TAILSCALE_UP_ARGS=--accept-dns=false
+      # - TAILSCALE_UP_ARGS=--accept-routes
     restart: unless-stopped
 ```
 

@@ -29,7 +29,7 @@ services:
       - SYNC_5_TARGET=photos
       # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
       # - TS_HOSTNAME=schnorarr-sender
-      # - TAILSCALE_UP_ARGS=--accept-dns=false
+      # - TAILSCALE_UP_ARGS=--accept-routes
     ports:
       - "8080:8080"
     volumes:
