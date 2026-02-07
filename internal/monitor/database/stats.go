@@ -22,10 +22,18 @@ func GetTrafficStats() TrafficStats {
 	var s TrafficStats
 	if DB == nil { return s }
 	_ = DB.QueryRow("SELECT COALESCE(SUM(bytes_sent), 0) FROM traffic").Scan(&s.Total)
-	
+
 	// Fix: Use LIKE to ensure we match the date prefix correctly
 	todayPrefix := time.Now().Format("2006/01/02") + "%"
 	_ = DB.QueryRow("SELECT COALESCE(SUM(bytes_sent), 0) FROM traffic WHERE date LIKE ?", todayPrefix).Scan(&s.Today)
+
+	trafficMu.Lock()
+	for _, b := range unflushedBytes {
+		s.Today += b
+		s.Total += b
+	}
+	trafficMu.Unlock()
+
 	return s
 }
 
@@ -41,12 +49,19 @@ func GetEngineTrafficStats(engineID string) TrafficStats {
 	var s TrafficStats
 	if DB == nil { return s }
 	_ = DB.QueryRow("SELECT COALESCE(SUM(bytes_sent), 0) FROM traffic WHERE engine_id=?", engineID).Scan(&s.Total)
-	
+
 	todayPrefix := time.Now().Format("2006/01/02") + "%"
 	_ = DB.QueryRow("SELECT COALESCE(SUM(bytes_sent), 0) FROM traffic WHERE engine_id=? AND date LIKE ?", engineID, todayPrefix).Scan(&s.Today)
+
+	trafficMu.Lock()
+	if b, ok := unflushedBytes[engineID]; ok {
+		s.Today += b
+		s.Total += b
+	}
+	trafficMu.Unlock()
+
 	return s
 }
-
 func GetDailyTraffic(days int) []DailyTraffic {
 	if DB == nil { return nil }
 	query := `SELECT date, SUM(bytes_sent) FROM traffic GROUP BY date ORDER BY date DESC LIMIT ?`

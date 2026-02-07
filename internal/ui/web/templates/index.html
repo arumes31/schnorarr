@@ -79,6 +79,8 @@
                     <div onclick="setTheme('green')" class="theme-dot" style="background: #00ffad;" title="Cyber Green"></div>
                     <div onclick="setTheme('purple')" class="theme-dot" style="background: #a855f7;" title="Plasma Purple"></div>
                     <div onclick="setTheme('orange')" class="theme-dot" style="background: #f97316;" title="Nuclear Orange"></div>
+                    <div onclick="setTheme('red')" class="theme-dot" style="background: #ff3d00;" title="Crimson Red"></div>
+                    <div onclick="setTheme('blue')" class="theme-dot" style="background: #38bdf8;" title="Midnight Blue"></div>
                 </div>
             </div>
         </div>
@@ -248,7 +250,6 @@
                     </div>
                     <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
                         <input type="text" id="log-filter" class="log-search" placeholder="Filter logs..." onkeyup="filterLogs()" style="margin-left: 0;">
-                        <button onclick="toggleRetroMode()" class="copy-btn" title="Toggle Retro Mode" style="opacity: 0.8;">📺</button>
                         <button id="log-scroll-toggle" onclick="toggleLogScroll()" class="copy-btn" title="Lock Scroll" style="opacity: 0.8;">🔒</button>
                         <button onclick="clearLogs()" class="copy-btn" title="Clear Terminal" style="opacity: 0.8;">🗑️</button>
                         <button onclick="toggleTerminalFullscreen()" class="copy-btn" title="Toggle Fullscreen" style="opacity: 0.8;">⛶</button>

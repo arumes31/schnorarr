@@ -62,7 +62,7 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 		var totalSpeed int64; var totalRemaining int64; allPaused := true
 		type EngineProgress struct {
 			ID string `json:"id"`; File string `json:"file"`; Percent float64 `json:"percent"`; Speed string `json:"speed"`; Today string `json:"today"`; Total string `json:"total"`; IsActive bool `json:"is_active"`; ETA string `json:"eta"`; QueueCount int `json:"queue_count"`; IsScanning bool `json:"is_scanning"`
-			AvgSpeed string `json:"avg_speed"`; Elapsed string `json:"elapsed"`; SpeedHistory []int64 `json:"speed_history"`; IsPaused bool `json:"is_paused"`
+			AvgSpeed string `json:"avg_speed"`; Elapsed string `json:"elapsed"`; SpeedHistory []int64 `json:"speed_history"`; IsPaused bool `json:"is_paused"`; LastSync string `json:"last_sync"`
 		}
 		engineStats := make([]EngineProgress, 0)
 		for _, engine := range syncEngines {
@@ -89,7 +89,7 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 			}
 			engineStats = append(engineStats, EngineProgress{
 				ID: engine.GetConfig().ID, File: filepath.Base(file), Percent: percent, Speed: database.FormatBytes(s) + "/s", Today: database.FormatBytes(stats.Today), Total: database.FormatBytes(stats.Total), IsActive: s > 0, ETA: etaStr, QueueCount: qCount, IsScanning: engine.IsScanning(),
-				AvgSpeed: database.FormatBytes(avg) + "/s", Elapsed: elapsedStr, SpeedHistory: engine.GetSpeedHistory(), IsPaused: isPaused,
+				AvgSpeed: database.FormatBytes(avg) + "/s", Elapsed: elapsedStr, SpeedHistory: engine.GetSpeedHistory(), IsPaused: isPaused, LastSync: engine.GetLastSyncTime().Format(time.RFC3339),
 			})
 		}
 		state := "ACTIVE"; progress := "Monitoring..."
@@ -105,9 +105,17 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 		
 		latency := int64(10 + (time.Now().UnixNano() % 15)) 
 
+		receiverHealthy, receiverMsg, receiverVersion, receiverUptime := healthState.GetReceiverStatus()
+		traffic := database.GetTrafficStats()
 		wsHub.Broadcast("progress", map[string]interface{}{
 			"speed": database.FormatBytes(totalSpeed) + "/s", "state": state, "engines": engineStats, "eta": globalEta, "latency": latency,
-			"top_files": database.GetTopFiles(),
+			"top_files":        database.GetTopFiles(),
+			"receiver_healthy": receiverHealthy,
+			"receiver_msg":     receiverMsg,
+			"receiver_version": receiverVersion,
+			"receiver_uptime":  receiverUptime,
+			"traffic_today":    database.FormatBytes(traffic.Today),
+			"traffic_total":    database.FormatBytes(traffic.Total),
 		})
 		wsHub.Broadcast("sync_status", map[string]interface{}{ "status": progress, "engines": len(syncEngines) })
 	}

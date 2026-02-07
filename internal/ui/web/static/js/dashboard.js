@@ -2,7 +2,6 @@
 let currentLogLevel = 'all';
 let logScrollLocked = false;
 let currentPreviewId = null;
-let lastTrafficToday = 0;
 let lastTrafficTotal = 0;
 
 // --- 2. Core Logic Functions ---
@@ -17,18 +16,15 @@ function updateTopFiles(files) {
     list.innerHTML = files.map(f => `<li class="activity-item"><span class="action-badge badge-added">LARGE</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${f.Path} <span style="color: var(--text-muted); font-size: 11px;">(${f.Size})</span></div></li>`).join('');
 }
 
-function updateGlobalTraffic(speed) {
-    const todayEl = document.getElementById('stat-today');
-    if (todayEl) {
-        if (lastTrafficToday === 0) lastTrafficToday = parseBytes(todayEl.innerText);
-        lastTrafficToday += speed;
-        todayEl.innerText = formatBytes(lastTrafficToday);
-    }
-}
-
 function addLogLine(data) {
     const logContainer = document.getElementById('log-container');
     if (!logContainer) return;
+
+    // Clear initial placeholder
+    if (logContainer.innerText.includes("Awaiting logs...")) {
+        logContainer.innerHTML = '';
+    }
+
     const line = document.createElement('div');
     let color = '#00FFAD';
     let msg = typeof data === 'string' ? data : (data.msg || '');
@@ -50,11 +46,34 @@ function addLogLine(data) {
     });
     line.innerHTML = `<span style="color: ${color};">${msg}</span>`;
     const filter = document.getElementById('log-filter')?.value.toLowerCase() || '';
-    if ((filter && !msg.toLowerCase().includes(filter)) || (currentLogLevel !== 'all' && !msg.toLowerCase().includes(currentLogLevel))) line.style.display = 'none';
+    if ((filter && !msg.toLowerCase().includes(filter)) || (currentLogLevel !== 'all' && level !== currentLogLevel)) line.style.display = 'none';
     line.style.opacity = '0'; line.style.animation = 'fadeIn 0.3s forwards';
     logContainer.appendChild(line);
     if (!logScrollLocked) logContainer.scrollTop = logContainer.scrollHeight;
     if (logContainer.childNodes.length > 300) logContainer.removeChild(logContainer.firstChild);
+}
+
+function setLogLevel(level) {
+    currentLogLevel = level;
+    toast(`Log Level: ${level.toUpperCase()}`, 'info');
+    filterLogs();
+}
+
+function filterLogs() {
+    const filter = document.getElementById('log-filter')?.value.toLowerCase() || '';
+    const container = document.getElementById('log-container');
+    if (!container) return;
+    const lines = container.getElementsByTagName('div');
+    for (let line of lines) {
+        const text = line.innerText.toLowerCase();
+        // This is a bit simplified, but checks if level matches and filter matches
+        const matchesLevel = currentLogLevel === 'all' || text.includes(`[${currentLogLevel.toUpperCase()}]`) || line.innerHTML.includes(currentLogLevel);
+        if (text.includes(filter) && matchesLevel) {
+            line.style.display = 'block';
+        } else {
+            line.style.display = 'none';
+        }
+    }
 }
 
 function updateFavicon(status) {
@@ -118,9 +137,26 @@ function updateProgress(data) {
         const el = document.getElementById('stat-speed'); if (el) el.innerText = data.speed;
         const val = parseBytes(data.speed);
         const bar = document.getElementById('speed-bar'); if (bar) bar.style.width = Math.min((val / (100 * 1024 * 1024)) * 100, 100) + '%';
-        if (val > 0) updateGlobalTraffic(val);
+    }
+    if (data.traffic_today) {
+        const todayEl = document.getElementById('stat-today');
+        if (todayEl) todayEl.innerText = data.traffic_today;
+    }
+    if (data.traffic_total) {
+        const totalEl = document.getElementById('stat-total');
+        if (totalEl) totalEl.innerText = data.traffic_total;
     }
     if (data.latency) { updateLatencySparkline(data.latency); }
+    if (data.hasOwnProperty('receiver_healthy')) {
+        const receiverBadge = document.getElementById('receiver-badge');
+        if (receiverBadge) {
+            receiverBadge.className = `status-pill ${data.receiver_healthy ? 'pill-active' : 'pill-critical'}`;
+            receiverBadge.innerText = data.receiver_healthy ? 'ONLINE' : 'OFFLINE';
+            let title = `Ver: ${data.receiver_version || 'N/A'} | Up: ${data.receiver_uptime || 'N/A'}`;
+            if (data.receiver_msg) title += `\nStatus: ${data.receiver_msg}`;
+            receiverBadge.title = title;
+        }
+    }
     if (data.engines) {
         data.engines.forEach(eng => {
             const container = document.getElementById(`engine-progress-container-${eng.id}`);
@@ -133,7 +169,12 @@ function updateProgress(data) {
             const totalText = document.getElementById(`engine-total-${eng.id}`);
             const elapsedEl = document.getElementById(`engine-elapsed-${eng.id}`);
             const avgEl = document.getElementById(`engine-avg-${eng.id}`);
+            const lastSyncEl = document.getElementById(`engine-lastsync-${eng.id}`);
 
+            if (lastSyncEl && eng.last_sync) {
+                lastSyncEl.setAttribute('data-time', eng.last_sync);
+                lastSyncEl.innerText = timeAgo(eng.last_sync);
+            }
             if (todayText) todayText.innerText = eng.today;
             if (totalText) totalText.innerText = eng.total;
             if (radar) radar.style.display = eng.is_scanning ? 'flex' : 'none';
@@ -155,6 +196,30 @@ function updateProgress(data) {
     }
 }
 
+function timeAgo(date) {
+    if (!date || date.startsWith("0001")) return "Never";
+    const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+    if (seconds < 5) return "just now";
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + "y";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + "mo";
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + "d";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + "h";
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + "m";
+    return Math.floor(seconds) + "s";
+}
+
+function updateRelativeTimes() {
+    document.querySelectorAll('.relative-time').forEach(el => {
+        const time = el.getAttribute('data-time');
+        if (time) el.innerText = timeAgo(time);
+    });
+}
+
 // --- 3. WebSocket Setup ---
 const socket = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws');
 socket.onmessage = function (event) {
@@ -174,6 +239,27 @@ function setTheme(name) {
     document.documentElement.setAttribute('data-theme', name);
     localStorage.setItem('schnorarr-theme', name);
     toast(`Theme: ${name.toUpperCase()}`, 'success');
+}
+
+function toggleWebhookVisibility() {
+    const input = document.getElementById('webhook-input');
+    if (input) {
+        input.type = input.type === 'password' ? 'text' : 'password';
+    }
+}
+
+function filterEngines() {
+    const query = document.getElementById('engine-search')?.value.toLowerCase() || '';
+    document.querySelectorAll('.engine-card').forEach(card => {
+        const id = card.id.replace('engine-card-', '');
+        const alias = document.getElementById(`alias-${id}`)?.innerText.toLowerCase() || '';
+        const source = card.querySelector('.path-value')?.innerText.toLowerCase() || '';
+        if (id.includes(query) || alias.includes(query) || source.includes(query)) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
 }
 
 function cycleSyncMode() {
@@ -272,14 +358,32 @@ function parseBytes(str) { if (!str) return 0; const parts = str.trim().split(' 
 function toast(msg, type = 'info') { const c = document.getElementById('toast-container'); if (!c) return; const t = document.createElement('div'); t.className = 'toast'; t.style.borderLeftColor = type === 'success' ? 'var(--accent-primary)' : 'var(--accent-warning)'; t.innerText = msg; c.appendChild(t); setTimeout(() => t.remove(), 4000); }
 function toggleLogScroll() { logScrollLocked = !logScrollLocked; const btn = document.getElementById('log-scroll-toggle'); if (btn) btn.innerText = logScrollLocked ? 'Locked' : 'Auto'; }
 function clearLogs() { const logContainer = document.getElementById('log-container'); if (logContainer) logContainer.innerHTML = 'Buffer cleared.'; }
-function toggleRetroMode() { const term = document.getElementById('logs'); if (term) term.classList.toggle('retro'); }
+
+function toggleTerminalFullscreen() {
+    const term = document.querySelector('.terminal-window');
+    if (term) term.classList.toggle('fullscreen');
+}
+
+function downloadLogs() {
+    const container = document.getElementById('log-container');
+    if (!container) return;
+    const text = container.innerText;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `schnorarr-logs-${new Date().toISOString()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 function copyToClipboard(text, btn) { navigator.clipboard.writeText(text).then(() => { const old = btn.innerText; btn.innerText = 'OK'; setTimeout(() => btn.innerText = old, 2000); }); }
 function addHistoryItem(data) {
     const list = document.getElementById('history-list');
     if (!list) return;
     const li = document.createElement('li');
     li.className = 'activity-item';
-    const actionClass = data.Action.toLowerCase().replace('dry-', 'dry').replace(' ', '');
+    const actionClass = data.Action.toLowerCase().trim().replace(/\s+/g, '-');
     li.innerHTML = `<span class="action-badge badge-${actionClass}">${data.Action}</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${data.Path}</div>`;
     list.insertBefore(li, list.firstChild);
     if (list.childNodes.length > 10) list.removeChild(list.lastChild);
@@ -295,9 +399,10 @@ document.addEventListener('DOMContentLoaded', () => {
     NodeMap.init();
     const savedTheme = localStorage.getItem('schnorarr-theme');
     if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
-    const retro = localStorage.getItem('schnorarr-retro');
-    if (retro === 'true') { const logs = document.getElementById('logs'); if (logs) logs.classList.add('retro'); }
     document.querySelectorAll('.sparkline-container').forEach(sl => { const histStr = sl.getAttribute('data-history') || ""; const history = histStr ? histStr.split(',').map(Number) : []; if (history.length >= 2) drawSparkline(sl.id, history, '#00ffad'); });
+
+    updateRelativeTimes();
+    setInterval(updateRelativeTimes, 30000);
 });
 
 window.addEventListener('keydown', e => {
@@ -309,3 +414,27 @@ window.addEventListener('keydown', e => {
 });
 
 if (Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
+
+// --- 8. Error & Receiver Modals ---
+function showReceiverError() {
+    const badge = document.getElementById('receiver-badge');
+    if (!badge) return;
+    const msg = badge.title || "No additional information available.";
+    showErrorModal("Receiver Status", msg);
+}
+
+function showErrorModal(title, msg) {
+    const modal = document.getElementById('error-modal');
+    const titleEl = document.getElementById('error-title');
+    const msgEl = document.getElementById('error-msg');
+    if (modal && titleEl && msgEl) {
+        titleEl.innerText = title;
+        msgEl.innerText = msg;
+        modal.style.display = 'flex';
+    }
+}
+
+function closeErrorModal() {
+    const modal = document.getElementById('error-modal');
+    if (modal) modal.style.display = 'none';
+}
