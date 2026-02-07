@@ -77,8 +77,6 @@ func NewEngine(config SyncConfig) *Engine {
 		},
 		OnProgress: func(path string, bytesTransferred, totalBytes int64) {
 			e.pausedMu.Lock()
-			defer e.pausedMu.Unlock()
-
 			if e.currentFile != path {
 				e.lastBytes = 0
 				e.lastUpdate = time.Now()
@@ -98,18 +96,19 @@ func NewEngine(config SyncConfig) *Engine {
 				}
 			}
 
+			var diff int64
+			shouldLog := false
+			var speed int64
+
 			if e.lastUpdate.IsZero() {
 				e.lastUpdate = now
 				e.lastBytes = bytesTransferred
-				return
-			}
-
-			if now.Sub(e.lastUpdate) >= time.Second {
-				diff := bytesTransferred - e.lastBytes
+			} else if now.Sub(e.lastUpdate) >= time.Second {
+				diff = bytesTransferred - e.lastBytes
 				e.currentSpeed = diff
+				speed = diff
 				e.lastUpdate = now
 				e.lastBytes = bytesTransferred
-				_ = database.AddTraffic(e.config.ID, diff)
 				if len(e.speedHistory) < 60 {
 					e.speedHistory = make([]int64, 60)
 				}
@@ -117,14 +116,24 @@ func NewEngine(config SyncConfig) *Engine {
 			}
 
 			if now.Sub(e.lastLogTime) >= 5*time.Second {
+				shouldLog = true
+				e.lastLogTime = now
+				e.lastLogBytes = bytesTransferred
+			}
+			id := e.config.ID
+			e.pausedMu.Unlock() // Release lock before DB op and logging
+
+			if diff > 0 {
+				_ = database.AddTraffic(id, diff)
+			}
+
+			if shouldLog {
 				percent := 0.0
 				if totalBytes > 0 {
 					percent = float64(bytesTransferred) / float64(totalBytes) * 100
 				}
-				speedStr := database.FormatBytes(e.currentSpeed)
-				log.Printf("[%s] Syncing %s: %.1f%% (%s/s)", e.config.ID, filepath.Base(path), percent, speedStr)
-				e.lastLogTime = now
-				e.lastLogBytes = bytesTransferred
+				speedStr := database.FormatBytes(speed) // Use local speed var
+				log.Printf("[%s] Syncing %s: %.1f%% (%s/s)", id, filepath.Base(path), percent, speedStr)
 			}
 		},
 		OnComplete: func(path string, size int64, err error) {
@@ -199,14 +208,20 @@ func (e *Engine) PreviewSync() (*SyncPlan, error) {
 		return nil, fmt.Errorf("failed to scan source: %w", err)
 	}
 	if e.targetManifest == nil {
-		cachePath := e.getCachePath()
-		e.targetManifest, err = LoadFromFile(cachePath)
-		if err != nil {
-			e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
+
+		// Lock to protect targetManifest initialization
+		e.pausedMu.Lock()
+		if e.targetManifest == nil { // Double check
+			cachePath := e.getCachePath()
+			e.targetManifest, err = LoadFromFile(cachePath)
 			if err != nil {
-				e.targetManifest = NewManifest(e.config.TargetDir)
+				e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
+				if err != nil {
+					e.targetManifest = NewManifest(e.config.TargetDir)
+				}
 			}
 		}
+		e.pausedMu.Unlock()
 	}
 	plan := CompareManifests(sourceManifest, e.targetManifest, e.config.Rule)
 	return plan, nil
@@ -407,12 +422,20 @@ func (e *Engine) reportError(msg string) {
 }
 
 func (e *Engine) watchLoop() {
-	debounceTimer := time.NewTicker(5 * time.Second)
-	debounceTimer.Stop()
+	timer := time.NewTimer(5 * time.Second)
+	// Stop immediately so we can reset it on events
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+
 	needsSync := false
 	for {
 		select {
 		case <-e.stopCh:
+			timer.Stop()
 			return
 		case event, ok := <-e.watcher.Events:
 			if !ok {
@@ -425,9 +448,8 @@ func (e *Engine) watchLoop() {
 				_ = e.addWatchRecursive(event.Name)
 			}
 			needsSync = true
-			debounceTimer.Stop()
-			debounceTimer = time.NewTicker(5 * time.Second)
-		case <-debounceTimer.C:
+			timer.Reset(5 * time.Second)
+		case <-timer.C:
 			if needsSync {
 				needsSync = false
 				_ = e.RunSync(nil)
@@ -538,7 +560,11 @@ func (e *Engine) GetQueuedStats() (count int, size int64) {
 	}
 	return count, size
 }
-func (e *Engine) GetLastSyncTime() time.Time { return e.lastSyncTime }
+func (e *Engine) GetLastSyncTime() time.Time {
+	e.pausedMu.RLock()
+	defer e.pausedMu.RUnlock()
+	return e.lastSyncTime
+}
 func (e *Engine) SetAutoApproveDeletions(enabled bool) {
 	e.pausedMu.Lock()
 	defer e.pausedMu.Unlock()
@@ -579,9 +605,16 @@ func (e *Engine) GetPendingDeletions() []string {
 	if e.pendingDeletions == nil {
 		return []string{}
 	}
-	return e.pendingDeletions
+	// Return a copy to prevent external mutation
+	res := make([]string, len(e.pendingDeletions))
+	copy(res, e.pendingDeletions)
+	return res
 }
-func (e *Engine) GetAlias() string { return e.alias }
+func (e *Engine) GetAlias() string {
+	e.pausedMu.RLock()
+	defer e.pausedMu.RUnlock()
+	return e.alias
+}
 func (e *Engine) SetAlias(alias string) {
 	e.pausedMu.Lock()
 	defer e.pausedMu.Unlock()

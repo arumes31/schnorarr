@@ -74,10 +74,21 @@ func (h *Handlers) GetUser(r *http.Request) string {
 	if err != nil {
 		return "unknown"
 	}
+
 	h.sessionMu.RLock()
-	defer h.sessionMu.RUnlock()
-	if session, ok := h.sessions[cookie.Value]; ok {
-		return session.User
+	session, ok := h.sessions[cookie.Value]
+	h.sessionMu.RUnlock()
+
+	if !ok {
+		return "unknown"
 	}
-	return "unknown"
+
+	if time.Now().After(session.Expires) {
+		h.sessionMu.Lock()
+		delete(h.sessions, cookie.Value)
+		h.sessionMu.Unlock()
+		return "unknown"
+	}
+
+	return session.User
 }

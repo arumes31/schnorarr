@@ -312,7 +312,12 @@ function onEngineSelect() {
     else { if (bar) bar.classList.remove('active'); const master = document.getElementById('select-all-engines'); if (master) master.checked = false; }
 }
 
-function toggleAllEngines(master) { document.querySelectorAll('.engine-select').forEach(cb => cb.checked = master.checked); onEngineSelect(); }
+function toggleAllEngines(master) {
+    document.querySelectorAll('.engine-select').forEach(cb => {
+        cb.checked = master.checked;
+    });
+    onEngineSelect();
+}
 function deselectAll() { const master = document.getElementById('select-all-engines'); if (master) master.checked = false; toggleAllEngines({ checked: false }); }
 
 async function executeBulkAction(action) {
@@ -353,6 +358,9 @@ async function showPreview(id, mode = 'preview') {
     if (modal) modal.style.display = 'flex'; if (loading) loading.style.display = 'block'; if (body) body.style.display = 'none';
     try {
         const resp = await fetch(`/api/engine/${id}/preview`);
+        if (!resp.ok) {
+            throw new Error(`Preview failed: ${resp.statusText}`);
+        }
         const plan = await resp.json();
         if (loading) loading.style.display = 'none'; if (body) body.style.display = 'block';
         if (stats) stats.innerHTML = `<div class="stat-card" style="padding:15px;"><div class="stat-label">Sync</div><div class="stat-value" style="font-size:20px;">${plan.FilesToSync.length}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Delete</div><div class="stat-value" style="font-size:20px; color:var(--accent-error);">${plan.FilesToDelete.length}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Conflicts</div><div class="stat-value" style="font-size:20px; color:var(--accent-warning);">${plan.Conflicts.length}</div></div>`;
@@ -409,8 +417,12 @@ function addHistoryItem(data) {
 const NodeMap = {
     canvas: null, ctx: null, speedMult: 1,
     init() { const c = document.getElementById('node-map-bg'); if (!c) return; this.canvas = document.createElement('canvas'); c.appendChild(this.canvas); this.ctx = this.canvas.getContext('2d'); this.resize(); },
-    resize() { if (this.canvas) { this.canvas.width = window.innerWidth; this.canvas.height = window.innerHeight; } }
+    resize() { if (this.canvas) { this.canvas.width = window.innerWidth; this.canvas.height = window.innerHeight; } },
+    setSpeed(s) {
+        this.speedMult = Math.max(0.1, Math.min(10, Number(s) || 1));
+    }
 };
+window.nodeMap = NodeMap;
 
 document.addEventListener('DOMContentLoaded', () => {
     NodeMap.init();

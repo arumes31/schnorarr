@@ -101,6 +101,9 @@ func (e *Engine) executeCleanupPhase(plan *SyncPlan, targetManifest *Manifest, t
 			if err := e.transferer.DeleteDir(filepath.Join(e.config.TargetDir, dirPath)); err == nil {
 				delete(targetManifest.Dirs, dirPath)
 				delete(targetManifest.Files, dirPath)
+				e.reportEvent(timestamp, "Deleted", dirPath, 0)
+			} else {
+				e.reportError(fmt.Sprintf("Failed to delete dir %s: %v", dirPath, err))
 			}
 		}
 	}
