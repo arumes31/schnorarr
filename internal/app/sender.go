@@ -46,7 +46,7 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 		engine := sync.NewEngine(sync.SyncConfig{
 			ID: id, SourceDir: src, TargetDir: resolvedTgt, Rule: rule,
 			ExcludePatterns: []string{".git", ".DS_Store", "Thumbs.db"}, BandwidthLimit: bwlimitBytes,
-			PollInterval: 10 * time.Second, WatchInterval: 12 * time.Hour, AutoApproveDeletions: database.GetSetting("auto_approve", "off") == "on",
+			PollInterval: 60 * time.Second, WatchInterval: 12 * time.Hour, AutoApproveDeletions: database.GetSetting("auto_approve", "off") == "on",
 			DryRunFunc: func() bool { return database.GetSetting("sync_mode", "dry") == "dry" },
 			OnSyncEvent: func(ts, act, p string, sz int64) {
 				_ = database.LogEvent(ts, act, p, sz, id)
@@ -74,7 +74,7 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 }
 
 func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine, healthState *health.State, latency *int64) {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
 		var totalSpeed int64

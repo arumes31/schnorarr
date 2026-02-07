@@ -38,7 +38,7 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 	var mu sync.Mutex
 
 	// Semaphore to limit concurrency (prevent opening too many file descriptors)
-	sem := make(chan struct{}, 32)
+	sem := make(chan struct{}, 8)
 	var wg sync.WaitGroup
 
 	// Error handling with cancellation
