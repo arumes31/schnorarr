@@ -355,6 +355,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 				}
 			}
 			plan.FilesToSync = filteredSyncs
+
 			var filteredFiles []string
 			for _, f := range plan.FilesToDelete {
 				if allowed[f] {
@@ -362,6 +363,23 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 				}
 			}
 			plan.FilesToDelete = filteredFiles
+
+			var filteredDirsDelete []string
+			for _, f := range plan.DirsToDelete {
+				if allowed[f] {
+					filteredDirsDelete = append(filteredDirsDelete, f)
+				}
+			}
+			plan.DirsToDelete = filteredDirsDelete
+
+			var filteredDirsCreate []string
+			for _, f := range plan.DirsToCreate {
+				if allowed[f] {
+					filteredDirsCreate = append(filteredDirsCreate, f)
+				}
+			}
+			plan.DirsToCreate = filteredDirsCreate
+
 			filteredRenames := make(map[string]string)
 			for oldP, newP := range plan.Renames {
 				if allowed[oldP] || allowed[newP] {
