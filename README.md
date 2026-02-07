@@ -21,6 +21,7 @@
 *   **Cyberpunk Aesthetics:** Fully themed UI with 5 distinct color palettes (Cyber Green, Plasma Purple, Nuclear Orange, Crimson Red, Midnight Blue).
 *   **Log Terminal:** Integrated web-based terminal for viewing real-time system logs with filtering.
 *   **Discord Notifications:** Get alerted on sync completion or critical errors.
+*   **Built-in Mesh VPN:** Optional Tailscale integration for secure, zero-config cross-network synchronization.
 
 ## 🛠️ Tech Stack
 
@@ -59,6 +60,8 @@ services:
       - SYNC_1_RULE=series
       - BWLIMIT_MBPS=100
       - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
+      # - TAILSCALE_UP_ARGS=--accept-dns=false
     restart: unless-stopped
 ```
 
@@ -75,6 +78,8 @@ services:
       - "8080:8080"
     environment:
       - MODE=receiver
+      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
+      # - TAILSCALE_UP_ARGS=--accept-routes
     volumes:
       - /mnt/storage/media:/media
     restart: unless-stopped
@@ -88,6 +93,8 @@ services:
 | `MODE` | `sender` or `receiver` | `sender` |
 | `PORT` | Web UI / API Port | `8080` |
 | `PUID` / `PGID` | User/Group ID for file permissions | `1000` |
+| `TAILSCALE_AUTHKEY` | Optional: Tailscale Auth Key for built-in mesh VPN | - |
+| `TAILSCALE_UP_ARGS` | Optional: Extra arguments for `tailscale up` | - |
 
 ### Sender Specific
 | Variable | Description | Example |
