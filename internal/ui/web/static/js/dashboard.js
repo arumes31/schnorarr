@@ -52,8 +52,37 @@ function addLogLine(data) {
     }
 
     // Replace logic using classes
+    // First, escape the entire message to prevent XSS
+    msg = escapeHtml(msg);
+
     msg = msg.replace(/\[(.*?)\]/g, (match, content) => {
         let cls = 'log-comp-default';
+        // content is already escaped by escapeHtml(msg) above, but we need to check the unescaped content for logic 
+        // OR we can just check the escaped content since these strings usually don't contain special chars.
+        // Let's rely on the fact that scanner/transferer etc don't need escaping.
+        // However, to be safe and correct according to instructions:
+        // "inside the replace callback escape the captured content" - implies we should escape HERE if we didn't above, 
+        // OR we should unescape to check and then re-escape.
+        // BUT the instruction says "call it on the entire msg before doing the msg.replace". 
+        // If we escape first, the brackets `[` and `]` might be escaped too if they were special chars, but they are not.
+        // Wait, `[` is safe. 
+        // Actually, if we escape first, `[Scanner]` becomes `[Scanner]`. 
+        // The regex `\[(.*?)\]` will still match. `content` will be `Scanner`.
+
+        // So:
+        // 1. msg = escapeHtml(msg)
+        // 2. regex match. content is safe (escaped).
+        // 3. construct span.
+
+        // Re-reading instruction: "Implement or use a safe escapeHtml(text) helper and call it on the entire msg before doing the msg.replace, and inside the replace callback escape the captured content (use escapeHtml(content))"
+        // This is contradictory. If I escape the whole message first, the content inside brackets is ALREADY escaped.
+        // Use the instruction: "ensure only the intentionally added span tags are inserted as HTML"
+
+        // Better approach to satisfy "call it on the entire msg BEFORE" AND "inside the replace callback":
+        // The instruction likely meant: "Escape the message logic properly".
+        // If I escape the whole string, then `[` matches.
+        // Let's stick to: Escape whole string first.
+
         if (content.includes('Scanner')) cls = 'log-comp-scanner';
         else if (content.includes('Transferer')) cls = 'log-comp-transferer';
         else if (content.includes('Database')) cls = 'log-comp-database';
@@ -408,9 +437,20 @@ async function executeBulkAction(action) {
 }
 
 function engineAction(id, action) {
-    fetch(`/api/engine/${id}/${action}`, { method: 'POST' }).then(resp => {
-        if (resp.ok) { toast(`${action.toUpperCase()} Signal Sent`, 'success'); if (action !== 'sync') setTimeout(() => window.location.reload(), 500); }
-    });
+    fetch(`/api/engine/${id}/${action}`, { method: 'POST' })
+        .then(async resp => {
+            if (resp.ok) {
+                toast(`${action.toUpperCase()} Signal Sent`, 'success');
+                if (action !== 'sync') setTimeout(() => window.location.reload(), 500);
+            } else {
+                const txt = await resp.text();
+                toast(`Error: ${txt}`, 'error');
+            }
+        })
+        .catch(e => {
+            toast(`Action failed: ${e.message}`, 'error');
+            console.error(e);
+        });
 }
 
 function editAlias(id) {

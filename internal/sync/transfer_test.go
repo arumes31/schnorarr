@@ -16,7 +16,7 @@ func TestTransferer_CopyParallel(t *testing.T) {
 	dstPath := filepath.Join(tmpDir, "dst.dat")
 
 	size := int64(1 * 1024 * 1024)
-	data := make([]byte, size)
+	data := make([]byte, int(size))
 	if _, err := rand.Read(data); err != nil {
 		t.Fatal(err)
 	}

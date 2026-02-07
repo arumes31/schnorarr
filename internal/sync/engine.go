@@ -294,8 +294,10 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	plan := CompareManifests(sourceManifest, localTarget, e.config.Rule)
 
 	if len(plan.FilesToSync) == 0 && len(plan.FilesToDelete) == 0 && len(plan.DirsToCreate) == 0 && len(plan.DirsToDelete) == 0 && len(plan.Renames) == 0 {
+		e.pausedMu.Lock()
 		e.lastSyncTime = time.Now()
 		e.lastSourceManifest = sourceManifest
+		e.pausedMu.Unlock()
 		return nil
 	}
 
@@ -414,8 +416,12 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 
 	database.ReportEngineSuccess(e.config.ID)
 	_ = e.targetManifest.SaveToFile(e.getCachePath())
+
+	e.pausedMu.Lock()
 	e.lastSyncTime = time.Now()
 	e.lastSourceManifest = sourceManifest
+	e.pausedMu.Unlock()
+
 	log.Printf("[%s] Sync completed in %v", e.config.ID, time.Since(start))
 	return nil
 }
@@ -541,7 +547,9 @@ func (e *Engine) addWatchRecursive(path string) error {
 			if e.scanner.shouldExclude(relPath) {
 				return filepath.SkipDir
 			}
-			_ = e.watcher.Add(walkPath)
+			if err := e.watcher.Add(walkPath); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
