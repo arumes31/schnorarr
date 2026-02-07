@@ -59,18 +59,10 @@ elif [ "$MODE" = "sender" ]; then
     fi
 
     # Wait for receiver to be ready
-    MAX_RETRIES=${MAX_RETRIES:-30}
-    COUNT=0
+    echo "Waiting for receiver $DEST_HOST:873..."
     while ! nc -z "$DEST_HOST" 873; do
-        COUNT=$((COUNT+1))
-        if [ $COUNT -ge "$MAX_RETRIES" ]; then
-            echo "Error: Receiver $DEST_HOST not ready after $MAX_RETRIES attempts. Exiting."
-            # Notification handled by monitor (system unhealthy) if it was running, but here we exit before monitor might catch it?
-            # Actually monitor is running in background.
-            exit 1
-        fi
-        echo "Receiver not ready ($COUNT/$MAX_RETRIES), sleeping..."
-        sleep 2
+        echo "Receiver not ready, sleeping 5s..."
+        sleep 5
     done
 
     # Start Monitor with embedded sync engine

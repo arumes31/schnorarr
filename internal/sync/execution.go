@@ -58,8 +58,14 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 			srcPath, dstPath := filepath.Join(e.config.SourceDir, file.Path), filepath.Join(e.config.TargetDir, file.Path)
 			if err := e.transferer.CopyFile(srcPath, dstPath); err != nil {
 				e.reportError(fmt.Sprintf("Failed to copy %s: %v", file.Path, err))
+				e.pausedMu.Lock()
+				e.failedFiles[file.Path] = time.Now()
+				e.pausedMu.Unlock()
 				continue
 			}
+			e.pausedMu.Lock()
+			delete(e.failedFiles, file.Path)
+			e.pausedMu.Unlock()
 			targetManifest.Add(&FileInfo{Path: file.Path, Size: file.Size, ModTime: file.ModTime, IsDir: false})
 			e.reportEvent(timestamp, "Added", file.Path, file.Size)
 		}
