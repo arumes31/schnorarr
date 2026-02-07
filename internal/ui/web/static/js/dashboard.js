@@ -346,6 +346,10 @@ function editAlias(id) {
 }
 
 // --- 6. Modal & Preview ---
+function toggleAllPreview(master) {
+    document.querySelectorAll('.preview-select').forEach(cb => cb.checked = master.checked);
+}
+
 async function showPreview(id, mode = 'preview') {
     currentPreviewId = id;
     const modal = document.getElementById('modal-container');
@@ -363,20 +367,90 @@ async function showPreview(id, mode = 'preview') {
         }
         const plan = await resp.json();
         if (loading) loading.style.display = 'none'; if (body) body.style.display = 'block';
-        if (stats) stats.innerHTML = `<div class="stat-card" style="padding:15px;"><div class="stat-label">Sync</div><div class="stat-value" style="font-size:20px;">${plan.FilesToSync.length}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Delete</div><div class="stat-value" style="font-size:20px; color:var(--accent-error);">${plan.FilesToDelete.length}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Conflicts</div><div class="stat-value" style="font-size:20px; color:var(--accent-warning);">${plan.Conflicts.length}</div></div>`;
-        let html = '<table style="width:100%; border-collapse: collapse; font-size:12px;"><tr style="text-align:left; color:var(--text-muted); border-bottom:1px solid var(--border-glass);"><th style="padding:10px;">Action</th><th>File</th><th>Details</th></tr>';
+
+        let totalCount = plan.FilesToSync.length + plan.FilesToDelete.length + plan.Conflicts.length + (plan.Renames ? Object.keys(plan.Renames).length : 0);
+        let deleteCount = plan.FilesToDelete.length + plan.DirsToDelete.length;
+
+        if (stats) stats.innerHTML = `<div class="stat-card" style="padding:15px;"><div class="stat-label">Changes</div><div class="stat-value" style="font-size:20px;">${totalCount}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Sync</div><div class="stat-value" style="font-size:20px;">${plan.FilesToSync.length}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Delete</div><div class="stat-value" style="font-size:20px; color:var(--accent-error);">${deleteCount}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Conflicts</div><div class="stat-value" style="font-size:20px; color:var(--accent-warning);">${plan.Conflicts.length}</div></div>`;
+
+        let html = '<table style="width:100%; border-collapse: collapse; font-size:12px;">';
+        html += '<tr style="text-align:left; color:var(--text-muted); border-bottom:1px solid var(--border-glass);">';
+        html += '<th style="padding:10px; width: 40px;"><input type="checkbox" onchange="toggleAllPreview(this)" checked></th>';
+        html += '<th style="padding:10px;">Action</th><th>File</th><th>Details</th></tr>';
+
+        const renderRow = (type, path, details, badgeClass, isChecked = true) => {
+            return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                <td style="padding:10px;"><input type="checkbox" class="preview-select" value="${escapeHtml(path)}" ${isChecked ? 'checked' : ''}></td>
+                <td style="padding:10px;"><span class="action-badge ${badgeClass}">${type}</span></td>
+                <td style="word-break: break-all;">${escapeHtml(path)}</td>
+                <td>${details}</td>
+            </tr>`;
+        };
+
         plan.Conflicts.forEach(c => {
             const isSourceNewer = new Date(c.source_time) > new Date(c.receiver_time);
-            html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:10px;"><span class="action-badge badge-renamed">DIFF</span></td><td>${escapeHtml(c.path)}</td><td><div style="font-size:10px; color:var(--accent-warning);">${isSourceNewer ? 'Sender is NEWER' : 'Sender is OLDER'}</div><div style="font-size:9px; opacity:0.6;">Size diff: ${formatBytes(Math.abs(c.source_size - c.receiver_size))}</div></td></tr>`;
+            html += renderRow("DIFF", c.path, `<div style="font-size:10px; color:var(--accent-warning);">${isSourceNewer ? 'Sender is NEWER' : 'Sender is OLDER'}</div><div style="font-size:9px; opacity:0.6;">Size diff: ${formatBytes(Math.abs(c.source_size - c.receiver_size))}</div>`, "badge-renamed", false);
         });
-        plan.FilesToSync.forEach(f => { if (!plan.Conflicts.some(c => c.path === f.Path)) html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:10px;"><span class="action-badge badge-added">ADD</span></td><td>${escapeHtml(f.Path)}</td><td>${formatBytes(f.Size)}</td></tr>`; });
-        html += '</table>'; if (details) details.innerHTML = html;
-    } catch (e) { if (details) details.innerHTML = "Error loading preview."; }
+
+        plan.FilesToSync.forEach(f => {
+            if (!plan.Conflicts.some(c => c.path === f.Path)) {
+                html += renderRow("ADD", f.Path, formatBytes(f.Size), "badge-added");
+            }
+        });
+
+        plan.Renames = plan.Renames || {};
+        for (const [oldPath, newPath] of Object.entries(plan.Renames)) {
+            html += renderRow("MOVE", oldPath, `-> ${escapeHtml(newPath)}`, "badge-renamed");
+        }
+
+        plan.FilesToDelete.forEach(p => {
+            html += renderRow("DEL", p, "-", "badge-deleted");
+        });
+
+        plan.DirsToDelete.forEach(p => {
+            html += renderRow("DEL-DIR", p, "-", "badge-deleted");
+        });
+
+        html += '</table>';
+        if (details) details.innerHTML = html;
+    } catch (e) { if (details) details.innerHTML = `Error loading preview: ${e.message}`; }
 }
 
 function closeModal() { const el = document.getElementById('modal-container'); if (el) el.style.display = 'none'; }
-async function confirmSyncFromPreview() { if (!currentPreviewId) return; const btn = document.getElementById('preview-confirm-btn'); if (btn) btn.disabled = true; try { const resp = await fetch(`/api/engine/${currentPreviewId}/sync`, { method: 'POST' }); if (resp.ok) { toast("Sync started", "success"); closeModal(); } } finally { if (btn) btn.disabled = false; } }
 
+async function confirmSyncFromPreview() {
+    if (!currentPreviewId) return;
+
+    // Gather selected files
+    const selected = Array.from(document.querySelectorAll('.preview-select:checked')).map(cb => cb.value);
+    if (selected.length === 0) {
+        toast("No changes selected", "warning");
+        return;
+    }
+
+    const btn = document.getElementById('preview-confirm-btn');
+    if (btn) btn.disabled = true;
+
+    try {
+        const resp = await fetch(`/api/engine/${currentPreviewId}/approve-list`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ files: selected })
+        });
+
+        if (resp.ok) {
+            toast("Sync started for selected items", "success");
+            closeModal();
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            toast("Failed to start sync", "error");
+        }
+    } catch (e) {
+        toast("Request failed", "error");
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
 // --- 7. UI Helpers ---
 function formatBytes(b) { b = Math.abs(b); if (b === 0) return '0 B'; const k = 1024, s = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + s[i]; }
 function parseBytes(str) { if (!str) return 0; const parts = str.trim().split(' '); if (parts.length < 2) return 0; const val = parseFloat(parts[0]); const unit = parts[1].toUpperCase(); if (unit.includes('KB')) return val * 1024; if (unit.includes('MB')) return val * 1024 * 1024; if (unit.includes('GB')) return val * 1024 * 1024 * 1024; return val; }
