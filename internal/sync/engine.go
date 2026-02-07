@@ -9,35 +9,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"schnorarr/internal/monitor/database"
 )
-
-// SyncConfig configures the sync engine
-type SyncConfig struct {
-	// ID is a unique identifier for this sync engine (used for caching)
-	ID string
-	// SourceDir is the directory to watch and sync from
-	SourceDir string
-	// TargetDir is the destination directory
-	TargetDir string
-	// Rule describes the sync strategy (e.g., "flat", "series")
-	Rule string
-	// ExcludePatterns are glob patterns to exclude from syncing
-	ExcludePatterns []string
-	// BandwidthLimit in bytes per second (0 = unlimited)
-	BandwidthLimit int64
-	// WatchInterval is how often to perform full scans (0 = only on file changes)
-	WatchInterval time.Duration
-	// PollInterval is how often to poll the source directory for changes (for Docker/Windows compatibility)
-	PollInterval time.Duration
-	// DryRun when true, logs what would be synced without actually syncing
-	DryRun bool
-	// DryRunFunc optional callback to check dry run status dynamically
-	DryRunFunc func() bool
-	// OnSyncEvent callback for sync events (timestamp, action, path, size)
-	OnSyncEvent func(timestamp, action, path string, size int64)
-	// OnError callback for errors
-	OnError func(msg string)
-}
 
 // Engine is the main sync orchestrator
 type Engine struct {
@@ -52,6 +25,20 @@ type Engine struct {
 	lastSourceManifest *Manifest // Cached source manifest for quick polling comparison
 	targetManifest     *Manifest // In-memory cache of receiver state
 	syncMu             stdsync.Mutex
+	syncQueued         bool      // True if a sync is requested while one is running
+	queuedManifest     *Manifest // Store provided manifest for the queued run
+
+	// Progress Tracking
+	currentSpeed    int64
+	currentFile     string
+	currentProgress int64 // Bytes
+	totalFileSize   int64
+	lastUpdate      time.Time
+	lastBytes       int64
+	lastLogTime     time.Time
+	lastLogBytes    int64
+	planRemainingBytes int64 // Sum of sizes of files in current plan yet to complete
+	isScanning      bool
 
 	// Deletion Approval Safety Lock
 	pendingDeletions   []string
@@ -59,608 +46,355 @@ type Engine struct {
 	deletionAllowed    bool
 }
 
-// GetConfig returns the engine configuration
-func (e *Engine) GetConfig() SyncConfig {
-	return e.config
-}
-
 // NewEngine creates a new sync engine
 func NewEngine(config SyncConfig) *Engine {
 	scanner := NewScanner()
 	scanner.ExcludePatterns = config.ExcludePatterns
 
+	e := &Engine{
+		config:  config,
+		scanner: scanner,
+		stopCh:  make(chan struct{}),
+	}
+
 	transferer := NewTransferer(TransferOptions{
 		BandwidthLimit: config.BandwidthLimit,
+		CheckPaused: func() bool {
+			return e.IsPaused()
+		},
+		OnProgress: func(path string, bytesTransferred, totalBytes int64) {
+			e.pausedMu.Lock()
+			defer e.pausedMu.Unlock()
+
+			e.currentFile = path
+			e.currentProgress = bytesTransferred
+			e.totalFileSize = totalBytes
+
+			now := time.Now()
+			if e.lastUpdate.IsZero() {
+				e.lastUpdate = now
+				e.lastBytes = bytesTransferred
+				return
+			}
+
+			if now.Sub(e.lastUpdate) >= time.Second {
+				diff := bytesTransferred - e.lastBytes
+				e.currentSpeed = diff
+				e.lastUpdate = now
+				e.lastBytes = bytesTransferred
+				_ = database.AddTraffic(e.config.ID, diff)
+			}
+
+			if now.Sub(e.lastLogTime) >= 5*time.Second {
+				percent := 0.0
+				if totalBytes > 0 {
+					percent = float64(bytesTransferred) / float64(totalBytes) * 100
+				}
+				speedStr := database.FormatBytes(e.currentSpeed)
+				log.Printf("[%s] Syncing %s: %.1f%% (%s/s)", e.config.ID, filepath.Base(path), percent, speedStr)
+				e.lastLogTime = now
+				e.lastLogBytes = bytesTransferred
+			}
+		},
+		OnComplete: func(path string, size int64, err error) {
+			e.pausedMu.Lock()
+			defer e.pausedMu.Unlock()
+			e.currentSpeed = 0
+			e.currentFile = ""
+			e.currentProgress = 0
+			e.totalFileSize = 0
+		},
 	})
 
-	return &Engine{
-		config:     config,
-		scanner:    scanner,
-		transferer: transferer,
-		stopCh:     make(chan struct{}),
-	}
+	e.transferer = transferer
+	return e
 }
 
 // Start begins the sync engine in continuous watch mode
 func (e *Engine) Start() error {
-	// Initial full sync
-	if err := e.RunSync(nil); err != nil {
-		return fmt.Errorf("initial sync failed: %w", err)
-	}
-
-	// Set up file watcher
 	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return fmt.Errorf("failed to create watcher: %w", err)
-	}
+	if err != nil { return fmt.Errorf("failed to create watcher: %w", err) }
 	e.watcher = watcher
 
-	// Watch source directory recursively
-	if err := e.addWatchRecursive(e.config.SourceDir); err != nil {
-		return fmt.Errorf("failed to add watches: %w", err)
-	}
+	if err := e.addWatchRecursive(e.config.SourceDir); err != nil { return fmt.Errorf("failed to add watches: %w", err) }
 
-	// Start watch loop
+	go func() {
+		_ = e.RunSync(nil)
+	}()
+
 	go e.watchLoop()
-
-	// Start periodic full sync if configured
-	if e.config.WatchInterval > 0 {
-		go e.periodicSyncLoop()
-	}
-
-	// Start source polling if configured
-	if e.config.PollInterval > 0 {
-		go e.sourcePollLoop()
-	}
+	if e.config.WatchInterval > 0 { go e.periodicSyncLoop() }
+	if e.config.PollInterval > 0 { go e.sourcePollLoop() }
 
 	log.Printf("Sync engine started: %s -> %s", e.config.SourceDir, e.config.TargetDir)
 	return nil
 }
 
-// Stop stops the sync engine
 func (e *Engine) Stop() {
 	close(e.stopCh)
-	if e.watcher != nil {
-		e.watcher.Close()
-	}
-	log.Println("Sync engine stopped")
+	if e.watcher != nil { e.watcher.Close() }
 }
 
-// IsBusy returns true if a sync is currently in progress
 func (e *Engine) IsBusy() bool {
-	if !e.syncMu.TryLock() {
-		return true
-	}
+	e.pausedMu.RLock()
+	queued := e.syncQueued
+	e.pausedMu.RUnlock()
+	if queued { return true }
+	if !e.syncMu.TryLock() { return true }
 	e.syncMu.Unlock()
 	return false
 }
 
-// PreviewSync calculates a sync plan without executing it
 func (e *Engine) PreviewSync() (*SyncPlan, error) {
-	e.pausedMu.RLock()
-	isPaused := e.paused
-	e.pausedMu.RUnlock()
+	e.pausedMu.RLock(); isPaused := e.paused; e.pausedMu.RUnlock()
+	if isPaused { return nil, fmt.Errorf("sync is paused") }
 
-	if isPaused {
-		return nil, fmt.Errorf("sync is paused")
-	}
-
-	// Scan source
 	sourceManifest, err := e.scanner.ScanLocal(e.config.SourceDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan source: %w", err)
-	}
+	if err != nil { return nil, fmt.Errorf("failed to scan source: %w", err) }
 
-	// Get target manifest (prefer in-memory cache)
 	if e.targetManifest == nil {
 		cachePath := e.getCachePath()
 		var err error
 		e.targetManifest, err = LoadFromFile(cachePath)
 		if err != nil {
 			e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
-			if err != nil {
-				e.targetManifest = NewManifest(e.config.TargetDir)
-			}
+			if err != nil { e.targetManifest = NewManifest(e.config.TargetDir) }
 		}
 	}
-
-	// Compare
 	return CompareManifests(sourceManifest, e.targetManifest, e.config.Rule), nil
 }
 
-// RunSync performs a one-time sync operation
-// If sourceManifest is provided, it uses it instead of scanning the source directory
 func (e *Engine) RunSync(sourceManifest *Manifest) error {
-	e.pausedMu.RLock()
-	isPaused := e.paused
-	e.pausedMu.RUnlock()
+	e.pausedMu.RLock(); isPaused := e.paused; e.pausedMu.RUnlock()
+	if isPaused { return fmt.Errorf("sync is paused") }
 
-	if isPaused {
-		return fmt.Errorf("sync is paused")
-	}
-
-	// Prevent concurrent syncs on the same engine
 	if !e.syncMu.TryLock() {
-		return fmt.Errorf("sync already in progress")
+		e.pausedMu.Lock()
+		e.syncQueued = true
+		if sourceManifest != nil { e.queuedManifest = sourceManifest }
+		e.pausedMu.Unlock()
+		log.Printf("[%s] Sync already in progress, queuing next run", e.config.ID)
+		return nil
 	}
-	defer e.syncMu.Unlock()
 
-	startTime := time.Now()
+	defer func() {
+		e.syncMu.Unlock()
+		e.pausedMu.Lock()
+		wasQueued := e.syncQueued; nextManifest := e.queuedManifest
+		e.syncQueued = false; e.queuedManifest = nil
+		e.pausedMu.Unlock()
+		if wasQueued {
+			time.Sleep(1 * time.Second)
+			go func() { _ = e.RunSync(nextManifest) }()
+		}
+	}()
 
-	// 1. Scan source if not provided
+	start := time.Now()
+
 	if sourceManifest == nil {
+		e.pausedMu.Lock()
+		e.isScanning = true
+		e.pausedMu.Unlock()
 		var err error
 		sourceManifest, err = e.scanner.ScanLocal(e.config.SourceDir)
-		if err != nil {
-			return fmt.Errorf("failed to scan source: %w", err)
-		}
+		e.pausedMu.Lock()
+		e.isScanning = false
+		e.pausedMu.Unlock()
+		if err != nil { return fmt.Errorf("failed to scan source: %w", err) }
 	}
 
-	// 2. Get target manifest (prefer in-memory cache)
 	if e.targetManifest == nil {
 		cachePath := e.getCachePath()
 		var err error
 		e.targetManifest, err = LoadFromFile(cachePath)
 		if err != nil {
-			log.Printf("[%s] No valid cache found, performing full target scan: %v", e.config.ID, err)
 			e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
-			if err != nil {
-				e.targetManifest = NewManifest(e.config.TargetDir)
-			}
-		} else {
-			log.Printf("[%s] Loaded receiver manifest from disk (%d files)", e.config.ID, len(e.targetManifest.Files))
+			if err != nil { e.targetManifest = NewManifest(e.config.TargetDir) }
 		}
 	}
 
-	// 3. Compare
 	plan := CompareManifests(sourceManifest, e.targetManifest, e.config.Rule)
 	if len(plan.FilesToSync) == 0 && len(plan.FilesToDelete) == 0 && len(plan.DirsToCreate) == 0 && len(plan.DirsToDelete) == 0 && len(plan.Renames) == 0 {
-		log.Printf("[%s] Sync skipped: No changes detected", e.config.ID)
-		e.lastSyncTime = time.Now()
-		e.lastSourceManifest = sourceManifest
+		e.lastSyncTime = time.Now(); e.lastSourceManifest = sourceManifest
 		return nil
 	}
 
-	// SAFETY LOCK: Intercept deletions
-	hasDeletions := len(plan.FilesToDelete) > 0 || len(plan.DirsToDelete) > 0
+	var totalPlanSize int64
+	for _, f := range plan.FilesToSync { totalPlanSize += f.Size }
 	e.pausedMu.Lock()
-	if hasDeletions && !e.deletionAllowed {
+	e.planRemainingBytes = totalPlanSize
+	e.pausedMu.Unlock()
+
+	hasChanges := len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.Renames) > 0 || len(plan.DirsToCreate) > 0
+	syncMode := database.GetSetting("sync_mode", "dry")
+	
+	e.pausedMu.Lock()
+	if hasChanges && syncMode == "manual" && !e.deletionAllowed {
+		e.waitingForApproval = true
+		e.pendingDeletions = nil
+		for _, f := range plan.FilesToSync { e.pendingDeletions = append(e.pendingDeletions, f.Path) }
+		e.pendingDeletions = append(e.pendingDeletions, plan.FilesToDelete...)
+		for oldP := range plan.Renames { e.pendingDeletions = append(e.pendingDeletions, oldP) }
+		e.pausedMu.Unlock()
+		return nil
+	}
+
+	hasDeletions := len(plan.FilesToDelete) > 0 || len(plan.DirsToDelete) > 0
+	if hasDeletions && !e.config.AutoApproveDeletions && !e.deletionAllowed {
 		e.waitingForApproval = true
 		e.pendingDeletions = append(plan.FilesToDelete, plan.DirsToDelete...)
 		e.pausedMu.Unlock()
-		log.Printf("[%s] SAFETY LOCK: %d deletions detected. Pausing for approval.", e.config.ID, len(e.pendingDeletions))
 		return nil
 	}
-	// If proceeding, reset approval state
+
 	if e.deletionAllowed {
-		e.deletionAllowed = false
-		e.waitingForApproval = false
-		e.pendingDeletions = nil
-		log.Printf("[%s] SAFETY LOCK: Deletions approved. Proceeding.", e.config.ID)
+		if len(e.pendingDeletions) > 0 {
+			allowed := make(map[string]bool)
+			for _, f := range e.pendingDeletions { allowed[f] = true }
+			var filteredSyncs []*FileInfo
+			for _, f := range plan.FilesToSync {
+				if allowed[f.Path] { filteredSyncs = append(filteredSyncs, f) }
+			}
+			plan.FilesToSync = filteredSyncs
+			var filteredFiles []string
+			for _, f := range plan.FilesToDelete {
+				if allowed[f] { filteredFiles = append(filteredFiles, f) }
+			}
+			plan.FilesToDelete = filteredFiles
+			filteredRenames := make(map[string]string)
+			for oldP, newP := range plan.Renames {
+				if allowed[oldP] || allowed[newP] { filteredRenames[oldP] = newP }
+			}
+			plan.Renames = filteredRenames
+		}
+		e.deletionAllowed = false; e.waitingForApproval = false; e.pendingDeletions = nil
 	}
 	e.pausedMu.Unlock()
 
-	log.Printf("[%s] Starting sync: %s -> %s", e.config.ID, e.config.SourceDir, e.config.TargetDir)
+	touchedDirs, err := e.executeSyncPhase(plan, e.targetManifest)
+	if err != nil { return fmt.Errorf("sync failed: %w", err) }
+	if err := e.executeCleanupPhase(plan, e.targetManifest, touchedDirs); err != nil { return fmt.Errorf("cleanup failed: %w", err) }
 
-	// 4. Execute
-	if err := e.executePlan(plan, e.targetManifest); err != nil {
-		return fmt.Errorf("failed to execute sync plan: %w", err)
-	}
-
-	// 5. Save cache
-	cachePath := e.getCachePath()
-	if err := e.targetManifest.SaveToFile(cachePath); err != nil {
-		log.Printf("[%s] Warning: failed to save target manifest cache: %v", e.config.ID, err)
-	} else {
-		log.Printf("[%s] Receiver cache updated on disk", e.config.ID)
-	}
-
-	e.lastSyncTime = time.Now()
-	e.lastSourceManifest = sourceManifest
-	log.Printf("[%s] Sync completed in %v", e.config.ID, time.Since(startTime))
+	_ = e.targetManifest.SaveToFile(e.getCachePath())
+	e.lastSyncTime = time.Now(); e.lastSourceManifest = sourceManifest
+	log.Printf("[%s] Sync completed in %v", e.config.ID, time.Since(start))
 	return nil
 }
 
 func (e *Engine) getCachePath() string {
 	configDir := os.Getenv("CONFIG_DIR")
-	if configDir == "" {
-		configDir = "/config"
-	}
+	if configDir == "" { configDir = "/config" }
 	return filepath.Join(configDir, fmt.Sprintf("receiver_cache_%s.json", e.config.ID))
 }
 
-// executePlan executes the sync plan and updates targetManifest to reflect changes
-func (e *Engine) executePlan(plan *SyncPlan, targetManifest *Manifest) error {
-	timestamp := time.Now().Format("2006/01/02 15:04:05")
-
-	// Log dry-run status
-	isDryRun := e.config.DryRun
-	if e.config.DryRunFunc != nil {
-		isDryRun = e.config.DryRunFunc()
-	}
-
-	if isDryRun {
-		log.Printf("[%s] === DRY RUN MODE - No changes will be made ===", e.config.ID)
-		log.Printf("[%s] Sync plan: %d dirs to create, %d renames, %d files to sync, %d files to delete, %d dirs to delete",
-			e.config.ID, len(plan.DirsToCreate), len(plan.Renames), len(plan.FilesToSync), len(plan.FilesToDelete), len(plan.DirsToDelete))
-	}
-
-	// Create directories first
-	for _, dirPath := range plan.DirsToCreate {
-		fullPath := filepath.Join(e.config.TargetDir, dirPath)
-		if isDryRun {
-			log.Printf("[%s] [DRY RUN] Would create directory: %s", e.config.ID, dirPath)
-			if e.config.OnSyncEvent != nil {
-				e.config.OnSyncEvent(timestamp, "DRY-Created", dirPath, 0)
-			}
-		} else {
-			if err := e.transferer.CreateDir(fullPath); err != nil {
-				if e.config.OnError != nil {
-					e.config.OnError(fmt.Sprintf("Failed to create dir %s: %v", dirPath, err))
-				}
-				continue
-			}
-			log.Printf("[%s] Created directory: %s", e.config.ID, dirPath)
-
-			// Update in-memory manifest
-			targetManifest.Add(&FileInfo{
-				Path:  filepath.ToSlash(dirPath),
-				IsDir: true,
-			})
-		}
-	}
-
-	// Handle Renames
-	for oldPath, newPath := range plan.Renames {
-		if isDryRun {
-			log.Printf("[%s] [DRY RUN] Would rename: %s -> %s", e.config.ID, oldPath, newPath)
-			if e.config.OnSyncEvent != nil {
-				e.config.OnSyncEvent(timestamp, "DRY-Renamed", fmt.Sprintf("%s -> %s", oldPath, newPath), 0)
-			}
-		} else {
-			oldFullPath := filepath.Join(e.config.TargetDir, oldPath)
-			newFullPath := filepath.Join(e.config.TargetDir, newPath)
-
-			if err := e.transferer.RenameFile(oldFullPath, newFullPath); err != nil {
-				log.Printf("[%s] Failed to rename %s to %s: %v", e.config.ID, oldPath, newPath, err)
-				// If rename fails, we should really add it back to FilesToSync, but for now we just log
-				continue
-			}
-
-			log.Printf("[%s] Renamed: %s -> %s", e.config.ID, oldPath, newPath)
-
-			// Update in-memory manifest
-			if file, exists := targetManifest.Files[oldPath]; exists {
-				delete(targetManifest.Files, oldPath)
-				file.Path = newPath
-				targetManifest.Files[newPath] = file
-			}
-
-			// Report sync event
-			if e.config.OnSyncEvent != nil {
-				e.config.OnSyncEvent(timestamp, "Renamed", fmt.Sprintf("%s -> %s", oldPath, newPath), 0)
-			}
-		}
-	}
-
-	// Copy/update files
-	for _, file := range plan.FilesToSync {
-		if isDryRun {
-			log.Printf("[%s] [DRY RUN] Would sync file: %s (%d bytes)", e.config.ID, file.Path, file.Size)
-			if e.config.OnSyncEvent != nil {
-				e.config.OnSyncEvent(timestamp, "DRY-Added", file.Path, file.Size)
-			}
-		} else {
-			srcPath := filepath.Join(e.config.SourceDir, file.Path)
-			dstPath := filepath.Join(e.config.TargetDir, file.Path)
-
-			if err := e.transferer.CopyFile(srcPath, dstPath); err != nil {
-				if e.config.OnError != nil {
-					e.config.OnError(fmt.Sprintf("Failed to copy %s: %v", file.Path, err))
-				}
-				continue
-			}
-
-			log.Printf("[%s] Synced file: %s (%d bytes)", e.config.ID, file.Path, file.Size)
-
-			// Update in-memory manifest
-			targetManifest.Add(&FileInfo{
-				Path:    file.Path,
-				Size:    file.Size,
-				ModTime: file.ModTime,
-				IsDir:   false,
-			})
-
-			// Report sync event
-			if e.config.OnSyncEvent != nil {
-				e.config.OnSyncEvent(timestamp, "Added", file.Path, file.Size)
-			}
-		}
-	}
-
-	// Delete files
-	for _, filePath := range plan.FilesToDelete {
-		if isDryRun {
-			log.Printf("[%s] [DRY RUN] Would delete file: %s", e.config.ID, filePath)
-			if e.config.OnSyncEvent != nil {
-				e.config.OnSyncEvent(timestamp, "DRY-Deleted", filePath, 0)
-			}
-		} else {
-			fullPath := filepath.Join(e.config.TargetDir, filePath)
-			if err := e.transferer.DeleteFile(fullPath); err != nil {
-				if e.config.OnError != nil {
-					e.config.OnError(fmt.Sprintf("Failed to delete file %s: %v", filePath, err))
-				}
-				continue
-			}
-			log.Printf("[%s] Deleted file: %s", e.config.ID, filePath)
-
-			// Update in-memory manifest
-			delete(targetManifest.Files, filePath)
-
-			// Report sync event
-			if e.config.OnSyncEvent != nil {
-				e.config.OnSyncEvent(timestamp, "Deleted", filePath, 0)
-			}
-		}
-	}
-
-	// Delete directories (in reverse order to handle nested dirs)
-	for i := len(plan.DirsToDelete) - 1; i >= 0; i-- {
-		dirPath := plan.DirsToDelete[i]
-		if isDryRun {
-			log.Printf("[%s] [DRY RUN] Would delete directory: %s", e.config.ID, dirPath)
-			if e.config.OnSyncEvent != nil {
-				e.config.OnSyncEvent(timestamp, "DRY-Deleted", dirPath, 0)
-			}
-		} else {
-			fullPath := filepath.Join(e.config.TargetDir, dirPath)
-			if err := e.transferer.DeleteDir(fullPath); err != nil {
-				if e.config.OnError != nil {
-					e.config.OnError(fmt.Sprintf("Failed to delete dir %s: %v", dirPath, err))
-				}
-				continue
-			}
-			log.Printf("[%s] Deleted directory: %s", e.config.ID, dirPath)
-
-			// Update in-memory manifest
-			delete(targetManifest.Dirs, dirPath)
-			delete(targetManifest.Files, dirPath)
-		}
-	}
-
-	if isDryRun {
-		log.Printf("[%s] === DRY RUN COMPLETE - No changes were made ===", e.config.ID)
-	}
-
-	return nil
+func (e *Engine) isDryRun() bool {
+	if e.config.DryRunFunc != nil { return e.config.DryRunFunc() }
+	return e.config.DryRun
 }
 
-// watchLoop monitors file system events
+func (e *Engine) reportEvent(timestamp, action, path string, size int64) {
+	if e.config.OnSyncEvent != nil { e.config.OnSyncEvent(timestamp, action, path, size) }
+}
+
+func (e *Engine) reportError(msg string) {
+	if e.config.OnError != nil { e.config.OnError(msg) }
+}
+
 func (e *Engine) watchLoop() {
-	// Debounce timer to avoid syncing too often
-	debounceTimer := time.NewTimer(5 * time.Second)
-	debounceTimer.Stop()
+	debounceTimer := time.NewTimer(5 * time.Second); debounceTimer.Stop()
 	needsSync := false
-
 	for {
 		select {
-		case <-e.stopCh:
-			return
-
+		case <-e.stopCh: return
 		case event, ok := <-e.watcher.Events:
-			if !ok {
-				return
-			}
-
-			// Ignore events we don't care about
-			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
-				continue
-			}
-
-			log.Printf("File event: %s %s", event.Op, event.Name)
-
-			// If a new directory was created, add it to watcher
-			if event.Op&fsnotify.Create != 0 {
-				if err := e.addWatchRecursive(event.Name); err != nil {
-					log.Printf("Failed to add watch for %s: %v", event.Name, err)
-				}
-			}
-
-			// Trigger debounced sync
-			needsSync = true
-			debounceTimer.Reset(5 * time.Second)
-
-		case err, ok := <-e.watcher.Errors:
-			if !ok {
-				return
-			}
-			if e.config.OnError != nil {
-				e.config.OnError(fmt.Sprintf("Watcher error: %v", err))
-			}
-
+			if !ok { return }
+			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 { continue }
+			if event.Op&fsnotify.Create != 0 { _ = e.addWatchRecursive(event.Name) }
+			needsSync = true; debounceTimer.Reset(5 * time.Second)
 		case <-debounceTimer.C:
-			if needsSync {
-				needsSync = false
-				if err := e.RunSync(nil); err != nil {
-					if e.config.OnError != nil {
-						e.config.OnError(fmt.Sprintf("Sync error: %v", err))
-					}
-				}
-			}
+			if needsSync { needsSync = false; _ = e.RunSync(nil) }
 		}
 	}
 }
 
-// sourcePollLoop periodically checks the source for changes
 func (e *Engine) sourcePollLoop() {
-	ticker := time.NewTicker(e.config.PollInterval)
-	defer ticker.Stop()
-
+	ticker := time.NewTicker(e.config.PollInterval); defer ticker.Stop()
 	for {
 		select {
-		case <-e.stopCh:
-			return
+		case <-e.stopCh: return
 		case <-ticker.C:
-			e.pausedMu.RLock()
-			isPaused := e.paused
-			e.pausedMu.RUnlock()
-
-			if isPaused {
-				continue
-			}
-
-			// Scan source only (fast)
+			if e.IsPaused() { continue }
 			currentSource, err := e.scanner.ScanLocal(e.config.SourceDir)
-			if err != nil {
-				log.Printf("[%s] Polling error: %v", e.config.ID, err)
-				continue
-			}
-
-			// If we have a previous manifest, compare them
+			if err != nil { continue }
 			if e.lastSourceManifest != nil {
 				plan := CompareManifests(currentSource, e.lastSourceManifest, e.config.Rule)
 				if len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.DirsToCreate) > 0 || len(plan.DirsToDelete) > 0 || len(plan.Renames) > 0 {
-					log.Printf("[%s] Polling detected changes on source, triggering sync", e.config.ID)
-					if err := e.RunSync(currentSource); err != nil {
-						log.Printf("[%s] Polling-triggered sync error: %v", e.config.ID, err)
-					}
+					go func() { _ = e.RunSync(currentSource) }()
 				}
-			} else {
-				// First poll, just store the manifest
-				e.lastSourceManifest = currentSource
-			}
+			} else { e.lastSourceManifest = currentSource }
 		}
 	}
 }
 
-// periodicSyncLoop performs periodic full syncs
 func (e *Engine) periodicSyncLoop() {
-	ticker := time.NewTicker(e.config.WatchInterval)
-	defer ticker.Stop()
-
+	ticker := time.NewTicker(e.config.WatchInterval); defer ticker.Stop()
 	for {
 		select {
-		case <-e.stopCh:
-			return
-		case <-ticker.C:
-			if err := e.RunSync(nil); err != nil {
-				if e.config.OnError != nil {
-					e.config.OnError(fmt.Sprintf("Periodic sync error: %v", err))
-				}
-			}
+		case <-e.stopCh: return
+		case <-ticker.C: go func() { _ = e.RunSync(nil) }()
 		}
 	}
 }
 
-// addWatchRecursive adds a directory and all subdirectories to the watcher
 func (e *Engine) addWatchRecursive(path string) error {
 	return filepath.Walk(path, func(walkPath string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+		if err != nil { return err }
 		if info.IsDir() {
-			// Check exclusions
 			relPath, _ := filepath.Rel(e.config.SourceDir, walkPath)
-			if e.scanner.shouldExclude(relPath) {
-				return filepath.SkipDir
-			}
-
-			if err := e.watcher.Add(walkPath); err != nil {
-				return fmt.Errorf("failed to watch %s: %w", walkPath, err)
-			}
+			if e.scanner.shouldExclude(relPath) { return filepath.SkipDir }
+			_ = e.watcher.Add(walkPath)
 		}
 		return nil
 	})
 }
 
-// Pause pauses the sync engine
-func (e *Engine) Pause() {
-	e.pausedMu.Lock()
-	defer e.pausedMu.Unlock()
-	e.paused = true
-	log.Println("Sync engine paused")
-}
-
-// Resume resumes the sync engine
+func (e *Engine) Pause() { e.pausedMu.Lock(); e.paused = true; e.pausedMu.Unlock() }
 func (e *Engine) Resume() {
-	e.pausedMu.Lock()
-	defer e.pausedMu.Unlock()
-	e.paused = false
-	log.Println("Sync engine resumed")
-
-	// Trigger immediate sync
-	go func() {
-		if err := e.RunSync(nil); err != nil {
-			if e.config.OnError != nil {
-				e.config.OnError(fmt.Sprintf("Resume sync error: %v", err))
-			}
-		}
-	}()
+	e.pausedMu.Lock(); e.paused = false; e.pausedMu.Unlock()
+	go func() { _ = e.RunSync(nil) }()
 }
-
-// IsPaused returns whether the engine is paused
-func (e *Engine) IsPaused() bool {
-	e.pausedMu.RLock()
-	defer e.pausedMu.RUnlock()
-	return e.paused
+func (e *Engine) IsPaused() bool { e.pausedMu.RLock(); defer e.pausedMu.RUnlock(); return e.paused }
+func (e *Engine) IsScanning() bool { e.pausedMu.RLock(); defer e.pausedMu.RUnlock(); return e.isScanning }
+func (e *Engine) GetTransferStats() (file string, progress, total, speed int64) {
+	e.pausedMu.RLock(); defer e.pausedMu.RUnlock(); return e.currentFile, e.currentProgress, e.totalFileSize, e.currentSpeed
 }
-
-// SetBandwidthLimit updates the bandwidth limit
-func (e *Engine) SetBandwidthLimit(limit int64) {
-	e.transferer.SetBandwidthLimit(limit)
-	log.Printf("Bandwidth limit updated: %d bytes/s", limit)
+func (e *Engine) GetPlanRemainingBytes() int64 { e.pausedMu.RLock(); defer e.pausedMu.RUnlock(); return e.planRemainingBytes }
+func (e *Engine) GetQueuedStats() (count int, size int64) {
+	e.pausedMu.RLock(); defer e.pausedMu.RUnlock()
+	if !e.syncQueued { return 0, 0 }
+	if e.queuedManifest != nil {
+		for _, f := range e.queuedManifest.Files { if !f.IsDir { size += f.Size; count++ } }
+	} else { count = 1 }
+	return count, size
 }
-
-// GetLastSyncTime returns the time of the last successful sync
-func (e *Engine) GetLastSyncTime() time.Time {
-	return e.lastSyncTime
+func (e *Engine) GetLastSyncTime() time.Time { return e.lastSyncTime }
+func (e *Engine) SetAutoApproveDeletions(enabled bool) {
+	e.pausedMu.Lock(); defer e.pausedMu.Unlock(); e.config.AutoApproveDeletions = enabled
 }
-
-// GetStatus returns a human-readable status of the sync engine
 func (e *Engine) GetStatus() string {
-	e.pausedMu.RLock()
-	defer e.pausedMu.RUnlock()
-
-	status := "Running"
-	if e.paused {
-		status = "Paused"
-	}
-
-	return fmt.Sprintf("[%s] %s: %s -> %s (Last sync: %s)",
-		e.config.ID,
-		status,
-		e.config.SourceDir,
-		e.config.TargetDir,
-		e.lastSyncTime.Format("15:04:05"),
-	)
+	e.pausedMu.RLock(); defer e.pausedMu.RUnlock()
+	status := "Running"; if e.paused { status = "Paused" }
+	return fmt.Sprintf("[%s] %s: %s -> %s", e.config.ID, status, e.config.SourceDir, e.config.TargetDir)
 }
-
-// ApproveDeletions allows the next sync to perform deletions
 func (e *Engine) ApproveDeletions() {
-	e.pausedMu.Lock()
-	e.deletionAllowed = true
-	e.waitingForApproval = false // Clear waiting state immediately so UI updates
-	e.pausedMu.Unlock()
-	log.Printf("[%s] Deletions approved by user. Triggering sync.", e.config.ID)
-
-	// Trigger immediate sync
-	go e.RunSync(nil)
+	e.pausedMu.Lock(); e.deletionAllowed = true; e.waitingForApproval = false; e.pausedMu.Unlock()
+	go func() { _ = e.RunSync(nil) }()
 }
-
-// IsWaitingForApproval returns true if the engine is stopped due to pending deletions
-func (e *Engine) IsWaitingForApproval() bool {
-	e.pausedMu.RLock()
-	defer e.pausedMu.RUnlock()
-	return e.waitingForApproval
+func (e *Engine) ApproveSpecificChanges(files []string) {
+	e.pausedMu.Lock(); e.deletionAllowed = true; e.waitingForApproval = false; e.pendingDeletions = files; e.pausedMu.Unlock()
+	go func() { _ = e.RunSync(nil) }()
 }
-
-// GetPendingDeletions returns the list of files waiting to be deleted
+func (e *Engine) IsWaitingForApproval() bool { e.pausedMu.RLock(); defer e.pausedMu.RUnlock(); return e.waitingForApproval }
 func (e *Engine) GetPendingDeletions() []string {
-	e.pausedMu.RLock()
-	defer e.pausedMu.RUnlock()
-	if e.pendingDeletions == nil {
-		return []string{}
-	}
-	return e.pendingDeletions
+	e.pausedMu.RLock(); defer e.pausedMu.RUnlock(); if e.pendingDeletions == nil { return []string{} }; return e.pendingDeletions
 }

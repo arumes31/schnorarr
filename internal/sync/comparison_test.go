@@ -78,27 +78,36 @@ func TestCompareManifests_FlatSync(t *testing.T) {
 	sender := NewManifest("/sender")
 	receiver := NewManifest("/receiver")
 
-	// Sender is empty
-	// Receiver has a folder that should be deleted in flat mode
-	receiver.Add(&FileInfo{Path: "test12", IsDir: true})
-	receiver.Add(&FileInfo{Path: "test12/file.txt", Size: 100})
+	// Sender has a root directory and a file
+	sender.Add(&FileInfo{Path: "CommonDir", IsDir: true})
+	sender.Add(&FileInfo{Path: "CommonDir/keep.txt", Size: 100})
+
+	// Receiver has the same directory, but with an extra file and an extra sub-directory
+	receiver.Add(&FileInfo{Path: "CommonDir", IsDir: true})
+	receiver.Add(&FileInfo{Path: "CommonDir/keep.txt", Size: 100})
+	receiver.Add(&FileInfo{Path: "CommonDir/to_delete.txt", Size: 50})
+	receiver.Add(&FileInfo{Path: "CommonDir/ExtraDir", IsDir: true})
 
 	// Rule: flat
 	plan := CompareManifests(sender, receiver, "flat")
 
-	// Should delete everything
-	found := false
-	for _, path := range plan.DirsToDelete {
-		if path == "test12" {
-			found = true
+	// Should NOT delete ANY directory
+	if len(plan.DirsToDelete) > 0 {
+		t.Errorf("Expected 0 directories to delete, got %d: %v", len(plan.DirsToDelete), plan.DirsToDelete)
+	}
+
+	// Should still delete the file CommonDir/to_delete.txt
+	foundFile := false
+	for _, path := range plan.FilesToDelete {
+		if path == "CommonDir/to_delete.txt" {
+			foundFile = true
 			break
 		}
 	}
-	if !found {
-		t.Error("Expected test12 directory to be deleted in flat mode")
+	if !foundFile {
+		t.Error("Expected CommonDir/to_delete.txt to be deleted")
 	}
 }
-
 func TestGetTopLevelDir(t *testing.T) {
 	tests := []struct {
 		input    string

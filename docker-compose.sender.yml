@@ -16,6 +16,17 @@ services:
       - AUTH_ENABLED=${AUTH_ENABLED:-true}
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASS=${ADMIN_PASS:-schnorarr}
+      - SYNC_1_SOURCE=/data/movies
+      - SYNC_1_TARGET=movies
+      - SYNC_1_RULE=flat
+      - SYNC_2_SOURCE=/data/tv
+      - SYNC_2_TARGET=tv
+      - SYNC_3_SOURCE=/data/music
+      - SYNC_3_TARGET=music
+      - SYNC_4_SOURCE=/data/books
+      - SYNC_4_TARGET=books
+      - SYNC_5_SOURCE=/data/photos
+      - SYNC_5_TARGET=photos
       # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
       # - TS_HOSTNAME=schnorarr-sender
       # - TAILSCALE_UP_ARGS=--accept-dns=false

@@ -5,659 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>schnorarr | Sync Dashboard</title>
-    <style>
-        :root {
-            --bg-deep: #0a0b10;
-            --bg-glass: rgba(25, 27, 38, 0.7);
-            --bg-card: rgba(35, 38, 55, 0.5);
-            --border-glass: rgba(255, 255, 255, 0.1);
-            --accent-primary: #00ffad;
-            --accent-secondary: #0079d3;
-            --accent-warning: #ffb300;
-            --accent-error: #ff3d00;
-            --text-main: #e0e6ed;
-            --text-muted: #94a3b8;
-            --sidebar-width: 260px;
-            --glass-blur: 12px;
-        }
-
-        * {
-            box-sizing: border-box;
-            transition: all 0.2s ease;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-deep);
-            background-image:
-                radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
-                radial-gradient(at 50% 0%, hsla(225, 39%, 10%, 1) 0, transparent 50%),
-                radial-gradient(at 100% 0%, hsla(339, 49%, 10%, 1) 0, transparent 50%);
-            color: var(--text-main);
-            margin: 0;
-            display: flex;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        /* Sidebar Navigation */
-        .sidebar {
-            width: var(--sidebar-width);
-            background: rgba(10, 11, 16, 0.8);
-            backdrop-filter: blur(var(--glass-blur));
-            border-right: 1px solid var(--border-glass);
-            height: 100vh;
-            position: fixed;
-            left: 0;
-            top: 0;
-            display: flex;
-            flex-direction: column;
-            padding: 30px 20px;
-            z-index: 1000;
-        }
-
-        .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 50px;
-        }
-
-        .logo-area h1 {
-            font-size: 20px;
-            font-weight: 800;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin: 0;
-        }
-
-        .nav-items {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            flex: 1;
-        }
-
-        .nav-link {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 16px;
-            border-radius: 10px;
-            color: var(--text-muted);
-            text-decoration: none;
-            font-size: 14px;
-            font-weight: 500;
-        }
-
-        .nav-link:hover,
-        .nav-link.active {
-            background: rgba(255, 255, 255, 0.05);
-            color: var(--text-main);
-        }
-
-        .nav-link svg {
-            width: 18px;
-            height: 18px;
-            opacity: 0.7;
-        }
-
-        /* Sync Mode Toggle in Sidebar */
-        .sidebar-footer {
-            margin-top: auto;
-            border-top: 1px solid var(--border-glass);
-            padding-top: 20px;
-        }
-
-        /* Main Content Area */
-        .main-content {
-            flex: 1;
-            margin-left: var(--sidebar-width);
-            padding: 40px;
-            max-width: 1400px;
-        }
-
-        /* Top Bar Stats */
-        .top-stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 40px;
-        }
-
-        .stat-card {
-            background: var(--bg-glass);
-            backdrop-filter: blur(var(--glass-blur));
-            border: 1px solid var(--border-glass);
-            border-radius: 16px;
-            padding: 24px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .stat-card::after {
-            content: "";
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle at center, rgba(255, 255, 255, 0.03) 0, transparent 70%);
-            pointer-events: none;
-        }
-
-        .stat-label {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-        }
-
-        .stat-value {
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--accent-primary);
-        }
-
-        /* Action Bar */
-        .action-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-        }
-
-        .btn-premium {
-            padding: 10px 20px;
-            border-radius: 12px;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            border: 1px solid transparent;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            text-decoration: none;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .btn-sync-all {
-            background: linear-gradient(135deg, #00C853, #64DD17);
-            color: #000;
-            box-shadow: 0 4px 15px rgba(100, 221, 23, 0.3);
-        }
-
-        .btn-sync-all:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(100, 221, 23, 0.5);
-        }
-
-        .btn-outline {
-            background: transparent;
-            border-color: var(--border-glass);
-            color: var(--text-main);
-        }
-
-        .btn-outline:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(255, 255, 255, 0.3);
-        }
-
-        /* Engine Grid */
-        .engine-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-            gap: 25px;
-            margin-bottom: 50px;
-        }
-
-        .engine-card {
-            background: var(--bg-card);
-            backdrop-filter: blur(var(--glass-blur));
-            border: 1px solid var(--border-glass);
-            border-radius: 20px;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            position: relative;
-        }
-
-        .engine-card:hover {
-            border-color: rgba(255, 255, 255, 0.2);
-            transform: scale(1.02);
-            background: rgba(45, 48, 65, 0.6);
-        }
-
-        .engine-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-        }
-
-        .engine-title {
-            font-size: 18px;
-            font-weight: 700;
-        }
-
-        .status-pill {
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 10px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .pill-rule {
-            background: rgba(147, 51, 234, 0.15);
-            /* Purple tint */
-            color: #d8b4fe;
-            border: 1px solid rgba(147, 51, 234, 0.3);
-        }
-
-        .pill-active {
-            background: rgba(0, 255, 173, 0.1);
-            color: var(--accent-primary);
-            border: 1px solid rgba(0, 255, 173, 0.3);
-        }
-
-        .pill-paused {
-            background: rgba(255, 179, 0, 0.1);
-            color: var(--accent-warning);
-            border: 1px solid rgba(255, 179, 0, 0.3);
-        }
-
-        .pill-critical {
-            background: rgba(255, 61, 0, 0.1);
-            color: var(--accent-error);
-            border: 1px solid rgba(255, 61, 0, 0.3);
-        }
-
-        .pill-waiting {
-            background: rgba(255, 179, 0, 0.1);
-            color: #ffb300;
-            border: 1px solid rgba(255, 179, 0, 0.3);
-            animation: pulse-border 2s infinite;
-        }
-
-        @keyframes pulse-border {
-            0% {
-                border-color: rgba(255, 179, 0, 0.3);
-                box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.2);
-            }
-
-            70% {
-                border-color: rgba(255, 179, 0, 0.6);
-                box-shadow: 0 0 0 4px rgba(255, 179, 0, 0);
-            }
-
-            100% {
-                border-color: rgba(255, 179, 0, 0.3);
-                box-shadow: 0 0 0 0 rgba(255, 179, 0, 0);
-            }
-        }
-
-        .warning-box {
-            background: rgba(255, 179, 0, 0.05);
-            /* Yellow tint */
-            border: 1px solid rgba(255, 179, 0, 0.2);
-            border-radius: 8px;
-            padding: 10px;
-            margin-top: 10px;
-            font-size: 11px;
-            color: #ffb300;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .path-box {
-            background: rgba(10, 11, 16, 0.4);
-            border-radius: 12px;
-            padding: 12px;
-            font-size: 12px;
-        }
-
-        .path-label {
-            color: var(--text-muted);
-            font-size: 10px;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-
-        .path-value {
-            font-family: 'JetBrains Mono', monospace;
-            word-break: break-all;
-            color: var(--accent-secondary);
-        }
-
-        .engine-controls {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .ctrl-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-glass);
-            border-radius: 8px;
-            padding: 8px;
-            color: var(--text-main);
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-        }
-
-        .ctrl-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.3);
-        }
-
-        .ctrl-btn-sync {
-            color: var(--accent-primary);
-        }
-
-        .ctrl-btn-preview {
-            color: var(--accent-secondary);
-        }
-
-        .ctrl-btn-approve {
-            background: rgba(255, 179, 0, 0.1);
-            color: #ffb300;
-            border-color: rgba(255, 179, 0, 0.3);
-            grid-column: span 3;
-            /* Full width */
-        }
-
-        .ctrl-btn-approve:hover {
-            background: rgba(255, 179, 0, 0.2);
-            border-color: #ffb300;
-        }
-
-        /* Sync Mode Toggle - Premium */
-        .mode-toggle-container {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-            padding: 12px;
-            margin-top: 20px;
-        }
-
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 80px;
-            height: 32px;
-        }
-
-        .switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: var(--bg-deep);
-            border: 1px solid var(--border-glass);
-            transition: .4s;
-            border-radius: 34px;
-        }
-
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 24px;
-            width: 36px;
-            left: 4px;
-            bottom: 3px;
-            background-color: var(--text-muted);
-            transition: .4s;
-            border-radius: 20px;
-        }
-
-        input:checked+.slider {
-            border-color: var(--accent-primary);
-        }
-
-        input:checked+.slider:before {
-            transform: translateX(34px);
-            background-color: var(--accent-primary);
-        }
-
-        /* Terminal CSS */
-        .terminal-window {
-            background: #0d0f14;
-            border: 1px solid var(--border-glass);
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-        }
-
-        .terminal-header {
-            background: #1a1c22;
-            padding: 8px 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            border-bottom: 1px solid var(--border-glass);
-        }
-
-        .dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-        }
-
-        .dot-red {
-            background: #ff5f56;
-        }
-
-        .dot-yellow {
-            background: #ffbd2e;
-        }
-
-        .dot-green {
-            background: #27c93f;
-        }
-
-        .terminal-body {
-            height: 400px;
-            overflow-y: auto;
-            padding: 15px;
-            font-family: 'JetBrains Mono', 'Consolas', monospace;
-            font-size: 13px;
-            color: #00ff00;
-            line-height: 1.5;
-        }
-
-        /* Activity List */
-        .activity-card {
-            background: var(--bg-glass);
-            border-radius: 16px;
-            border: 1px solid var(--border-glass);
-            padding: 24px;
-        }
-
-        .activity-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .activity-item {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            background: rgba(255, 255, 255, 0.02);
-            padding: 10px 16px;
-            border-radius: 10px;
-            font-size: 13px;
-            border: 1px solid transparent;
-        }
-
-        .activity-item:hover {
-            background: rgba(255, 255, 255, 0.04);
-            border-color: var(--border-glass);
-        }
-
-        .action-badge {
-            padding: 2px 8px;
-            border-radius: 6px;
-            font-weight: 700;
-            font-size: 10px;
-            min-width: 60px;
-            text-align: center;
-        }
-
-        .badge-added {
-            background: rgba(0, 255, 173, 0.1);
-            color: var(--accent-primary);
-        }
-
-        .badge-deleted {
-            background: rgba(255, 61, 0, 0.1);
-            color: var(--accent-error);
-        }
-
-        .badge-renamed {
-            background: rgba(255, 179, 0, 0.1);
-            color: var(--accent-warning);
-        }
-
-        .badge-dry {
-            background: rgba(255, 255, 255, 0.05);
-            color: var(--text-muted);
-            border: 1px dashed var(--border-glass);
-        }
-
-        /* Toasts */
-        .toast-container {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .toast {
-            background: #1a1c22;
-            border: 1px solid var(--border-glass);
-            border-left: 4px solid var(--accent-secondary);
-            padding: 12px 20px;
-            border-radius: 8px;
-            color: var(--text-main);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-            animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            min-width: 250px;
-        }
-
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        /* Keyframes */
-        @keyframes loading-pulse {
-            0% {
-                opacity: 0.5;
-            }
-
-            50% {
-                opacity: 1;
-            }
-
-            100% {
-                opacity: 0.5;
-            }
-        }
-
-        .sync-pulse {
-            animation: loading-pulse 1.5s infinite;
-        }
-
-        /* Responsiveness */
-        @media (max-width: 1024px) {
-            .sidebar {
-                width: 80px;
-                padding: 20px 10px;
-                align-items: center;
-            }
-
-            .logo-area h1,
-            .nav-link span,
-            .sidebar-footer div {
-                display: none;
-            }
-
-            .nav-link {
-                padding: 12px;
-                justify-content: center;
-            }
-
-            .main-content {
-                margin-left: 80px;
-                padding: 20px;
-            }
-
-            .top-stats {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Modal Redesign */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(8px);
-            z-index: 2000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .modal-content {
-            background: var(--bg-glass);
-            border: 1px solid var(--border-glass);
-            border-radius: 24px;
-            width: 100%;
-            max-width: 800px;
-            max-height: 90vh;
-            overflow-y: auto;
-            padding: 30px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 
 <body>
@@ -698,17 +46,34 @@
                 </svg>
                 <span>Live Logs</span>
             </a>
+            <a href="/logout" class="nav-link" style="margin-top: 20px; color: var(--accent-error);">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Logout</span>
+            </a>
         </nav>
 
         <div class="sidebar-footer">
             <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">
-                Safety Mode</div>
+                Sync Mode</div>
+            <div class="three-state-container">
+                <div id="sync-mode-switch" class="three-state-switch" data-val="{{.SyncMode}}" onclick="cycleSyncMode()">
+                    <div class="three-state-slider"></div>
+                    <div class="three-state-option opt-dry">Dry</div>
+                    <div class="three-state-option opt-manual">Man</div>
+                    <div class="three-state-option opt-auto">Auto</div>
+                </div>
+            </div>
+
+            <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-top: 20px; margin-bottom: 10px;">
+                Auto-Approve</div>
             <div class="mode-toggle-container">
-                <span id="mode-label" style="font-size: 12px; font-weight: bold; color: var(--text-muted);">DRY
-                    RUN</span>
+                <span id="auto-approve-label" style="font-size: 12px; font-weight: bold; color: var(--text-muted);">OFF</span>
                 <label class="switch">
-                    <input type="checkbox" id="sync-mode-toggle" onchange="updateSyncMode(this)" {{if eq
-                        .SyncMode "auto" }}checked{{end}}>
+                    <input type="checkbox" id="auto-approve-toggle" onchange="updateAutoApprove(this)" {{if eq
+                        .AutoApproveDeletions "on" }}checked{{end}}>
                     <span class="slider"></span>
                 </label>
             </div>
@@ -721,8 +86,8 @@
             <div>
                 <h1 style="font-size: 32px; font-weight: 800; margin: 0;">Sync Center</h1>
                 <p style="color: var(--text-muted); margin: 5px 0 0 0;">
-                    System: <span id="main-status-badge" class="status-pill {{if eq .State " ACTIVE"}}pill-active{{else
-                        if eq .State "PAUSED" }}pill-paused{{else}}pill-critical{{end}}">{{.State}}</span>
+                    System: <span id="main-status-badge" class="status-pill {{if eq .State "ACTIVE"}}pill-active{{else
+                        if eq .State "PAUSED" }}pill-paused{{else if eq .State "SYNCING"}}pill-syncing{{else}}pill-critical{{end}}">{{.State}}</span>
                     <span style="margin: 0 8px; color: var(--border-glass);">|</span>
                     Receiver: <span
                         class="status-pill {{if .ReceiverHealthy}}pill-active{{else}}pill-critical{{end}}">{{if
@@ -746,7 +111,7 @@
         </header>
 
         <!-- Stats Overview -->
-        <section class="top-stats">
+        <section class="top-stats" style="grid-template-columns: repeat(4, 1fr);">
             <div class="stat-card">
                 <div class="stat-label">Traffic Today</div>
                 <div id="stat-today" class="stat-value">{{.TrafficToday}}</div>
@@ -758,6 +123,13 @@
             <div class="stat-card">
                 <div class="stat-label">Transfer Speed</div>
                 <div id="stat-speed" class="stat-value" style="color: #FF00E5;">{{.CurrentSpeed}}</div>
+                <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 10px; overflow: hidden;">
+                    <div id="speed-bar" style="width: 0%; height: 100%; background: #FF00E5; transition: width 0.5s ease;"></div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div id="eta-label" class="stat-label">Estimated Time</div>
+                <div id="stat-eta" class="stat-value" style="color: var(--accent-warning);">{{.ETA}}</div>
             </div>
         </section>
 
@@ -765,26 +137,52 @@
         <h2
             style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 20px;">
             Active Sync Engines</h2>
-        <section class="engine-grid">
-            {{range .Engines}}
-            <div id="engine-card-{{.ID}}" class="engine-card">
-                <div class="engine-header">
-                    <div class="engine-title">Engine #{{.ID}}</div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        {{if .Rule}}<span class="status-pill pill-rule">{{.Rule}}</span>{{end}}
-                        <span id="engine-status-{{.ID}}"
-                            class="status-pill {{if .WaitingForApproval}}pill-waiting{{else if eq .State "
-                            ACTIVE"}}pill-active{{else if eq .State "PAUSED"
-                            }}pill-paused{{else}}pill-critical{{end}}">{{.State}}</span>
-                    </div>
-                </div>
+                <section class="engine-grid">
+                    {{range .Engines}}
+                    <div id="engine-card-{{.ID}}" class="engine-card {{if (gt .CurrentPercent 0.0)}}syncing-glow{{end}}">
+                        <div class="engine-header">				                    <div class="engine-title">Engine #{{.ID}}</div>
+				                    <div style="display: flex; gap: 8px; align-items: center;">
+				                        <span id="engine-queue-{{.ID}}" class="status-pill pill-rule" style="display: none; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6;"></span>
+				                        {{if .Rule}}<span class="status-pill pill-rule">{{.Rule}}</span>{{end}}
+				                        <span id="engine-status-{{.ID}}" class="status-pill 
+				                            {{if .WaitingForApproval}}pill-waiting							{{else if (gt .CurrentPercent 0.0)}}pill-syncing
+							{{else if eq .State "ACTIVE"}}pill-active {{else if eq .State "PAUSED" }}pill-paused
+							{{else}}pill-critical{{end}}">
+							{{if (gt .CurrentPercent 0.0)}}SYNCING{{else}}{{.State}}{{end}}
+						</span>
+					</div>
+				</div>
 
-                <div class="path-box">
-                    <div class="path-label">Source</div>
-                    <div class="path-value">{{.Source}}</div>
-                    <div class="path-label" style="margin-top: 8px;">Target</div>
-                    <div class="path-value">{{.Target}}</div>
-                </div>
+				                <div class="path-box">
+				                    <div class="path-label" style="display: flex; justify-content: space-between; align-items: center;">
+				                        <span>Source</span>
+				                        <div id="engine-radar-{{.ID}}" style="display: none; align-items: center; gap: 5px; color: var(--accent-primary);">
+				                            <div class="radar-circle"></div>
+				                            <span style="font-size: 8px; font-weight: 900;">INDEXING</span>
+				                        </div>
+				                        <button class="copy-btn" onclick="copyToClipboard('{{.Source}}', this)" title="Copy Path">📋</button>
+				                    </div>
+				                    <div class="path-value">{{.Source}}</div>					                    
+					                    <div class="data-flow-line {{if (gt .CurrentPercent 0.0)}}syncing{{end}}" id="flow-{{.ID}}">
+					                        <div class="data-flow-pulse"></div>
+					                    </div>
+					
+					                    <div class="path-label" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">						<span>Target</span>
+						<button class="copy-btn" onclick="copyToClipboard('{{.Target}}', this)" title="Copy Path">📋</button>
+					</div>
+					<div class="path-value">{{.Target}}</div>
+				</div>
+
+				<!-- Per-Engine Progress -->
+				<div id="engine-progress-container-{{.ID}}" style="display: {{if (gt .CurrentPercent 0.0)}}block{{else}}none{{end}}; margin-top: 5px;">
+					<div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px;">
+						<span id="engine-current-file-{{.ID}}" style="color: var(--accent-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">{{.CurrentFile}}</span>
+						<span id="engine-current-speed-{{.ID}}" style="color: var(--text-muted);">{{.CurrentSpeed}}</span>
+					</div>
+					<div style="width: 100%; height: 6px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; border: 1px solid var(--border-glass);">
+						<div id="engine-progress-bar-{{.ID}}" style="width: {{.CurrentPercent}}%; height: 100%; background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary)); transition: width 0.5s ease;"></div>
+					</div>
+				</div>
 
                 {{if .WaitingForApproval}}
                 <div class="warning-box">
@@ -799,7 +197,7 @@
                         <div
                             style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">
                             Today</div>
-                        <div style="font-size: 13px; font-weight: bold; color: var(--text-main);">{{.TrafficToday}}
+                        <div id="engine-today-{{.ID}}" style="font-size: 13px; font-weight: bold; color: var(--text-main);">{{.TrafficToday}}
                         </div>
                     </div>
                     <div
@@ -807,19 +205,19 @@
                         <div
                             style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">
                             Total</div>
-                        <div style="font-size: 13px; font-weight: bold; color: var(--accent-secondary);">
+                        <div id="engine-total-{{.ID}}" style="font-size: 13px; font-weight: bold; color: var(--accent-secondary);">
                             {{.TrafficTotal}}</div>
                     </div>
                 </div>
 
                 <div style="font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between;">
                     <span>Last Sync:</span>
-                    <span id="engine-lastsync-{{.ID}}" style="color: var(--text-main);">{{.LastSync}}</span>
+                    <span id="engine-lastsync-{{.ID}}" class="relative-time" data-time="{{.LastSync}}" style="color: var(--text-main);">{{.LastSync}}</span>
                 </div>
 
                 <div class="engine-controls">
                     {{if .WaitingForApproval}}
-                    <button onclick="engineAction('{{.ID}}', 'approve')" class="ctrl-btn ctrl-btn-approve">
+                    <button onclick="showPreview('{{.ID}}', 'approve')" class="ctrl-btn ctrl-btn-approve">
                         ✅ Review & Approve Deletions
                     </button>
                     {{else}}
@@ -875,6 +273,11 @@
                     <div class="dot dot-green"></div>
                     <span style="font-size: 11px; color: var(--text-muted); margin-left: 10px; font-weight: bold;">LIVE
                         LOG STREAM</span>
+                    <div class="live-indicator">
+                        <div class="live-dot"></div>
+                        LIVE
+                    </div>
+                    <input type="text" id="log-filter" class="log-search" placeholder="Filter logs..." onkeyup="filterLogs()">
                 </header>
                 <div class="terminal-body" id="log-container">
                     <div style="color: var(--text-muted);">[SYSTEM] Connected to schnorarr-monitor. Awaiting logs...
@@ -910,8 +313,11 @@
                         <input type="text" name="webhook_url" placeholder="https://discord.com/api/webhooks/..."
                             style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
                     </div>
-                    <button type="submit" class="btn-premium btn-outline"
-                        style="width: 100%; justify-content: center;">Save Webhook</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="submit" class="btn-premium btn-outline"
+                            style="flex: 1; justify-content: center;">Save Webhook</button>
+                        <a href="/test-notify" class="btn-premium btn-outline" style="padding: 10px;" title="Test Notification">🔔</a>
+                    </div>
                 </form>
             </div>
         </div>
@@ -922,7 +328,7 @@
         <div class="modal-overlay">
             <div class="modal-content">
                 <div
-                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;">
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;">      
                     <h2 style="margin: 0; color: var(--accent-secondary);">Sync Preview: <span id="preview-id"></span>
                     </h2>
                     <button onclick="closeModal()"
@@ -954,192 +360,7 @@
         </div>
     </div>
 
-    <script>
-        // WebSocket Connection
-        const socket = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws');
-        const logContainer = document.getElementById('log-container');
-
-        socket.onmessage = function (event) {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'progress') updateProgress(msg.data);
-            else if (msg.type === 'history') addHistoryItem(msg.data);
-            else if (msg.type === 'log') addLogLine(msg.data);
-        };
-
-        function addLogLine(data) {
-            const line = document.createElement('div');
-            const timeStr = new Date().toLocaleTimeString();
-            let color = '#00FFAD';
-            if (data.level === 'error') color = '#ff3d00';
-            if (data.level === 'warn') color = '#ffb300';
-
-            line.innerHTML = `<span style="color: #4B5563;">[${timeStr}]</span> <span style="color: ${color};">${data.msg || data}</span>`;
-            logContainer.appendChild(line);
-            logContainer.scrollTop = logContainer.scrollHeight;
-            if (logContainer.childNodes.length > 300) logContainer.removeChild(logContainer.firstChild);
-        }
-
-        function updateProgress(data) {
-            if (data.state) {
-                const badge = document.getElementById('main-status-badge');
-                badge.innerText = data.state;
-                badge.className = `status-pill pill-${data.state.toLowerCase()}`;
-            }
-            if (data.speed) document.getElementById('stat-speed').innerText = data.speed;
-        }
-
-        function addHistoryItem(data) {
-            const list = document.getElementById('history-list');
-            const li = document.createElement('li');
-            li.className = 'activity-item';
-
-            const actionClass = data.action.toLowerCase().replace('dry-', 'dry');
-            const actionLabel = data.action.startsWith('DRY-') ? data.action.substring(4) : data.action;
-            const isDry = data.action.startsWith('DRY-');
-
-            li.innerHTML = `
-                <span class="action-badge badge-${actionClass} ${isDry ? 'badge-dry' : ''}">${data.action}</span>
-                <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${data.path} <span style="color: var(--text-muted); font-size: 11px;">(${data.size || '0 B'})</span>
-                </div>
-                <span style="font-family: monospace; font-size: 11px; color: var(--text-muted);">${data.time}</span>
-            `;
-            list.insertBefore(li, list.firstChild);
-            if (list.childNodes.length > 12) list.removeChild(list.lastChild);
-        }
-
-        function updateSyncMode(checkbox) {
-            const mode = checkbox.checked ? 'auto' : 'dry';
-            document.getElementById('mode-label').innerText = mode.toUpperCase() + (mode === 'dry' ? ' RUN' : '');
-
-            const formData = new FormData();
-            formData.append('mode', mode);
-
-            fetch('/settings/sync-mode', {
-                method: 'POST',
-                headers: { 'Accept': 'application/json' },
-                body: formData
-            })
-                .then(r => {
-                    if (!r.ok) throw new Error(r.statusText);
-                    return r.json();
-                })
-                .then(data => {
-                    if (data.status === 'success') toast(`Sync Mode: ${mode.toUpperCase()} enabled`, 'success');
-                    else { toast("Failed to update mode", "error"); checkbox.checked = !checkbox.checked; }
-                });
-        }
-
-        function engineAction(id, action) {
-            fetch(`/api/engine/${id}/${action}`, { method: 'POST' })
-                .then(r => {
-                    if (r.ok) {
-                        toast(`${action.toUpperCase()} action triggered for Engine ${id}`, 'success');
-                        setTimeout(() => window.location.reload(), 1000);
-                    } else if (r.status === 409) {
-                        toast(`Engine ${id} is already busy syncing`, 'warn');
-                    } else {
-                        toast(`Error: ${r.statusText}`, 'error');
-                    }
-                });
-        }
-
-        let currentPreviewId = null;
-        function showPreview(id) {
-            currentPreviewId = id;
-            document.getElementById('modal-container').style.display = 'block';
-            document.getElementById('preview-loading').style.display = 'block';
-            document.getElementById('preview-body').style.display = 'none';
-            document.getElementById('preview-id').innerText = id;
-
-            fetch(`/api/engine/${id}/preview`, {
-                headers: { 'Accept': 'application/json' }
-            })
-                .then(r => {
-                    if (!r.ok) throw new Error(r.statusText);
-                    return r.json();
-                })
-                .then(plan => {
-                    document.getElementById('preview-loading').style.display = 'none';
-                    document.getElementById('preview-body').style.display = 'block';
-                    renderPreview(plan);
-                });
-        }
-
-        function renderPreview(plan) {
-            const stats = document.getElementById('preview-stats');
-            const details = document.getElementById('preview-details');
-
-            const count = (arr) => (arr || []).length;
-            const renames = Object.keys(plan.Renames || {}).length;
-
-            stats.innerHTML = `
-                <div class="stat-card" style="padding: 12px; text-align: center;">
-                    <div class="stat-label" style="font-size: 8px;">Syncs</div>
-                    <div style="color: var(--accent-primary); font-weight: bold;">${count(plan.FilesToSync)}</div>
-                </div>
-                <div class="stat-card" style="padding: 12px; text-align: center;">
-                    <div class="stat-label" style="font-size: 8px;">Deletes</div>
-                    <div style="color: var(--accent-error); font-weight: bold;">${count(plan.FilesToDelete)}</div>
-                </div>
-                <div class="stat-card" style="padding: 12px; text-align: center;">
-                    <div class="stat-label" style="font-size: 8px;">Renames</div>
-                    <div style="color: var(--accent-warning); font-weight: bold;">${renames}</div>
-                </div>
-                <div class="stat-card" style="padding: 12px; text-align: center;">
-                    <div class="stat-label" style="font-size: 8px;">Dirs</div>
-                    <div style="color: var(--accent-secondary); font-weight: bold;">${count(plan.DirsToCreate)}</div>
-                </div>
-            `;
-
-            let html = '';
-            if (renames > 0) {
-                html += '<div style="margin-bottom: 20px;"><div class="path-label">Renames</div>';
-                for (const [o, n] of Object.entries(plan.Renames)) {
-                    html += `<div style="font-size: 11px; color: var(--accent-warning); margin-bottom: 4px;">🔄 ${o} &rarr; ${n}</div>`;
-                }
-                html += '</div>';
-            }
-            if (count(plan.FilesToSync) > 0) {
-                html += '<div style="margin-bottom: 20px;"><div class="path-label">Adds / Updates</div>';
-                plan.FilesToSync.forEach(f => {
-                    html += `<div style="font-size: 11px; color: var(--accent-primary); margin-bottom: 4px;">➕ ${f.Path} (${formatBytes(f.Size)})</div>`;
-                });
-                html += '</div>';
-            }
-            if (count(plan.FilesToDelete) > 0) {
-                html += '<div><div class="path-label">Deletions</div>';
-                plan.FilesToDelete.forEach(f => {
-                    html += `<div style="font-size: 11px; color: var(--accent-error); margin-bottom: 4px;">❌ ${f}</div>`;
-                });
-                html += '</div>';
-            }
-            if (!html) html = '<div style="text-align: center; color: var(--text-muted);">No changes detected.</div>';
-            details.innerHTML = html;
-        }
-
-        function closeModal() { document.getElementById('modal-container').style.display = 'none'; }
-        function confirmSyncFromPreview() { if (currentPreviewId) { engineAction(currentPreviewId, 'sync'); closeModal(); } }
-
-        function toast(msg, type = 'info') {
-            const c = document.getElementById('toast-container');
-            const t = document.createElement('div');
-            t.className = 'toast';
-            t.style.borderLeftColor = type === 'success' ? 'var(--accent-primary)' : (type === 'warn' ? 'var(--accent-warning)' : 'var(--accent-error)');
-            t.innerText = msg;
-            c.appendChild(t);
-            setTimeout(() => t.remove(), 4000);
-        }
-
-        function formatBytes(b) {
-            if (b === 0) return '0 B';
-            const k = 1024, s = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(b) / Math.log(k));
-            return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + s[i];
-        }
-
-        // Init label
-        document.getElementById('mode-label').innerText = document.getElementById('sync-mode-toggle').checked ? 'AUTO' : 'DRY RUN';
-    </script>
+    <script src="/static/js/dashboard.js"></script>
 </body>
 
 </html>

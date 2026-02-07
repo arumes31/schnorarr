@@ -32,6 +32,9 @@ if [ "$MODE" = "receiver" ]; then
         sed -i "/auth users/a \    secrets file = /config/rsyncd.secrets" /scripts/rsyncd.conf
     fi
 
+    # Start monitor in background for health checks and status reporting
+    /usr/local/bin/monitor &
+
     exec rsync --no-detach --daemon --config=/scripts/rsyncd.conf
 elif [ "$MODE" = "sender" ]; then
     echo "Starting custom sync engine (Sender MODE)..."
@@ -45,7 +48,11 @@ elif [ "$MODE" = "sender" ]; then
     # Monitor will be started at the end with exec
 
     # Disk space check
-    AVAILABLE_SPACE_GB=$(df -BG /data | awk 'NR==2 {print $4}' | sed 's/G//')
+    MIN_DISK_SPACE_GB=${MIN_DISK_SPACE_GB:-0}
+    # BusyBox df doesn't support -BG, use -k and convert
+    AVAILABLE_SPACE_KB=$(df -k /data | awk 'NR==2 {print $4}')
+    AVAILABLE_SPACE_GB=$((AVAILABLE_SPACE_KB / 1024 / 1024))
+    
     if [ "$AVAILABLE_SPACE_GB" -lt "$MIN_DISK_SPACE_GB" ]; then
         echo "Error: Not enough disk space. Available: ${AVAILABLE_SPACE_GB}GB, Required: ${MIN_DISK_SPACE_GB}GB"
         exit 1
@@ -65,12 +72,6 @@ elif [ "$MODE" = "sender" ]; then
         echo "Receiver not ready ($COUNT/$MAX_RETRIES), sleeping..."
         sleep 2
     done
-
-    # Password for rsync
-    if [ -n "$RSYNC_PASSWORD" ]; then
-        echo "$RSYNC_PASSWORD" > /config/rsync.pass
-        chmod 600 /config/rsync.pass
-    fi
 
     # Start Monitor with embedded sync engine
     # The monitor binary now includes the custom sync engine

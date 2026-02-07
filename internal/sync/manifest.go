@@ -87,11 +87,6 @@ func (fi *FileInfo) NeedsUpdate(other *FileInfo) bool {
 
 	// File needs update if size differs or sender is newer
 	// We use a small epsilon for time comparison to account for filesystem precision differences
-	diff := fi.ModTime.Sub(other.ModTime)
-	if diff < 0 {
-		diff = -diff
-	}
-
 	return fi.Size != other.Size || fi.ModTime.After(other.ModTime.Add(time.Second))
 }
 

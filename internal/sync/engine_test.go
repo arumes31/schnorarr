@@ -80,3 +80,43 @@ func TestEngine_SafetyLock(t *testing.T) {
 		t.Fatal("File should have been deleted after approval")
 	}
 }
+
+func TestEngine_AutoApproveDeletions(t *testing.T) {
+	// Setup temp directories
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Create a file in target that should be deleted (not in source)
+	deletePath := filepath.Join(targetDir, "to_delete.txt")
+	if err := os.WriteFile(deletePath, []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Configure engine with AutoApproveDeletions: true
+	cfg := SyncConfig{
+		ID:                   "test-auto-approve",
+		SourceDir:            sourceDir,
+		TargetDir:            targetDir,
+		Rule:                 "flat",
+		AutoApproveDeletions: true,
+		DryRun:               false,
+	}
+
+	engine := NewEngine(cfg)
+
+	// Trigger Sync
+	err := engine.RunSync(nil)
+	if err != nil {
+		t.Fatalf("RunSync failed: %v", err)
+	}
+
+	// Verify Safety Lock was NOT triggered
+	if engine.IsWaitingForApproval() {
+		t.Fatal("Engine should NOT be waiting for approval when AutoApproveDeletions is true")
+	}
+
+	// Verify file was deleted
+	if _, err := os.Stat(deletePath); !os.IsNotExist(err) {
+		t.Fatal("File should have been deleted automatically")
+	}
+}
