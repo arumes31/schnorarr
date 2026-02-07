@@ -158,6 +158,7 @@ body {
     font-weight: 800;
     margin: 0;
     background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -598,6 +599,44 @@ body {
     animation: flicker 0.15s infinite;
     white-space: pre-wrap;
     word-break: break-all;
+}
+
+/* Scrollbar Theming */
+.terminal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.terminal-body::-webkit-scrollbar-track {
+    background: var(--bg-terminal);
+    border-left: 1px solid var(--border-glass);
+}
+
+.terminal-body::-webkit-scrollbar-thumb {
+    background: var(--border-glass);
+    border-radius: 4px;
+}
+
+.terminal-body::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-primary);
+}
+
+/* Global Scrollbar (Optional, for main body if needed) */
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-deep);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-glass);
+    border-radius: 5px;
+    border: 2px solid var(--bg-deep);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-secondary);
 }
 
 @keyframes flicker {
