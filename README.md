@@ -181,13 +181,6 @@ graph LR
 - **Log Management**: Map `/config` to a persistent volume to preserve sync history and database across updates.
 - **Memory Optimization**: For massive libraries (100k+ files), ensure your container has at least 512MB RAM for manifest hashing.
 
-## 🗺️ Roadmap
-
-- [ ] **Mobile-Responsive UI**: Native-feeling wrap for monitoring on the go.
-- [ ] **Advanced Filtering**: Regex-based exclusion and inclusion rules.
-- [ ] **Extended Webhooks**: Support for Slack, Matrix, and custom POST endpoints.
-- [ ] **Peer-to-Peer Mode**: Decentralized sync between multiple senders.
-
 ## 📊 Dashboard Guide
 
 The Schnorarr dashboard is designed for high-density information display:
