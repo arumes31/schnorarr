@@ -20,7 +20,7 @@ func TestCompareManifests_FilesToSync(t *testing.T) {
 	receiver.Add(&FileInfo{Path: "modified_file.txt", Size: 100, ModTime: now.Add(-1 * time.Hour)})
 	receiver.Add(&FileInfo{Path: "unchanged_file.txt", Size: 50, ModTime: now})
 
-	plan := CompareManifests(sender, receiver)
+	plan := CompareManifests(sender, receiver, "series")
 
 	// Should sync new_file.txt and modified_file.txt
 	if len(plan.FilesToSync) != 2 {
@@ -49,7 +49,7 @@ func TestCompareManifests_SmartDeletion(t *testing.T) {
 	receiver.Add(&FileInfo{Path: "test12/season1", IsDir: true})
 	receiver.Add(&FileInfo{Path: "test12/season1/episode.mkv", Size: 200, ModTime: now})
 
-	plan := CompareManifests(sender, receiver)
+	plan := CompareManifests(sender, receiver, "series")
 
 	// Should delete old_file.mkv (in sender-originated directory)
 	if len(plan.FilesToDelete) != 1 {
@@ -74,6 +74,40 @@ func TestCompareManifests_SmartDeletion(t *testing.T) {
 	}
 }
 
+func TestCompareManifests_FlatSync(t *testing.T) {
+	sender := NewManifest("/sender")
+	receiver := NewManifest("/receiver")
+
+	// Sender has a root directory and a file
+	sender.Add(&FileInfo{Path: "CommonDir", IsDir: true})
+	sender.Add(&FileInfo{Path: "CommonDir/keep.txt", Size: 100})
+
+	// Receiver has the same directory, but with an extra file and an extra sub-directory
+	receiver.Add(&FileInfo{Path: "CommonDir", IsDir: true})
+	receiver.Add(&FileInfo{Path: "CommonDir/keep.txt", Size: 100})
+	receiver.Add(&FileInfo{Path: "CommonDir/to_delete.txt", Size: 50})
+	receiver.Add(&FileInfo{Path: "CommonDir/ExtraDir", IsDir: true})
+
+	// Rule: flat
+	plan := CompareManifests(sender, receiver, "flat")
+
+	// Should NOT delete ANY directory
+	if len(plan.DirsToDelete) > 0 {
+		t.Errorf("Expected 0 directories to delete, got %d: %v", len(plan.DirsToDelete), plan.DirsToDelete)
+	}
+
+	// Should still delete the file CommonDir/to_delete.txt
+	foundFile := false
+	for _, path := range plan.FilesToDelete {
+		if path == "CommonDir/to_delete.txt" {
+			foundFile = true
+			break
+		}
+	}
+	if !foundFile {
+		t.Error("Expected CommonDir/to_delete.txt to be deleted")
+	}
+}
 func TestGetTopLevelDir(t *testing.T) {
 	tests := []struct {
 		input    string

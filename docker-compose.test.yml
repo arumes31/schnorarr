@@ -21,6 +21,7 @@ services:
       - BWLIMIT_MBPS=500
       - POLL_INTERVAL=10
       - DEST_HOST=receiver
+      - DEST_MODULE=video-sync
 
       # 1. Sender 1 -> Receiver 1 (Series Profile)
       - SYNC_1_SOURCE=/data/sender1

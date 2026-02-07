@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>schnorarr | Secure Access</title>
+    <style>
+        :root {
+            --bg-deep: #050608;
+            --accent-primary: #00ffad;
+            --accent-secondary: #0079d3;
+            --glass: rgba(15, 17, 26, 0.7);
+            --border: rgba(255, 255, 255, 0.08);
+        }
+
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            background: var(--bg-deep); 
+            font-family: 'Inter', -apple-system, sans-serif;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* High-End Aurora Animation (Low CPU / GPU Powered) */
+        .aurora-container {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: -1;
+            filter: blur(100px);
+            opacity: 0.4;
+            overflow: hidden;
+        }
+
+        .blob {
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            mix-blend-mode: screen;
+            animation: move 25s infinite alternate;
+        }
+
+        .blob-1 { background: var(--accent-primary); top: -100px; left: -100px; animation-duration: 30s; }
+        .blob-2 { background: var(--accent-secondary); bottom: -100px; right: -100px; animation-duration: 25s; animation-delay: -5s; }
+        .blob-3 { background: #7000ff; top: 50%; left: 50%; width: 400px; height: 400px; animation-duration: 35s; animation-delay: -10s; }
+
+        @keyframes move {
+            from { transform: translate(0, 0) rotate(0deg) scale(1); }
+            to { transform: translate(200px, 100px) rotate(360deg) scale(1.2); }
+        }
+
+        .login-card {
+            background: var(--glass);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--border);
+            padding: 50px 40px;
+            border-radius: 32px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8);
+            animation: slideUp 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+            position: relative;
+            z-index: 10;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(40px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo { text-align: center; margin-bottom: 40px; }
+        .logo h1 { 
+            color: white; font-weight: 900; letter-spacing: -1.5px; margin: 0; font-size: 32px;
+            text-shadow: 0 0 20px rgba(0, 255, 173, 0.2);
+        }
+        .logo span { color: var(--accent-primary); }
+
+        .input-group { margin-bottom: 25px; }
+        label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+        
+        input {
+            width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 14px;
+            padding: 14px 18px; color: white; outline: none; transition: all 0.3s;
+            font-size: 15px; box-sizing: border-box;
+        }
+        input:focus { border-color: var(--accent-primary); background: rgba(0,0,0,0.6); box-shadow: 0 0 0 4px rgba(0, 255, 173, 0.05); }
+
+        button {
+            width: 100%; background: var(--accent-primary); color: #050608; border: none; border-radius: 14px;
+            padding: 16px; font-weight: 800; cursor: pointer; transition: all 0.3s;
+            font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;
+            margin-top: 10px;
+        }
+        button:hover { 
+            transform: translateY(-3px) scale(1.01); 
+            box-shadow: 0 15px 30px rgba(0, 255, 173, 0.3);
+            background: #00ffa1;
+        }
+        button:active { transform: translateY(-1px); }
+
+        .error { 
+            color: #ff3d00; text-align: center; font-size: 13px; margin-bottom: 25px; padding: 12px; 
+            background: rgba(255, 61, 0, 0.1); border: 1px solid rgba(255, 61, 0, 0.2); border-radius: 12px; 
+        }
+
+        .footer-text { text-align: center; margin-top: 30px; font-size: 12px; color: #475569; }
+    </style>
+</head>
+<body>
+    <div class="aurora-container">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div class="login-card">
+        <div class="logo">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" style="margin-bottom: 15px;">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#00ffad" />
+                <path d="M2 17L12 22L22 17" stroke="#0079d3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 12L12 17L22 12" stroke="#0079d3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h1>schnor<span>arr</span></h1>
+        </div>
+
+        {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+        <form action="/login" method="POST">
+            <div class="input-group">
+                <label>Node Identity</label>
+                <input type="text" name="username" placeholder="Admin Username" required autofocus>
+            </div>
+            <div class="input-group">
+                <label>Security Key</label>
+                <input type="password" name="password" placeholder="••••••••" required>
+            </div>
+            <button type="submit">Unlock Node</button>
+        </form>
+
+        <div class="footer-text">
+            Mirrqr Sync Node v2.0 &bull; Secure Encrypted Tunnel
+        </div>
+    </div>
+</body>
+</html>
