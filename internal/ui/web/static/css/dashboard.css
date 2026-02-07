@@ -22,6 +22,17 @@
     --text-terminal: #00ff00;
     --bg-toast: #1a1c22;
     --bg-modal: #13151a;
+
+    /* Log Colors */
+    --log-info: #00ffad;
+    --log-error: #ff3d00;
+    --log-warn: #ffb300;
+    --log-scanner: #d6bcfa;
+    --log-transferer: #63b3ed;
+    --log-database: #f6e05e;
+    --log-health: #f687b3;
+    --log-number: #00ffad;
+    --log-bracket: #a0aec0;
 }
 
 [data-theme="green"] {
@@ -36,6 +47,15 @@
     --bg-terminal: #0f0a15;
     --bg-terminal-header: #1a1525;
     --text-terminal: #a855f7;
+
+    --log-info: #a855f7;
+    --log-error: #ef4444;
+    --log-warn: #f59e0b;
+    --log-scanner: #e9d5ff;
+    --log-transferer: #818cf8;
+    --log-database: #fcd34d;
+    --log-health: #f472b6;
+    --log-number: #a855f7;
 }
 
 [data-theme="orange"] {
@@ -46,6 +66,15 @@
     --bg-terminal: #120d0a;
     --bg-terminal-header: #1f1815;
     --text-terminal: #f97316;
+
+    --log-info: #f97316;
+    --log-error: #ef4444;
+    --log-warn: #f59e0b;
+    --log-scanner: #fed7aa;
+    --log-transferer: #60a5fa;
+    --log-database: #fcd34d;
+    --log-health: #f472b6;
+    --log-number: #f97316;
 }
 
 [data-theme="red"] {
@@ -56,6 +85,15 @@
     --bg-terminal: #0f0505;
     --bg-terminal-header: #1a0a0a;
     --text-terminal: #ff3d00;
+
+    --log-info: #ff3d00;
+    --log-error: #dc2626;
+    --log-warn: #f59e0b;
+    --log-scanner: #fecaca;
+    --log-transferer: #ef4444;
+    --log-database: #fcd34d;
+    --log-health: #f87171;
+    --log-number: #ff3d00;
 }
 
 [data-theme="blue"] {
@@ -66,6 +104,15 @@
     --bg-terminal: #050a0f;
     --bg-terminal-header: #0a151f;
     --text-terminal: #38bdf8;
+
+    --log-info: #38bdf8;
+    --log-error: #ef4444;
+    --log-warn: #f59e0b;
+    --log-scanner: #bae6fd;
+    --log-transferer: #3b82f6;
+    --log-database: #fcd34d;
+    --log-health: #f472b6;
+    --log-number: #38bdf8;
 }
 
 * {
@@ -580,6 +627,57 @@ body {
 
 .terminal-window.fullscreen .terminal-body {
     height: calc(100vh - 40px);
+}
+
+/* Log Coloring */
+.log-line {
+    opacity: 0;
+    animation: fadeIn 0.3s forwards;
+}
+
+.log-level-info {
+    color: var(--log-info);
+}
+
+.log-level-error {
+    color: var(--log-error);
+}
+
+.log-level-warn {
+    color: var(--log-warn);
+}
+
+.log-bracket {
+    color: var(--log-bracket);
+    font-weight: bold;
+}
+
+.log-comp-scanner {
+    color: var(--log-scanner);
+}
+
+.log-comp-transferer {
+    color: var(--log-transferer);
+}
+
+.log-comp-database {
+    color: var(--log-database);
+}
+
+.log-comp-health {
+    color: var(--log-health);
+}
+
+.log-comp-number {
+    color: var(--log-number);
+}
+
+.log-comp-error {
+    color: var(--log-error);
+}
+
+.log-comp-default {
+    color: var(--log-bracket);
 }
 
 /* Group Actions Toolbar */

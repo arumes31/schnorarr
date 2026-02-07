@@ -40,31 +40,35 @@ function addLogLine(data) {
     }
 
     const line = document.createElement('div');
-    let color = '#00FFAD';
+    line.className = 'log-line';
+
     let msg = typeof data === 'string' ? data : (data.msg || '');
     let level = (data.level || 'info').toLowerCase();
-    if (level === 'error') color = '#ff3d00';
-    if (level === 'warn') color = '#ffb300';
+
+    line.classList.add(`log-level-${level}`);
+
     if (!/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/.test(msg)) {
         msg = `[${new Date().toLocaleTimeString()}] ${msg}`;
     }
-    // Simple HTML escape for log message before highlighting
-    // Note: detailed highlighting regex might need adjustment if we escape first
-    // For now, assume log messages are trustworthy or simple text
+
+    // Replace logic using classes
     msg = msg.replace(/\[(.*?)\]/g, (match, content) => {
-        let c = '#a0aec0';
-        if (content.includes('Scanner')) c = '#d6bcfa';
-        else if (content.includes('Transferer')) c = '#63b3ed';
-        else if (content.includes('Database')) c = '#f6e05e';
-        else if (content.includes('Health')) c = '#f687b3';
-        else if (content.match(/^\d+$/)) c = '#00ffad';
-        else if (content.includes('ERROR')) c = '#ff3d00';
-        return `[<span style="color: ${c}; font-weight: bold;">${content}</span>]`;
+        let cls = 'log-comp-default';
+        if (content.includes('Scanner')) cls = 'log-comp-scanner';
+        else if (content.includes('Transferer')) cls = 'log-comp-transferer';
+        else if (content.includes('Database')) cls = 'log-comp-database';
+        else if (content.includes('Health')) cls = 'log-comp-health';
+        else if (content.match(/^\d+$/)) cls = 'log-comp-number';
+        else if (content.includes('ERROR')) cls = 'log-comp-error';
+
+        return `<span class="log-bracket">[<span class="${cls}">${content}</span>]</span>`;
     });
-    line.innerHTML = `<span style="color: ${color};">${msg}</span>`;
+
+    line.innerHTML = msg;
+
     const filter = document.getElementById('log-filter')?.value.toLowerCase() || '';
     if ((filter && !msg.toLowerCase().includes(filter)) || (currentLogLevel !== 'all' && level !== currentLogLevel)) line.style.display = 'none';
-    line.style.opacity = '0'; line.style.animation = 'fadeIn 0.3s forwards';
+
     logContainer.appendChild(line);
     if (!logScrollLocked) logContainer.scrollTop = logContainer.scrollHeight;
     if (logContainer.childNodes.length > 300) logContainer.removeChild(logContainer.firstChild);
