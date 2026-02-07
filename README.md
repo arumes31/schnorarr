@@ -34,23 +34,78 @@
 
 ### Docker Compose (Recommended)
 
+Schnorarr can run in two modes: **Sender** (the orchestrator that monitors files and pushes them) and **Receiver** (the destination agent).
+
+#### Sender Configuration
+The Sender monitors local directories and orchestrates the sync process to a Receiver.
+
 ```yaml
 version: '3.8'
 services:
-  schnorarr:
+  schnorarr-sender:
     image: ghcr.io/arumes31/schnorarr:latest
-    container_name: schnorarr
+    container_name: schnorarr-sender
     ports:
       - "8080:8080"
     volumes:
-      - ./config:/app/config
-      - /mnt/media/source:/source
-      - /mnt/media/target:/target
+      - ./config:/config
+      - /mnt/media/movies:/source/movies
     environment:
-      - PUID=1000
-      - PGID=1000
+      - MODE=sender
+      - DEST_HOST=receiver-ip-or-hostname
+      - DEST_MODULE=media
+      - SYNC_1_SOURCE=/source/movies
+      - SYNC_1_TARGET=media/movies
+      - SYNC_1_RULE=series
+      - BWLIMIT_MBPS=100
+      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
     restart: unless-stopped
 ```
+
+#### Receiver Configuration
+The Receiver acts as a passive target for the Sender.
+
+```yaml
+version: '3.8'
+services:
+  schnorarr-receiver:
+    image: ghcr.io/arumes31/schnorarr:latest
+    container_name: schnorarr-receiver
+    ports:
+      - "8080:8080"
+    environment:
+      - MODE=receiver
+    volumes:
+      - /mnt/storage/media:/media
+    restart: unless-stopped
+```
+
+## ⚙️ Configuration (Environment Variables)
+
+### General
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `MODE` | `sender` or `receiver` | `sender` |
+| `PORT` | Web UI / API Port | `8080` |
+| `PUID` / `PGID` | User/Group ID for file permissions | `1000` |
+
+### Sender Specific
+| Variable | Description | Example |
+| :--- | :--- | :--- |
+| `DEST_HOST` | Hostname or IP of the Receiver | `192.168.1.50` |
+| `DEST_MODULE` | Rsync module name on Receiver | `media` |
+| `BWLIMIT_MBPS` | Global bandwidth limit in Mbps | `50` |
+| `SYNC_N_SOURCE` | Source path for engine `N` (1-10) | `/source/movies` |
+| `SYNC_N_TARGET` | Target path for engine `N` (1-10) | `media/movies` |
+| `SYNC_N_RULE` | Sync rule (`standard`, `series`, `flat`) | `series` |
+| `DISCORD_WEBHOOK_URL` | Discord webhook for notifications | `https://...` |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token | `123456:ABC...` |
+| `TELEGRAM_CHAT_ID` | Telegram chat ID | `987654321` |
+
+### Receiver Specific
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `RSYNC_CONFIG` | Custom path to rsyncd.conf | `/etc/rsyncd.conf` |
 
 ### Manual Build
 
