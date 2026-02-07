@@ -149,7 +149,25 @@ function updateProgress(data) {
             if (window.nodeMap) window.nodeMap.setSpeed(1);
         }
     }
-    if (data.eta) { const el = document.getElementById('stat-eta'); if (el) el.innerText = data.eta; }
+    if (data.eta) {
+        const el = document.getElementById('stat-eta');
+        if (el) el.innerText = data.eta;
+
+        const clock = document.getElementById('stat-clock');
+        if (clock) {
+            if (data.eta === 'Done') {
+                clock.innerText = 'Finishes at: --:--';
+            } else {
+                const seconds = parseDuration(data.eta);
+                if (seconds > 0) {
+                    const finishTime = new Date(Date.now() + seconds * 1000);
+                    clock.innerText = 'Finishes at: ' + finishTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                } else {
+                    clock.innerText = 'Finishes at: --:--';
+                }
+            }
+        }
+    }
     if (data.speed) {
         const el = document.getElementById('stat-speed'); if (el) el.innerText = data.speed;
         const val = parseBytes(data.speed);
@@ -235,6 +253,18 @@ function updateRelativeTimes() {
         const time = el.getAttribute('data-time');
         if (time) el.innerText = timeAgo(time);
     });
+}
+
+function parseDuration(str) {
+    if (!str) return 0;
+    let total = 0;
+    const parts = str.split(' ');
+    parts.forEach(p => {
+        if (p.endsWith('h')) total += parseInt(p) * 3600;
+        else if (p.endsWith('m')) total += parseInt(p) * 60;
+        else if (p.endsWith('s')) total += parseInt(p);
+    });
+    return total;
 }
 
 // --- 3. WebSocket Setup ---
