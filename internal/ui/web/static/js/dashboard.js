@@ -120,7 +120,7 @@ function updateProgress(data) {
         const bar = document.getElementById('speed-bar'); if (bar) bar.style.width = Math.min((val / (100 * 1024 * 1024)) * 100, 100) + '%';
         if (val > 0) updateGlobalTraffic(val);
     }
-    if (data.latency) { const el = document.getElementById('stat-latency'); if (el) el.innerText = data.latency + 'ms'; updateLatencySparkline(data.latency); }
+    if (data.latency) { updateLatencySparkline(data.latency); }
     if (data.engines) {
         data.engines.forEach(eng => {
             const container = document.getElementById(`engine-progress-container-${eng.id}`);
