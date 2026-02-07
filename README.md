@@ -140,6 +140,54 @@ go build -o schnorarr ./cmd/monitor
 ./schnorarr
 ```
 
+## 🏗️ Architecture
+
+Schnorarr operates as a distributed system with two specialized roles:
+
+### 📤 Sender (Orchestrator)
+- **Responsibility**: Monitors local directories, calculates diffs, and pushes data.
+- **Components**: Go Sync Engine, SQLite Database, WebSocket Hub, Dashboard UI.
+- **Port**: `8080` (Web UI/API).
+
+### 📥 Receiver (Agent)
+- **Responsibility**: Passive data target.
+- **Components**: Rsync Daemon, Health Reporter.
+- **Ports**: `873` (Rsync), `8080` (Health Check).
+
+```mermaid
+graph LR
+    subgraph "Local Site (Sender)"
+        A[Media Source] --> B[Sync Engine]
+        B --> C[Dashboard UI]
+    end
+    subgraph "Remote Site (Receiver)"
+        D[Rsync Daemon] --> E[Media Storage]
+        F[Health Agent]
+    end
+    B -- "Data (Port 873)" --> D
+    B -- "Status (Port 8080)" --> F
+```
+
+## 🔒 Security & Privacy
+
+*   **Zero-Exposure**: Schnorarr does *not* require port forwarding. When used with the built-in **Tailscale** integration, your data stays within your private WireGuard® mesh.
+*   **Encrypted Data**: All synchronization traffic over Tailscale is end-to-end encrypted.
+*   **Authentication**: Supports `RSYNC_PASSWORD` for an extra layer of security between the sender and receiver.
+*   **Minimal Footprint**: The binary is statically compiled with no external dependencies (except rsync).
+
+## 💡 Best Practices
+
+- **Read-Only Mounting**: Mount your source volumes as `:ro` on the **Sender** for peace of mind. Schnorarr never needs to write to the source.
+- **Log Management**: Map `/config` to a persistent volume to preserve sync history and database across updates.
+- **Memory Optimization**: For massive libraries (100k+ files), ensure your container has at least 512MB RAM for manifest hashing.
+
+## 🗺️ Roadmap
+
+- [ ] **Mobile-Responsive UI**: Native-feeling wrap for monitoring on the go.
+- [ ] **Advanced Filtering**: Regex-based exclusion and inclusion rules.
+- [ ] **Extended Webhooks**: Support for Slack, Matrix, and custom POST endpoints.
+- [ ] **Peer-to-Peer Mode**: Decentralized sync between multiple senders.
+
 ## 📊 Dashboard Guide
 
 The Schnorarr dashboard is designed for high-density information display:
