@@ -14,8 +14,12 @@ func TestStartSyncEngines_LoopCapture(t *testing.T) {
 	tmpDir := t.TempDir()
 	src1 := filepath.Join(tmpDir, "src1")
 	src2 := filepath.Join(tmpDir, "src2")
-	os.Mkdir(src1, 0755)
-	os.Mkdir(src2, 0755)
+	if err := os.Mkdir(src1, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(src2, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Setup Env
 	os.Setenv("SYNC_1_SOURCE", src1)

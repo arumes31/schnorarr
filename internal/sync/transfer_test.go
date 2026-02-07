@@ -17,7 +17,9 @@ func TestTransferer_CopyParallel(t *testing.T) {
 
 	size := int64(1 * 1024 * 1024)
 	data := make([]byte, size)
-	rand.Read(data)
+	if _, err := rand.Read(data); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(srcPath, data, 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +49,9 @@ func TestTransferer_CopyParallel(t *testing.T) {
 	}
 
 	// Sync and Close to ensure flush
-	dstFile.Sync()
+	if err := dstFile.Sync(); err != nil {
+		t.Fatal(err)
+	}
 	dstFile.Close()
 
 	// Verify content
