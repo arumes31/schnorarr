@@ -55,6 +55,9 @@ type Engine struct {
 	pendingDeletions   []string
 	waitingForApproval bool
 	deletionAllowed    bool
+
+	// Retry Delay
+	failedFiles map[string]time.Time
 }
 
 // NewEngine creates a new sync engine
@@ -68,6 +71,7 @@ func NewEngine(config SyncConfig) *Engine {
 		stopCh:       make(chan struct{}),
 		alias:        database.GetSetting("alias_"+config.ID, "Engine #"+config.ID),
 		speedHistory: make([]int64, 60),
+		failedFiles:  make(map[string]time.Time),
 	}
 
 	transferer := NewTransferer(TransferOptions{
@@ -175,6 +179,7 @@ func (e *Engine) Start() error {
 	if e.config.PollInterval > 0 {
 		go e.sourcePollLoop()
 	}
+	go e.failedRetryLoop()
 	log.Printf("Sync engine started: %s -> %s", e.config.SourceDir, e.config.TargetDir)
 	return nil
 }
@@ -404,6 +409,20 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	}
 	e.pausedMu.Unlock()
 
+	// Filter out files that failed recently (within last hour)
+	var finalFilesToSync []*FileInfo
+	e.pausedMu.Lock()
+	for _, f := range plan.FilesToSync {
+		if failTime, exists := e.failedFiles[f.Path]; exists {
+			if time.Since(failTime) < 1*time.Hour {
+				continue // Skip for now, will retry later
+			}
+		}
+		finalFilesToSync = append(finalFilesToSync, f)
+	}
+	plan.FilesToSync = finalFilesToSync
+	e.pausedMu.Unlock()
+
 	touchedDirs, err := e.executeSyncPhase(plan, e.targetManifest)
 	if err != nil {
 		database.ReportEngineError(e.config.ID, err.Error())
@@ -519,6 +538,26 @@ func (e *Engine) sourcePollLoop() {
 				if len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.DirsToCreate) > 0 || len(plan.DirsToDelete) > 0 || len(plan.Renames) > 0 {
 					go func() { _ = e.RunSync(currentSource) }()
 				}
+			}
+		}
+	}
+}
+
+func (e *Engine) failedRetryLoop() {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-e.stopCh:
+			return
+		case <-ticker.C:
+			e.pausedMu.RLock()
+			hasFailures := len(e.failedFiles) > 0
+			e.pausedMu.RUnlock()
+
+			if hasFailures {
+				log.Printf("[%s] Periodic retry of failed files...", e.config.ID)
+				go func() { _ = e.RunSync(nil) }()
 			}
 		}
 	}

@@ -85,6 +85,20 @@ services:
     restart: unless-stopped
 ```
 
+## 🔄 Sync Capabilities & Rules
+
+Schnorarr uses a **Smart Sync** strategy designed specifically for media libraries, minimizing the risk of accidental data loss.
+
+### The "Smart Deletion" Logic
+Regardless of the configured rule name (`series`, `flat`, etc.), the engine currently applies a unified safety logic:
+
+1.  **Updates & Additions**: Files are transferred if they are new or if the source version is newer/different in size.
+2.  **Protected Archives**: if a **top-level directory** exists on the Receiver but *not* on the Sender, it is treated as an "Archive" and **ignored**.
+    *   *Example*: You delete `/source/movies/Matrix_Trilogy` locally to save space. Schnorarr sees `Matrix_Trilogy` on the receiver is unique and **will not delete it**.
+3.  **Standard Deletions**: If a directory exists on *both* sides, but a file inside it is deleted from source, it **will be deleted** from the receiver.
+    *   *Example*: You delete `movie.nfo` inside `/source/movies/Avatar/`. Since `/source/movies/Avatar/` still exists, `movie.nfo` is deleted from the receiver.
+4.  **Directory Safety**: The sync engine currently **never deletes directories**, only files. This prevents recursive deletion accidents. Empty directories may remain on the receiver.
+
 ## ⚙️ Configuration (Environment Variables)
 
 ### General
@@ -125,6 +139,125 @@ cd schnorarr
 go build -o schnorarr ./cmd/monitor
 ./schnorarr
 ```
+
+## 🛣️ Path Mapping Guide
+
+It is important to understand how Schnorarr constructs the final rsync destination path. The formula is:
+`RECIEVER_IP / DEST_MODULE / SYNC_N_TARGET`
+
+| Variable | Scope | Example Value | Resulting Path |
+| :--- | :--- | :--- | :--- |
+| `DEST_HOST` | Global | `192.168.1.50` | `192.168.1.50::...` |
+| `DEST_MODULE` | Global | `media` | `192.168.1.50::media/...` |
+| `SYNC_1_TARGET` | Engine 1 | `movies` | `192.168.1.50::media/movies` |
+| `SYNC_2_TARGET` | Engine 2 | `series/anime` | `192.168.1.50::media/series/anime` |
+
+> [!TIP]
+> Ensure the `DEST_MODULE` exists in the Receiver's `rsyncd.conf` (usually mapped to a physical path like `/data`).
+
+## 🔔 Notification Setup (Pro)
+
+Schnorarr can send real-time alerts to Discord and Telegram. Here is how to get your credentials:
+
+### Discord
+1.  Open **Server Settings** -> **Integrations** -> **Webhooks**.
+2.  Click **New Webhook**, select the target channel.
+3.  Click **Copy Webhook URL** and paste it into `DISCORD_WEBHOOK_URL`.
+
+### Telegram
+1.  **Bot Token**: Message [@BotFather](https://t.me/botfather) and use `/newbot` to get your API Token.
+2.  **Chat ID**: 
+    - Message [@getIDbot](https://t.me/getidbot) to get your personal `Chat ID`.
+    - Or, add your bot to a group and message [@myidbot](https://t.me/myidbot) inside the group.
+
+## 🏗️ Architecture
+
+Schnorarr operates as a distributed system with two specialized roles:
+
+### 📤 Sender (Orchestrator)
+- **Responsibility**: Monitors local directories, calculates diffs, and pushes data.
+- **Components**: Go Sync Engine, SQLite Database, WebSocket Hub, Dashboard UI.
+- **Port**: `8080` (Web UI/API).
+
+### 📥 Receiver (Agent)
+- **Responsibility**: Passive data target.
+- **Components**: Rsync Daemon, Health Reporter.
+- **Ports**: `873` (Rsync), `8080` (Health Check).
+
+```mermaid
+graph LR
+    subgraph "Local Site (Sender)"
+        A[Media Source] --> B[Sync Engine]
+        B --> C[Dashboard UI]
+    end
+    subgraph "Remote Site (Receiver)"
+        D[Rsync Daemon] --> E[Media Storage]
+        F[Health Agent]
+    end
+    B -- "Data (Port 873)" --> D
+    B -- "Status (Port 8080)" --> F
+```
+
+## 🔒 Security & Privacy
+
+*   **Zero-Exposure**: Schnorarr does *not* require port forwarding. When used with the built-in **Tailscale** integration, your data stays within your private WireGuard® mesh.
+*   **Encrypted Data**: All synchronization traffic over Tailscale is end-to-end encrypted.
+*   **Authentication**: Supports `RSYNC_PASSWORD` for an extra layer of security between the sender and receiver.
+*   **Minimal Footprint**: The binary is statically compiled with no external dependencies (except rsync).
+
+## 💡 Best Practices
+
+- **Read-Only Mounting**: Mount your source volumes as `:ro` on the **Sender** for peace of mind. Schnorarr never needs to write to the source.
+- **Log Management**: Map `/config` to a persistent volume to preserve sync history and database across updates.
+- **Memory Optimization**: For massive libraries (100k+ files), ensure your container has at least 512MB RAM for manifest hashing.
+
+## 📊 Dashboard Guide
+
+The Schnorarr dashboard is designed for high-density information display:
+
+*   **Real-Time Status**: View total accumulated traffic and "Traffic Today" at a glance.
+*   **Active Engines**: Each sync engine shows its current speed, percentage progress, ETA, and a 60-second speed sparkline.
+*   **Node Map**: A real-time visualization of file transfer activity across all engines.
+*   **Daily Traffic**: A 7-day bar chart showing data transfer volume trends.
+*   **Top Files**: Rankings of the most frequently synced or largest files.
+*   **Log Terminal**: A live-streaming terminal with ANSI color support and level filtering (INFO, WARN, ERROR).
+
+## 🎛️ Advanced Configuration
+
+Beyond the basic setup, you can fine-tune Schnorarr using these environment variables:
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `MIN_DISK_SPACE_GB` | (Sender) Stop syncing if source disk space falls below this. | `0` (Disabled) |
+| `MAX_RETRIES` | (Sender) Number of attempts to connect to receiver before failing. | `30` |
+| `CONFIG_DIR` | Path to store logs and cached manifests. | `/config` |
+| `BWLIMIT_MBPS` | Global bandwidth limit for all transfers in Mbps. | `0` (Unlimited) |
+| `RSYNC_PASSWORD` | Optional: Password for authenticated rsync transfers. | - |
+
+### Sync Engine Tuning (Code Level)
+Schnorarr is optimized for low CPU usage:
+- **Scan Concurrency**: 8 parallel workers (reduced from 32).
+- **Polling Interval**: Full "safety" scan runs every 60 seconds.
+- **Full Refresh**: Massive reconciliation scan runs every 12 hours.
+
+## 🔌 API Reference
+
+Power users can interact with Schnorarr via its REST API:
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/health` | `GET` | Returns JSON status of sender and receiver. |
+| `/history` | `GET` | Returns the last 50 sync events. |
+| `/api/engines/bulk` | `POST` | `{"action": "pause"\|"resume"}` - Controls all engines. |
+| `/api/engine/:id/sync` | `POST` | Triggers immediate manual sync for engine `id`. |
+| `/api/engine/:id/pause` | `POST` | Pauses a specific engine. |
+| `/api/engine/:id/preview` | `GET` | Returns JSON list of files that *would* be synced (Dry Run). |
+
+## 🛠️ Troubleshooting
+
+*   **Receiver Offline**: Ensure `DEST_HOST` is reachable from the sender container and port `873` (rsync) and `8080` (health) are open.
+*   **Permission Denied**: Check `PUID`/`PGID` settings. Ensure the container has write access to the mounted volumes.
+*   **Stuck Sync**: Use the **"Reset Engine"** button in the dashboard to clear the local manifest cache and force a full re-scan.
 
 ## 🖼️ Screenshots
 
