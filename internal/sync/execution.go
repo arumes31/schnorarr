@@ -44,6 +44,8 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 					targetManifest.Files[newPath] = file
 				}
 				e.reportEvent(timestamp, "Renamed", fmt.Sprintf("%s -> %s", oldPath, newPath), 0)
+			} else {
+				e.reportError(fmt.Sprintf("Failed to rename %s -> %s: %v", oldPath, newPath, err))
 			}
 		}
 	}
@@ -72,7 +74,7 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 }
 
 func (e *Engine) executeCleanupPhase(plan *SyncPlan, targetManifest *Manifest, touchedDirs map[string]bool) error {
-	timestamp := time.Now().Format("2006/01/02 15:04:05")
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	isDryRun := e.isDryRun()
 	if len(plan.FilesToDelete) == 0 && len(plan.DirsToDelete) == 0 {
 		return nil
@@ -85,6 +87,8 @@ func (e *Engine) executeCleanupPhase(plan *SyncPlan, targetManifest *Manifest, t
 			if err := e.transferer.DeleteFile(filepath.Join(e.config.TargetDir, filePath)); err == nil {
 				delete(targetManifest.Files, filePath)
 				e.reportEvent(timestamp, "Deleted", filePath, 0)
+			} else {
+				e.reportError(fmt.Sprintf("Failed to delete %s: %v", filePath, err))
 			}
 		}
 	}

@@ -38,5 +38,7 @@ type SyncConfig struct {
 
 // GetConfig returns the engine configuration
 func (e *Engine) GetConfig() SyncConfig {
+	e.pausedMu.RLock()
+	defer e.pausedMu.RUnlock()
 	return e.config
 }

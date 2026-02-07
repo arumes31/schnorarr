@@ -3,13 +3,21 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"time"
 )
 
 // WebSocket handler
 func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 	if AuthEnabled {
 		cookie, err := r.Cookie("schnorarr_session")
-		if err != nil || cookie.Value != h.sessionToken {
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		h.sessionMu.RLock()
+		session, ok := h.sessions[cookie.Value]
+		h.sessionMu.RUnlock()
+		if !ok || time.Now().After(session.Expires) {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -22,6 +30,10 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.wsHub.Register(wsConn)
+	defer func() {
+		wsConn.Close()
+		h.wsHub.Unregister(wsConn)
+	}()
 
 	// Send initial state
 	if err := wsConn.WriteJSON(struct {
@@ -35,7 +47,6 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 	for {
 		_, _, err := wsConn.ReadMessage()
 		if err != nil {
-			h.wsHub.Unregister(wsConn)
 			break
 		}
 	}

@@ -103,8 +103,8 @@ func GetTopFiles() []HistoryItem {
 
 // PruneHistory deletes history items older than the specified retention period
 func PruneHistory(days int) error {
-	cutoff := "date('now', '-" + FormatInt(days) + " days')"
-	_, err := DB.Exec("DELETE FROM history WHERE timestamp < " + cutoff)
+	cutoff := "-" + FormatInt(days) + " days"
+	_, err := DB.Exec("DELETE FROM history WHERE timestamp < date('now', ?)", cutoff)
 	return err
 }
 

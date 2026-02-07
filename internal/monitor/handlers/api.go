@@ -75,7 +75,7 @@ func (h *Handlers) GlobalPause(w http.ResponseWriter, r *http.Request) {
 			e.Pause()
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "true")
 		}
-		_ = database.LogSystemEvent(h.sessionToken, "Paused All", "User paused all engines")
+		_ = database.LogSystemEvent(h.GetUser(r), "Paused All", "User paused all engines")
 		http.Redirect(w, r, "/", 303)
 	})(w, r)
 }
@@ -86,7 +86,7 @@ func (h *Handlers) GlobalResume(w http.ResponseWriter, r *http.Request) {
 			e.Resume()
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "false")
 		}
-		_ = database.LogSystemEvent(h.sessionToken, "Resumed All", "User resumed all engines")
+		_ = database.LogSystemEvent(h.GetUser(r), "Resumed All", "User resumed all engines")
 		http.Redirect(w, r, "/", 303)
 	})(w, r)
 }
@@ -129,7 +129,7 @@ func (h *Handlers) BulkAction(w http.ResponseWriter, r *http.Request) {
 				_ = database.SaveSetting("engine_paused_"+id, "false")
 			}
 		}
-		_ = database.LogSystemEvent(h.sessionToken, "Bulk "+req.Action, fmt.Sprintf("Action on %d engines", len(req.IDs)))
+		_ = database.LogSystemEvent(h.GetUser(r), "Bulk "+req.Action, fmt.Sprintf("Action on %d engines", len(req.IDs)))
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 	})(w, r)
@@ -202,7 +202,7 @@ func (h *Handlers) EngineAction(w http.ResponseWriter, r *http.Request) {
 				engine.ApproveSpecificChanges(req.Files)
 			}
 		}
-		_ = database.LogSystemEvent(h.sessionToken, "Engine "+action, "Engine "+id)
+		_ = database.LogSystemEvent(h.GetUser(r), "Engine "+action, "Engine "+id)
 		w.WriteHeader(200)
 	})(w, r)
 }
@@ -245,7 +245,7 @@ func (h *Handlers) UpdateSyncMode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = database.SaveSetting("sync_mode", mode)
-		_ = database.LogSystemEvent(h.sessionToken, "Update Sync Mode", "Mode set to "+mode)
+		_ = database.LogSystemEvent(h.GetUser(r), "Update Sync Mode", "Mode set to "+mode)
 		if r.Header.Get("Accept") == "application/json" {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
@@ -262,7 +262,7 @@ func (h *Handlers) UpdateAutoApprove(w http.ResponseWriter, r *http.Request) {
 		for _, e := range h.engines {
 			e.SetAutoApproveDeletions(val == "on")
 		}
-		_ = database.LogSystemEvent(h.sessionToken, "Update Auto Approve", "Set to "+val)
+		_ = database.LogSystemEvent(h.GetUser(r), "Update Auto Approve", "Set to "+val)
 		if r.Header.Get("Accept") == "application/json" {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"schnorarr/internal/monitor/database"
@@ -17,15 +18,18 @@ import (
 )
 
 func (a *App) startSenderServices() {
+	// Shared latency variable
+	var latency int64
 	a.SyncEngines = startSyncEngines(a.WSHub, a.HealthState, a.Notifier)
-	go startSyncStatusBroadcaster(a.WSHub, a.SyncEngines, a.HealthState)
-	go checkReceiverHealth(a.HealthState, a.SyncEngines)
+	go startSyncStatusBroadcaster(a.WSHub, a.SyncEngines, a.HealthState, &latency)
+	go checkReceiverHealth(a.HealthState, a.SyncEngines, &latency)
 }
 
 func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier *notification.Service) []*sync.Engine {
 	var engines []*sync.Engine
 	for i := 1; i <= 10; i++ {
-		prefix := "SYNC_" + strconv.Itoa(i)
+		id := strconv.Itoa(i) // Capture loop variable
+		prefix := "SYNC_" + id
 		src, tgt, rule := os.Getenv(prefix+"_SOURCE"), os.Getenv(prefix+"_TARGET"), os.Getenv(prefix+"_RULE")
 		if src == "" || tgt == "" {
 			continue
@@ -40,12 +44,12 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 		}
 
 		engine := sync.NewEngine(sync.SyncConfig{
-			ID: strconv.Itoa(i), SourceDir: src, TargetDir: resolvedTgt, Rule: rule,
+			ID: id, SourceDir: src, TargetDir: resolvedTgt, Rule: rule,
 			ExcludePatterns: []string{".git", ".DS_Store", "Thumbs.db"}, BandwidthLimit: bwlimitBytes,
 			PollInterval: 10 * time.Second, AutoApproveDeletions: database.GetSetting("auto_approve", "off") == "on",
 			DryRunFunc: func() bool { return database.GetSetting("sync_mode", "dry") == "dry" },
 			OnSyncEvent: func(ts, act, p string, sz int64) {
-				_ = database.LogEvent(ts, act, p, sz, strconv.Itoa(i))
+				_ = database.LogEvent(ts, act, p, sz, id)
 				item := database.HistoryItem{Time: ts, Action: act, Path: p, Size: database.FormatBytes(sz)}
 				wsHub.Broadcast("history", item)
 				wsHub.Broadcast("stats", database.GetTrafficStats())
@@ -54,24 +58,29 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			},
 			OnError: func(msg string) { healthState.ReportError(msg, notifier.Send) },
 		})
+
 		if err := engine.Start(); err == nil {
 			engine.SetHealthState(healthState)
 			engines = append(engines, engine)
-		}
-		if database.GetSetting("engine_paused_"+strconv.Itoa(i), "false") == "true" {
-			engine.Pause()
+			// Only pause if successfully started
+			if database.GetSetting("engine_paused_"+id, "false") == "true" {
+				engine.Pause()
+			}
+		} else {
+			fmt.Printf("Failed to start engine %s: %v\n", id, err)
 		}
 	}
 	return engines
 }
 
-func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine, healthState *health.State) {
+func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine, healthState *health.State, latency *int64) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
 		var totalSpeed int64
 		var totalRemaining int64
 		allPaused := true
+		atomicLatency := atomic.LoadInt64(latency)
 		type EngineProgress struct {
 			ID           string  `json:"id"`
 			File         string  `json:"file"`
@@ -149,9 +158,6 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 		}
 		globalEta := "Done"
 		if totalSpeed > 0 && totalRemaining > 0 {
-			if totalRemaining < 0 {
-				totalRemaining = 0
-			}
 			sec := totalRemaining / totalSpeed
 			if sec > 3600 {
 				globalEta = fmt.Sprintf("%dh %dm", sec/3600, (sec%3600)/60)
@@ -162,7 +168,7 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 			}
 		}
 
-		latency := int64(10 + (time.Now().UnixNano() % 15))
+		latency := atomicLatency
 
 		receiverHealthy, receiverMsg, receiverVersion, receiverUptime := healthState.GetReceiverStatus()
 		traffic := database.GetTrafficStats()
@@ -180,7 +186,7 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 	}
 }
 
-func checkReceiverHealth(healthState *health.State, engines []*sync.Engine) {
+func checkReceiverHealth(healthState *health.State, engines []*sync.Engine, latency *int64) {
 	destHost := os.Getenv("DEST_HOST")
 	if destHost == "" {
 		return
@@ -190,7 +196,11 @@ func checkReceiverHealth(healthState *health.State, engines []*sync.Engine) {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
+		start := time.Now()
 		resp, err := client.Get(targetURL)
+		if err == nil {
+			atomic.StoreInt64(latency, time.Since(start).Milliseconds())
+		}
 		var version, uptime string
 		healthy := false
 		msg := ""

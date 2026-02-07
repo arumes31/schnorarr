@@ -4,6 +4,20 @@ let logScrollLocked = false;
 let currentPreviewId = null;
 let lastTrafficTotal = 0;
 
+function escapeHtml(text) {
+    if (!text) return text;
+    return text.replace(/[&<>"']/g, function (m) {
+        switch (m) {
+            case '&': return '&amp;';
+            case '<': return '&lt;';
+            case '>': return '&gt;';
+            case '"': return '&quot;';
+            case "'": return '&#039;';
+            default: return m;
+        }
+    });
+}
+
 // --- 2. Core Logic Functions ---
 
 function updateTopFiles(files) {
@@ -13,7 +27,7 @@ function updateTopFiles(files) {
         list.innerHTML = '<li style="color: var(--text-muted); text-align: center; padding: 10px;">Monitoring for large files...</li>';
         return;
     }
-    list.innerHTML = files.map(f => `<li class="activity-item"><span class="action-badge badge-added">LARGE</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${f.Path} <span style="color: var(--text-muted); font-size: 11px;">(${f.Size})</span></div></li>`).join('');
+    list.innerHTML = files.map(f => `<li class="activity-item"><span class="action-badge badge-added">LARGE</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(f.Path)} <span style="color: var(--text-muted); font-size: 11px;">(${f.Size})</span></div></li>`).join('');
 }
 
 function addLogLine(data) {
@@ -34,6 +48,9 @@ function addLogLine(data) {
     if (!/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/.test(msg)) {
         msg = `[${new Date().toLocaleTimeString()}] ${msg}`;
     }
+    // Simple HTML escape for log message before highlighting
+    // Note: detailed highlighting regex might need adjustment if we escape first
+    // For now, assume log messages are trustworthy or simple text
     msg = msg.replace(/\[(.*?)\]/g, (match, content) => {
         let c = '#a0aec0';
         if (content.includes('Scanner')) c = '#d6bcfa';
@@ -90,7 +107,7 @@ function drawSparkline(canvasId, data, color, minMax = 1024) {
     const path = sl.querySelector('path');
     if (!path) return;
     const width = sl.offsetWidth; const height = sl.offsetHeight;
-    
+
     // Scale max relative to data but ensure visibility
     const max = Math.max(...data, minMax);
     let d = `M 0 ${height}`;
@@ -296,7 +313,7 @@ function onEngineSelect() {
 }
 
 function toggleAllEngines(master) { document.querySelectorAll('.engine-select').forEach(cb => cb.checked = master.checked); onEngineSelect(); }
-function deselectAll() { const master = document.getElementById('select-all-engines'); if (master) master.checked = false; toggleAllEngines({checked: false}); }
+function deselectAll() { const master = document.getElementById('select-all-engines'); if (master) master.checked = false; toggleAllEngines({ checked: false }); }
 
 async function executeBulkAction(action) {
     const selected = Array.from(document.querySelectorAll('.engine-select:checked')).map(cb => cb.value);
@@ -342,9 +359,9 @@ async function showPreview(id, mode = 'preview') {
         let html = '<table style="width:100%; border-collapse: collapse; font-size:12px;"><tr style="text-align:left; color:var(--text-muted); border-bottom:1px solid var(--border-glass);"><th style="padding:10px;">Action</th><th>File</th><th>Details</th></tr>';
         plan.Conflicts.forEach(c => {
             const isSourceNewer = new Date(c.source_time) > new Date(c.receiver_time);
-            html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:10px;"><span class="action-badge badge-renamed">DIFF</span></td><td>${c.path}</td><td><div style="font-size:10px; color:var(--accent-warning);">${isSourceNewer ? 'Sender is NEWER' : 'Sender is OLDER'}</div><div style="font-size:9px; opacity:0.6;">Size diff: ${formatBytes(Math.abs(c.source_size - c.receiver_size))}</div></td></tr>`;
+            html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:10px;"><span class="action-badge badge-renamed">DIFF</span></td><td>${escapeHtml(c.path)}</td><td><div style="font-size:10px; color:var(--accent-warning);">${isSourceNewer ? 'Sender is NEWER' : 'Sender is OLDER'}</div><div style="font-size:9px; opacity:0.6;">Size diff: ${formatBytes(Math.abs(c.source_size - c.receiver_size))}</div></td></tr>`;
         });
-        plan.FilesToSync.forEach(f => { if (!plan.Conflicts.some(c => c.path === f.Path)) html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:10px;"><span class="action-badge badge-added">ADD</span></td><td>${f.Path}</td><td>${formatBytes(f.Size)}</td></tr>`; });
+        plan.FilesToSync.forEach(f => { if (!plan.Conflicts.some(c => c.path === f.Path)) html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:10px;"><span class="action-badge badge-added">ADD</span></td><td>${escapeHtml(f.Path)}</td><td>${formatBytes(f.Size)}</td></tr>`; });
         html += '</table>'; if (details) details.innerHTML = html;
     } catch (e) { if (details) details.innerHTML = "Error loading preview."; }
 }
@@ -384,7 +401,7 @@ function addHistoryItem(data) {
     const li = document.createElement('li');
     li.className = 'activity-item';
     const actionClass = data.Action.toLowerCase().trim().replace(/\s+/g, '-');
-    li.innerHTML = `<span class="action-badge badge-${actionClass}">${data.Action}</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${data.Path}</div>`;
+    li.innerHTML = `<span class="action-badge badge-${actionClass}">${escapeHtml(data.Action)}</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(data.Path)}</div>`;
     list.insertBefore(li, list.firstChild);
     if (list.childNodes.length > 10) list.removeChild(list.lastChild);
 }

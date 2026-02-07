@@ -314,13 +314,19 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		return nil
 	}
 	hasDeletions := len(plan.FilesToDelete) > 0 || len(plan.DirsToDelete) > 0
-	if hasDeletions && !e.config.AutoApproveDeletions && !e.deletionAllowed {
+	autoApprove := e.config.AutoApproveDeletions
+	deletionAllowed := e.deletionAllowed
+	e.pausedMu.Unlock()
+
+	if hasDeletions && !autoApprove && !deletionAllowed {
+		e.pausedMu.Lock()
 		e.waitingForApproval = true
 		e.pendingDeletions = append(plan.FilesToDelete, plan.DirsToDelete...)
 		e.pausedMu.Unlock()
 		return nil
 	}
 
+	e.pausedMu.Lock() // Re-acquire lock for the following block
 	if e.deletionAllowed {
 		if len(e.pendingDeletions) > 0 {
 			allowed := make(map[string]bool)

@@ -88,6 +88,7 @@ services:
 ## ⚙️ Configuration (Environment Variables)
 
 ### General
+
 | Variable | Description | Default |
 | :--- | :--- | :--- |
 | `MODE` | `sender` or `receiver` | `sender` |
@@ -97,6 +98,7 @@ services:
 | `TAILSCALE_UP_ARGS` | Optional: Extra arguments for `tailscale up` | - |
 
 ### Sender Specific
+
 | Variable | Description | Example |
 | :--- | :--- | :--- |
 | `DEST_HOST` | Hostname or IP of the Receiver | `192.168.1.50` |
@@ -110,6 +112,7 @@ services:
 | `TELEGRAM_CHAT_ID` | Telegram chat ID | `987654321` |
 
 ### Receiver Specific
+
 | Variable | Description | Default |
 | :--- | :--- | :--- |
 | `RSYNC_CONFIG` | Custom path to rsyncd.conf | `/etc/rsyncd.conf` |
