@@ -576,7 +576,10 @@ body {
     background: var(--bg-terminal);
     border: 1px solid var(--border-glass);
     border-radius: 12px;
+    border-radius: 12px;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .terminal-header {
@@ -589,7 +592,8 @@ body {
 }
 
 .terminal-body {
-    height: 400px;
+    flex: 1;
+    min-height: 400px;
     overflow-y: auto;
     padding: 15px;
     font-family: 'JetBrains Mono', monospace;

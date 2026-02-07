@@ -231,7 +231,7 @@
         </section>
 
         <!-- Lower Panel -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: start;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: stretch;">
             <section class="activity-card"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; font-size: 18px;">Recent Activity</h2><a href="/history" style="color: var(--accent-secondary); font-size: 12px; text-decoration: none; font-weight: bold;">View All →</a></div>
                 <ul id="history-list" class="activity-list">
                     {{range .History}}<li class="activity-item"><span class="action-badge badge-{{lower .Action}}">{{.Action}}</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{.Path}} <span style="color: var(--text-muted); font-size: 11px;">({{.Size}})</span></div><span style="font-family: monospace; font-size: 11px; color: var(--text-muted);">{{.Time}}</span></li>
