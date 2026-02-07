@@ -411,6 +411,12 @@ async function showPreview(id, mode = 'preview') {
             html += renderRow("DEL-DIR", p, "-", "badge-deleted");
         });
 
+        if (plan.DirsToCreate) {
+            plan.DirsToCreate.forEach(p => {
+                html += renderRow("ADD-DIR", p, "-", "badge-added");
+            });
+        }
+
         html += '</table>';
         if (details) details.innerHTML = html;
     } catch (e) { if (details) details.innerHTML = `Error loading preview: ${e.message}`; }
