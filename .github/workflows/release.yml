@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+        cache: true
+
+    - name: Build
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        BINARY_NAME=schnorarr
+        if [ "$GOOS" = "windows" ]; then
+          BINARY_NAME=schnorarr.exe
+        fi
+        go build -v -o build/$BINARY_NAME ./cmd/monitor
+
+    - name: Archive
+      run: |
+        cd build
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          zip schnorarr-${{ matrix.goos }}-${{ matrix.goarch }}.zip schnorarr.exe
+        else
+          tar -czvf schnorarr-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz schnorarr
+        fi
+
+    - name: Upload Release Asset
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/schnorarr-${{ matrix.goos }}-${{ matrix.goarch }}.*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
