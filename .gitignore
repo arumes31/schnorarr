@@ -53,3 +53,4 @@ test_data
 *dev.yml
 *test.yml
 *.exe
+run_test.ps1
