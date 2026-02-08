@@ -11,6 +11,7 @@ services:
     volumes:
       - ./receiver:/data
       - receiver_config:/config
+      - receiver_state:/var/lib/tailscale
     cap_add:
       - NET_ADMIN
     devices:
@@ -44,6 +45,7 @@ services:
     volumes:
       - ./sender:/data
       - sender_config:/config
+      - sender_state:/var/lib/tailscale
     cap_add:
       - NET_ADMIN
     devices:
@@ -55,3 +57,5 @@ services:
 volumes:
   sender_config:
   receiver_config:
+  sender_state:
+  receiver_state:
