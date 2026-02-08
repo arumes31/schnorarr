@@ -119,7 +119,7 @@ func (a *App) ManifestHandler(w http.ResponseWriter, r *http.Request) {
 	a.cacheMu.Lock()
 	a.manifestCache[fullPath] = manifestCacheEntry{
 		manifest: manifest,
-		expiry:   time.Now().Add(5 * time.Minute),
+		expiry:   time.Now().Add(12 * time.Hour),
 	}
 	a.cacheMu.Unlock()
 
