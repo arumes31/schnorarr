@@ -3,7 +3,6 @@ package sync
 import (
 	"path/filepath"
 	"sort"
-	"strings"
 )
 
 // identifyDeletions implements smart deletion logic
@@ -17,27 +16,26 @@ func identifyDeletions(sender, receiver *Manifest, rule string) (filesToDelete, 
 	// Additionally, a directory itself is only managed if it exists on the sender.
 	// This "Smart Deletion" protects receiver-only folders from being deleted.
 	isManaged := func(path string, isDir bool) bool {
-		normalized := filepath.ToSlash(path)
-		parts := strings.Split(normalized, "/")
+		curr := filepath.ToSlash(path)
 
-		current := ""
-		for i := 0; i < len(parts); i++ {
-			if i == 0 {
-				current = parts[i]
-			} else {
-				current = current + "/" + parts[i]
+		// If it's a directory, the directory itself must exist on the sender to be considered managed.
+		// If it doesn't exist on the sender, we ignore it (and its contents).
+		if isDir {
+			if _, exists := sender.GetDir(curr); !exists {
+				return false
 			}
+		}
 
-			if i < len(parts)-1 {
-				// Check parent components
-				if !sender.HasDir(current) && !sender.HasFile(current) {
-					return false
-				}
-			} else if isDir {
-				// The directory itself must exist on sender to be managed
-				if !sender.HasDir(current) && !sender.HasFile(current) {
-					return false
-				}
+		// All parent directory components must also exist on the sender.
+		for {
+			curr = filepath.Dir(curr)
+			if curr == "." || curr == "/" || curr == "" {
+				break
+			}
+			// Normalize for lookup
+			lookup := filepath.ToSlash(curr)
+			if _, exists := sender.GetDir(lookup); !exists {
+				return false
 			}
 		}
 		return true
@@ -50,13 +48,15 @@ func identifyDeletions(sender, receiver *Manifest, rule string) (filesToDelete, 
 		}
 
 		// If the item doesn't exist on the sender, it's a candidate for deletion
-		if !sender.HasFile(path) && !sender.HasDir(path) {
-			if receiverFile.IsDir {
+		if receiverFile.IsDir {
+			if _, exists := sender.GetDir(path); !exists {
 				// Don't delete directories in "flat" mode
 				if rule != "flat" {
 					dirsToDelete = append(dirsToDelete, path)
 				}
-			} else {
+			}
+		} else {
+			if _, exists := sender.GetFile(path); !exists {
 				filesToDelete = append(filesToDelete, path)
 			}
 		}

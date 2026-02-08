@@ -34,11 +34,11 @@ func CompareManifests(sender, receiver *Manifest, rule string, skipRenames bool)
 
 	for path, senderFile := range sender.Files {
 		if senderFile.IsDir {
-			if !receiver.HasDir(path) {
+			if _, exists := receiver.GetDir(path); !exists {
 				plan.DirsToCreate = append(plan.DirsToCreate, path)
 			}
 		} else {
-			receiverFile, exists := receiver.Files[path]
+			receiverFile, exists := receiver.GetFile(path)
 			if !exists {
 				plan.FilesToSync = append(plan.FilesToSync, senderFile)
 			} else if senderFile.NeedsUpdate(receiverFile) {

@@ -166,9 +166,6 @@ func (h *Handlers) EnginePreview(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		if engine.IsWaitingForApproval() {
-			plan.FilesToDelete = engine.GetPendingDeletions()
-		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(plan)
 	})(w, r)

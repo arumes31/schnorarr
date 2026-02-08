@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +25,11 @@ type Manifest struct {
 	Root  string               `json:"root"`
 	Files map[string]*FileInfo `json:"files"`
 	Dirs  map[string]bool      `json:"dirs"`
+
+	// Non-exported case-insensitive index
+	lowerFiles map[string]string
+	lowerDirs  map[string]string
+	mu         sync.RWMutex
 }
 
 // NewManifest creates an empty manifest for the given root path
@@ -34,23 +41,95 @@ func NewManifest(root string) *Manifest {
 	}
 }
 
-// AddFile adds a file to the manifest
+// Add adds a file or directory to the manifest
 func (m *Manifest) Add(info *FileInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.Files[info.Path] = info
 	if info.IsDir {
 		m.Dirs[info.Path] = true
 	}
+	// Invalidate case-insensitive index
+	m.lowerFiles = nil
+	m.lowerDirs = nil
 }
 
-// HasFile checks if a file exists in the manifest
+// HasFile checks if a file exists in the manifest (exact match)
 func (m *Manifest) HasFile(path string) bool {
+	m.mu.RLock()
 	_, exists := m.Files[path]
+	m.mu.RUnlock()
 	return exists
 }
 
-// HasDir checks if a directory exists in the manifest
+// HasDir checks if a directory exists in the manifest (exact match)
 func (m *Manifest) HasDir(path string) bool {
-	return m.Dirs[path]
+	m.mu.RLock()
+	exists := m.Dirs[path]
+	m.mu.RUnlock()
+	return exists
+}
+
+// GetFile retrieves a file from the manifest, trying exact match first,
+// then case-insensitive match.
+func (m *Manifest) GetFile(path string) (*FileInfo, bool) {
+	m.mu.RLock()
+	if f, ok := m.Files[path]; ok {
+		m.mu.RUnlock()
+		return f, true
+	}
+	m.mu.RUnlock()
+
+	// Try case-insensitive
+	m.ensureIndexes()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if realPath, ok := m.lowerFiles[strings.ToLower(path)]; ok {
+		return m.Files[realPath], true
+	}
+	return nil, false
+}
+
+// GetDir checks if a directory exists in the manifest, trying exact match first,
+// then case-insensitive match. Returns the real path if found.
+func (m *Manifest) GetDir(path string) (string, bool) {
+	m.mu.RLock()
+	if m.Dirs[path] {
+		m.mu.RUnlock()
+		return path, true
+	}
+	m.mu.RUnlock()
+
+	// Try case-insensitive
+	m.ensureIndexes()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if realPath, ok := m.lowerDirs[strings.ToLower(path)]; ok {
+		return realPath, true
+	}
+	return "", false
+}
+
+func (m *Manifest) ensureIndexes() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.lowerFiles != nil {
+		return
+	}
+
+	m.lowerFiles = make(map[string]string)
+	for p := range m.Files {
+		m.lowerFiles[strings.ToLower(p)] = p
+	}
+
+	m.lowerDirs = make(map[string]string)
+	for p := range m.Dirs {
+		m.lowerDirs[strings.ToLower(p)] = p
+	}
 }
 
 // ComputeHash calculates the SHA256 hash of a file
@@ -74,7 +153,8 @@ func (fi *FileInfo) ComputeHash(fullPath string) error {
 	return nil
 }
 
-// NeedsUpdate determines if a file should be updated based on size/mtime comparison
+// NeedsUpdate determines if a file should be updated based on size/mtime comparison.
+// It uses a 1-second threshold to ignore sub-second differences.
 func (fi *FileInfo) NeedsUpdate(other *FileInfo) bool {
 	if fi.IsDir != other.IsDir {
 		return true
@@ -84,7 +164,10 @@ func (fi *FileInfo) NeedsUpdate(other *FileInfo) bool {
 		return false // Directories don't need updates
 	}
 
-	// File needs update if size differs or sender is newer
-	// We use a small epsilon for time comparison to account for filesystem precision differences
-	return fi.Size != other.Size || fi.ModTime.After(other.ModTime.Add(time.Second))
+	if fi.Size != other.Size {
+		return true
+	}
+
+	// Truncate to seconds for comparison to avoid precision mismatches
+	return fi.ModTime.Unix() > other.ModTime.Unix()
 }
