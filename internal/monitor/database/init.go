@@ -46,17 +46,23 @@ func Init() error {
 		DB.SetConnMaxLifetime(time.Hour)
 
 		if _, err = DB.Exec("PRAGMA journal_mode=WAL"); err != nil {
-			_ = DB.Close()
+			if cerr := DB.Close(); cerr != nil {
+				log.Printf("[Database] Error closing DB: %v", cerr)
+			}
 			continue
 		}
 
 		if _, err = DB.Exec("PRAGMA busy_timeout=5000"); err != nil {
-			_ = DB.Close()
+			if cerr := DB.Close(); cerr != nil {
+				log.Printf("[Database] Error closing DB: %v", cerr)
+			}
 			continue
 		}
 
 		if err := runMigrations(); err != nil {
-			_ = DB.Close()
+			if cerr := DB.Close(); cerr != nil {
+				log.Printf("[Database] Error closing DB: %v", cerr)
+			}
 			continue
 		}
 
@@ -113,14 +119,18 @@ func runMigrations() error {
 		}
 
 		if _, err := tx.Exec(string(content)); err != nil {
-			_ = tx.Rollback()
+			if rerr := tx.Rollback(); rerr != nil {
+				log.Printf("[Database] Error rolling back migration: %v", rerr)
+			}
 			// If it's an "already exists" error on create table, we might want to ignore it if we are sure,
 			// but for safety we fail. The user can manually fix if needed.
 			return fmt.Errorf("migration %s failed: %w", file.Name(), err)
 		}
 
 		if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES (?)", version); err != nil {
-			_ = tx.Rollback()
+			if rerr := tx.Rollback(); rerr != nil {
+				log.Printf("[Database] Error rolling back migration record: %v", rerr)
+			}
 			return fmt.Errorf("failed to record migration version: %w", err)
 		}
 
