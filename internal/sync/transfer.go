@@ -225,27 +225,16 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		return fmt.Errorf("failed to start rsync: %w", err)
 	}
 
-	// Read and parse progress output in real-time
-	var stderrBuf strings.Builder
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := stderr.Read(buf)
-			if n > 0 {
-				stderrBuf.Write(buf[:n])
-			}
-			if err != nil {
-				break
-			}
-		}
-	}()
+	// Combine stdout and stderr for progress parsing
+	// rsync sends progress to stderr by default
+	combinedOutput := io.MultiReader(stdout, stderr)
 
-	// Read stdout byte-by-byte to handle \r (carriage return) from --progress
+	// Read output byte-by-byte to handle \r (carriage return) from --progress
 	var currentLine strings.Builder
 	var lastProgress int64
 	buf := make([]byte, 1)
 	for {
-		n, err := stdout.Read(buf)
+		n, err := combinedOutput.Read(buf)
 		if n > 0 {
 			ch := buf[0]
 			if ch == '\r' || ch == '\n' {
@@ -285,8 +274,7 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	}
 
 	if err := cmd.Wait(); err != nil {
-		stderrOutput := strings.TrimSpace(stderrBuf.String())
-		log.Printf("[Transferer] rsync failed for %s:\nSTDERR: %s", src, stderrOutput)
+		log.Printf("[Transferer] rsync failed for %s: %v", src, err)
 		if t.opts.OnComplete != nil {
 			t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %s", stderrOutput))
 		}
