@@ -85,8 +85,8 @@ func TestHandlers_Login(t *testing.T) {
 }
 
 func TestHandlers_AuthMiddleware(t *testing.T) {
-	os.Setenv("AUTH_ENABLED", "true")
-	defer os.Unsetenv("AUTH_ENABLED")
+	_ = os.Setenv("AUTH_ENABLED", "true")
+	defer func() { _ = os.Unsetenv("AUTH_ENABLED") }()
 
 	h := New(nil, nil, nil, nil, nil, nil)
 
