@@ -5,7 +5,7 @@
 *.dylib
 schnorarr
 server
-monitor
+/monitor
 main_new
 .qodo/
 
