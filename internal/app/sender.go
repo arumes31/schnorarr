@@ -35,7 +35,28 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 		if src == "" || tgt == "" {
 			continue
 		}
-		resolvedTgt := sync.ResolveTargetPath(tgt, os.Getenv("DEST_HOST"), os.Getenv("DEST_MODULE"))
+		var resolvedTgt string
+		destHost := os.Getenv("DEST_HOST")
+		destModule := os.Getenv("DEST_MODULE")
+
+		if destHost != "" && destModule != "" {
+			// Check if target is already a full rsync URI
+			if strings.Contains(tgt, "::") || strings.HasPrefix(tgt, "rsync://") {
+				resolvedTgt = tgt
+			} else {
+				// Construct Rsync URI: user@host::module/path
+				// e.g. syncuser@192.168.1.50::video-sync/movies
+				rsyncUser := os.Getenv("RSYNC_USER")
+				if rsyncUser == "" {
+					rsyncUser = "syncuser" // Default
+				}
+				// Using rsync:// syntax is sometimes safer for parsing, but :: is standard for daemon
+				resolvedTgt = fmt.Sprintf("%s@%s::%s/%s", rsyncUser, destHost, destModule, tgt)
+			}
+		} else {
+			// Local fallback (for testing or local-only mode)
+			resolvedTgt = sync.ResolveTargetPath(tgt, "", "")
+		}
 
 		bwlimitBytes := int64(0)
 		if bwStr := os.Getenv("BWLIMIT_MBPS"); bwStr != "" {
@@ -116,6 +137,7 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 			SpeedHistory []int64 `json:"speed_history"`
 			IsPaused     bool    `json:"is_paused"`
 			LastSync     string  `json:"last_sync"`
+			IsRemoteScan bool    `json:"is_remote_scan"`
 		}
 		engineStats := make([]EngineProgress, 0)
 		for _, engine := range syncEngines {
@@ -161,7 +183,7 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 			}
 			engineStats = append(engineStats, EngineProgress{
 				ID: engine.GetConfig().ID, File: filepath.Base(file), Percent: percent, Speed: database.FormatBytes(speed) + "/s", Today: database.FormatBytes(stats.Today), Total: database.FormatBytes(stats.Total), IsActive: speed > 0, ETA: etaStr, QueueCount: queuedCount, IsScanning: engine.IsScanning(),
-				AvgSpeed: database.FormatBytes(avgSpeed) + "/s", Elapsed: elapsedStr, SpeedHistory: engine.GetSpeedHistory(), IsPaused: isPaused, LastSync: engine.GetLastSyncTime().Format(time.RFC3339),
+				AvgSpeed: database.FormatBytes(avgSpeed) + "/s", Elapsed: elapsedStr, SpeedHistory: engine.GetSpeedHistory(), IsPaused: isPaused, LastSync: engine.GetLastSyncTime().Format(time.RFC3339), IsRemoteScan: engine.IsRemoteScan(),
 			})
 		}
 		state := "ACTIVE"

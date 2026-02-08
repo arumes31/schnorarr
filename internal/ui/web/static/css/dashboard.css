@@ -35,6 +35,14 @@
     --log-bracket: #a0aec0;
 }
 
+.color-success {
+    color: var(--accent-primary) !important;
+}
+
+.color-error {
+    color: var(--accent-error) !important;
+}
+
 [data-theme="green"] {
     --bg-deep: #0a0b10;
 }
@@ -432,6 +440,15 @@ body {
     background: rgba(147, 51, 234, 0.15);
     color: #d8b4fe;
     border: 1px solid rgba(147, 51, 234, 0.3);
+}
+
+.health-pill {
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--health-color);
+    border: 1px solid var(--health-color);
+    font-weight: 900;
+    font-size: 12px;
+    padding: 2px 8px;
 }
 
 @keyframes rapid-pulse {
@@ -1028,4 +1045,20 @@ input:checked+.slider:before {
         opacity: 1;
         transform: scale(1) translateY(0);
     }
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary));
+    transition: width 0.5s ease;
+    width: var(--progress, 0%);
+}
+
+/* Utility Classes */
+.d-none {
+    display: none !important;
+}
+
+.d-block {
+    display: block !important;
 }

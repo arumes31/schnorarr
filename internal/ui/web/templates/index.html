@@ -28,27 +28,41 @@
 
         <nav class="nav-items">
             <a href="#" class="nav-link active">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
                 <span>Dashboard</span>
             </a>
             <a href="/history" class="nav-link">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 <span>History</span>
             </a>
             <a href="#logs" class="nav-link">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
                 <span>Live Logs</span>
             </a>
             <a href="/logout" class="nav-link" style="margin-top: 10px; color: var(--accent-error);">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
                 <span>Logout</span>
             </a>
         </nav>
 
         <div class="sidebar-footer">
-            <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">Sync Mode</div>
+            <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">Sync
+                Mode</div>
             <div class="three-state-container">
-                <div id="sync-mode-switch" class="three-state-switch" data-val="{{.SyncMode}}" onclick="cycleSyncMode()">
+                <div id="sync-mode-switch" class="three-state-switch" data-val="{{.SyncMode}}"
+                    onclick="cycleSyncMode()">
                     <div class="three-state-slider"></div>
                     <div class="three-state-option opt-dry">Dry</div>
                     <div class="three-state-option opt-manual">Man</div>
@@ -56,17 +70,23 @@
                 </div>
             </div>
 
-            <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-top: 20px; margin-bottom: 5px;">Safety Controls</div>
+            <div
+                style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-top: 20px; margin-bottom: 5px;">
+                Safety Controls</div>
             <div class="mode-toggle-container">
                 <span style="font-size: 11px; font-weight: bold; color: var(--text-muted);">AUTO-APPROVE</span>
                 <label class="switch">
-                    <input type="checkbox" id="auto-approve-toggle" onchange="updateAutoApprove(this)" {{if eq .AutoApproveDeletions "on" }}checked{{end}}>
+                    <input type="checkbox" id="auto-approve-toggle" onchange="updateAutoApprove(this)" {{if eq
+                        .AutoApproveDeletions "on" }}checked{{end}}>
                     <span class="slider"></span>
                 </label>
             </div>
-            
-            <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-top: 20px; margin-bottom: 10px;">Conflicts</div>
-            <div class="two-state-switch" id="override-switch" data-val="{{if .SenderOverride}}override{{else}}ask{{end}}" onclick="cycleOverrideMode()">
+
+            <div
+                style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-top: 20px; margin-bottom: 10px;">
+                Conflicts</div>
+            <div class="two-state-switch" id="override-switch"
+                data-val="{{if .SenderOverride}}override{{else}}ask{{end}}" onclick="cycleOverrideMode()">
                 <div class="two-state-slider"></div>
                 <div class="two-state-option opt-ask">Ask</div>
                 <div class="two-state-option opt-override">Override</div>
@@ -74,13 +94,19 @@
 
             <!-- Dashboard Theme (Moved to bottom) -->
             <div style="margin-top: 25px;">
-                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">Interface Theme</div>
+                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">
+                    Interface Theme</div>
                 <div style="display: flex; gap: 12px; justify-content: flex-start; padding-left: 5px;">
-                    <div onclick="setTheme('green')" class="theme-dot" style="background: #00ffad;" title="Cyber Green"></div>
-                    <div onclick="setTheme('purple')" class="theme-dot" style="background: #a855f7;" title="Plasma Purple"></div>
-                    <div onclick="setTheme('orange')" class="theme-dot" style="background: #f97316;" title="Nuclear Orange"></div>
-                    <div onclick="setTheme('red')" class="theme-dot" style="background: #ff3d00;" title="Crimson Red"></div>
-                    <div onclick="setTheme('blue')" class="theme-dot" style="background: #38bdf8;" title="Midnight Blue"></div>
+                    <div onclick="setTheme('green')" class="theme-dot" style="background: #00ffad;" title="Cyber Green">
+                    </div>
+                    <div onclick="setTheme('purple')" class="theme-dot" style="background: #a855f7;"
+                        title="Plasma Purple"></div>
+                    <div onclick="setTheme('orange')" class="theme-dot" style="background: #f97316;"
+                        title="Nuclear Orange"></div>
+                    <div onclick="setTheme('red')" class="theme-dot" style="background: #ff3d00;" title="Crimson Red">
+                    </div>
+                    <div onclick="setTheme('blue')" class="theme-dot" style="background: #38bdf8;"
+                        title="Midnight Blue"></div>
                 </div>
             </div>
         </div>
@@ -95,7 +121,8 @@
             <button onclick="executeBulkAction('sync')" class="group-btn btn-sync">⚡ Sync Selected</button>
             <button onclick="executeBulkAction('pause')" class="group-btn">⏸️ Pause</button>
             <button onclick="executeBulkAction('resume')" class="group-btn">▶️ Resume</button>
-            <button onclick="deselectAll()" class="group-btn btn-outline" style="margin-left: 10px; border: none; opacity: 0.6;">&times; Deselect</button>
+            <button onclick="deselectAll()" class="group-btn btn-outline"
+                style="margin-left: 10px; border: none; opacity: 0.6;">&times; Deselect</button>
         </div>
     </div>
 
@@ -105,14 +132,22 @@
             <div>
                 <h1 style="font-size: 32px; font-weight: 800; margin: 0;">Sync Center</h1>
                 <p style="color: var(--text-muted); margin: 5px 0 0 0;">
-                    System: <span id="main-status-badge" class="status-pill {{if eq .State "ACTIVE"}}pill-active{{else if eq .State "PAUSED" }}pill-paused{{else if eq .State "SYNCING"}}pill-syncing{{else}}pill-critical{{end}}">{{.State}}</span>
+                    System: <span id="main-status-badge" class="status-pill {{if eq .State " ACTIVE"}}pill-active{{else
+                        if eq .State "PAUSED" }}pill-paused{{else if eq .State "SYNCING"
+                        }}pill-syncing{{else}}pill-critical{{end}}">{{.State}}</span>
                     <span style="margin: 0 8px; color: var(--border-glass);">|</span>
-                    Receiver: <span id="receiver-badge" class="status-pill {{if .ReceiverHealthy}}pill-active{{else}}pill-critical{{end}}" 
-                        title="Ver: {{.ReceiverVersion}} | Up: {{.ReceiverUptime}}" onclick="showReceiverError()" style="cursor: pointer;">{{if .ReceiverHealthy}}ONLINE{{else}}OFFLINE{{end}}</span>
+                    Receiver: <span id="receiver-badge"
+                        class="status-pill {{if .ReceiverHealthy}}pill-active{{else}}pill-critical{{end}}"
+                        title="Ver: {{.ReceiverVersion}} | Up: {{.ReceiverUptime}}" onclick="showReceiverError()"
+                        style="cursor: pointer;">{{if .ReceiverHealthy}}ONLINE{{else}}OFFLINE{{end}}</span>
                 </p>
             </div>
             <div style="display: flex; gap: 12px;">
-                <a href="/sync" class="btn-premium btn-sync-all"><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>SYNC ALL</a>
+                <a href="/sync" class="btn-premium btn-sync-all"><svg width="20" height="20" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>SYNC ALL</a>
                 <div style="display: flex; gap: 8px;">
                     <a href="/pause" class="btn-premium btn-outline" title="Pause All">⏸️</a>
                     <a href="/resume" class="btn-premium btn-outline" title="Resume All">▶️</a>
@@ -127,11 +162,13 @@
                 <div class="stat-label">Traffic Today</div>
                 <div style="display: flex; align-items: baseline; gap: 10px;">
                     <div id="stat-today" class="stat-value">{{.TrafficToday}}</div>
-                    <span id="stat-delta" style="font-size: 10px; font-weight: bold; color: {{if .TrafficDeltaPositive}}var(--accent-primary){{else}}var(--accent-error){{end}};">
+                    <span id="stat-delta" style="font-size: 10px; font-weight: bold;"
+                        class="{{if .TrafficDeltaPositive}}color-success{{else}}color-error{{end}}">
                         {{if .TrafficDeltaPositive}}↑{{else}}↓{{end}} {{.TrafficDelta}}%
                     </span>
                 </div>
-                <div style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">vs Yesterday: <span id="stat-yesterday-val">{{.TrafficYesterday}}</span></div>
+                <div style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">vs Yesterday: <span
+                        id="stat-yesterday-val">{{.TrafficYesterday}}</span></div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Total Traffic</div>
@@ -142,18 +179,25 @@
                     <span>Speed</span>
                 </div>
                 <div id="stat-speed" class="stat-value" style="color: #FF00E5;">{{.CurrentSpeed}}</div>
-                <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 10px; overflow: hidden;">
-                    <div id="speed-bar" style="width: 0%; height: 100%; background: #FF00E5; transition: width 0.5s ease;"></div>
+                <div
+                    style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 10px; overflow: hidden;">
+                    <div id="speed-bar"
+                        style="width: 0%; height: 100%; background: #FF00E5; transition: width 0.5s ease;"></div>
                 </div>
-                <div class="sparkline-container" id="latency-sparkline" data-history="" style="height: 12px; opacity: 0.6; margin-top: 5px; position: relative;">
-                    <span id="latency-val" style="position: absolute; right: 2px; top: 0; font-size: 8px; font-weight: 900; color: var(--accent-warning); pointer-events: none;"></span>
-                    <svg width="100%" height="12" preserveAspectRatio="none"><path d="" fill="none" stroke="var(--accent-warning)" stroke-width="1"></path></svg>
+                <div class="sparkline-container" id="latency-sparkline" data-history=""
+                    style="height: 12px; opacity: 0.6; margin-top: 5px; position: relative;">
+                    <span id="latency-val"
+                        style="position: absolute; right: 2px; top: 0; font-size: 8px; font-weight: 900; color: var(--accent-warning); pointer-events: none;"></span>
+                    <svg width="100%" height="12" preserveAspectRatio="none">
+                        <path d="" fill="none" stroke="var(--accent-warning)" stroke-width="1"></path>
+                    </svg>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Estimated Time</div>
                 <div id="stat-eta" class="stat-value" style="color: var(--accent-warning);">{{.ETA}}</div>
-                <div id="stat-clock" style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">Finishes at: --:--</div>
+                <div id="stat-clock" style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">Finishes at:
+                    --:--</div>
             </div>
         </section>
 
@@ -164,9 +208,12 @@
                     <input type="checkbox" id="select-all-engines" onchange="toggleAllEngines(this)">
                     <span class="checkmark"></span>
                 </label>
-                <h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 0;">Active Sync Engines</h2>
+                <h2
+                    style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 0;">
+                    Active Sync Engines</h2>
             </div>
-            <input type="text" id="engine-search" placeholder="Search engines..." onkeyup="filterEngines()" style="background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: 8px; padding: 6px 12px; color: white; font-size: 12px; width: 200px; outline: none;">
+            <input type="text" id="engine-search" placeholder="Search engines..." onkeyup="filterEngines()"
+                style="background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: 8px; padding: 6px 12px; color: white; font-size: 12px; width: 200px; outline: none;">
         </div>
         <section class="engine-grid">
             {{range .Engines}}
@@ -177,13 +224,22 @@
                 </label>
                 <div class="engine-header">
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <div class="engine-title" id="alias-{{.ID}}" onclick="editAlias('{{.ID}}')" title="Click to rename" style="cursor: pointer;">{{if .Alias}}{{.Alias}}{{else}}Engine #{{.ID}}{{end}}</div>
-                        <div class="status-pill" style="background: rgba(0,0,0,0.2); color: {{.HealthColor}}; border: 1px solid {{.HealthColor}}; font-weight: 900; font-size: 12px; padding: 2px 8px;" title="Reliability Score: {{.HealthGrade}}">{{.HealthGrade}}</div>
+                        <div class="engine-title" id="alias-{{.ID}}" onclick="editAlias('{{.ID}}')"
+                            title="Click to rename" style="cursor: pointer;">{{if .Alias}}{{.Alias}}{{else}}Engine
+                            #{{.ID}}{{end}}</div>
+                        {{if .IsRemoteScan}}<div class="status-pill"
+                            style="background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #a855f7; font-weight: 900; font-size: 10px; padding: 2px 6px;"
+                            title="Using Remote Manifest API">REMOTE</div>{{end}}
+                        <div class="status-pill health-pill" style="--health-color: {{.HealthColor}};"
+                            title="Reliability Score: {{.HealthGrade}}">{{.HealthGrade}}</div>
                     </div>
                     <div style="display: flex; gap: 8px; align-items: center;">
-                        <span id="engine-queue-{{.ID}}" class="status-pill pill-rule" style="display: none; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6;"></span>
-                        {{if .Rule}}<span class="status-pill pill-rule" title="Rule: {{if eq .Rule "flat"}}Syncs into root{{else if eq .Rule "series"}}Hierarchy{{else}}Standard{{end}}">{{.Rule}}</span>{{end}}
-                        <span id="engine-status-{{.ID}}" class="status-pill {{if .WaitingForApproval}}pill-waiting{{else if (gt .CurrentPercent 0.0)}}pill-syncing{{else if eq .State "ACTIVE"}}pill-active{{else if eq .State "PAUSED" }}pill-paused{{else}}pill-critical{{end}}">
+                        <span id="engine-queue-{{.ID}}" class="status-pill pill-rule"
+                            style="display: none; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6;"></span>
+                        {{if .Rule}}<span class="status-pill pill-rule" title="Rule: {{if eq .Rule " flat"}}Syncs into
+                            root{{else if eq .Rule "series" }}Hierarchy{{else}}Standard{{end}}">{{.Rule}}</span>{{end}}
+                        <span id="engine-status-{{.ID}}"
+                            class="status-pill {{if .WaitingForApproval}}pill-waiting{{else if (gt .CurrentPercent 0.0)}}pill-syncing{{else if eq .State "ACTIVE"}}pill-active{{else if eq .State "PAUSED" }}pill-paused{{else}}pill-critical{{end}}">
                             {{if (gt .CurrentPercent 0.0)}}SYNCING{{else}}{{.State}}{{end}}
                         </span>
                     </div>
@@ -191,40 +247,84 @@
                 <div class="path-box">
                     <div class="path-label" style="display: flex; justify-content: space-between; align-items: center;">
                         <span>Source</span>
-                        <div id="engine-radar-{{.ID}}" style="display: none; align-items: center; gap: 5px; color: var(--accent-primary);"><div class="radar-circle"></div><span style="font-size: 8px; font-weight: 900;">INDEXING</span></div>
-                        <button class="copy-btn" onclick="copyToClipboard('{{.Source}}', this)" title="Copy Path">📋</button>
+                        <div id="engine-radar-{{.ID}}"
+                            style="display: none; align-items: center; gap: 5px; color: var(--accent-primary);">
+                            <div class="radar-circle"></div><span
+                                style="font-size: 8px; font-weight: 900;">INDEXING</span>
+                        </div>
+                        <button class="copy-btn" onclick="copyToClipboard('{{.Source}}', this)"
+                            title="Copy Path">📋</button>
                     </div>
                     <div class="path-value">{{.Source}}</div>
-                    <div class="data-flow-line {{if (gt .CurrentPercent 0.0)}}syncing{{end}}" id="flow-{{.ID}}"><div class="data-flow-pulse"></div></div>
-                    <div class="path-label" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div class="data-flow-line {{if (gt .CurrentPercent 0.0)}}syncing{{end}}" id="flow-{{.ID}}">
+                        <div class="data-flow-pulse"></div>
+                    </div>
+                    <div class="path-label"
+                        style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
                         <span>Target</span>
-                        <button class="copy-btn" onclick="copyToClipboard('{{.Target}}', this)" title="Copy Path">📋</button>
+                        <button class="copy-btn" onclick="copyToClipboard('{{.Target}}', this)"
+                            title="Copy Path">📋</button>
                     </div>
                     <div class="path-value">{{.Target}}</div>
                 </div>
-                <div id="engine-progress-container-{{.ID}}" style="display: {{if (gt .CurrentPercent 0.0)}}block{{else}}none{{end}}; margin-top: 5px;">
+                <div id="engine-progress-container-{{.ID}}"
+                    class="{{if (gt .CurrentPercent 0.0)}}d-block{{else}}d-none{{end}}" style="margin-top: 5px;">
                     <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px;">
-                        <span id="engine-current-file-{{.ID}}" style="color: var(--accent-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">{{.CurrentFile}}</span>
-                        <span id="engine-current-speed-{{.ID}}" style="color: var(--text-muted);">{{.CurrentSpeed}}</span>
+                        <span id="engine-current-file-{{.ID}}"
+                            style="color: var(--accent-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">{{.CurrentFile}}</span>
+                        <span id="engine-current-speed-{{.ID}}"
+                            style="color: var(--text-muted);">{{.CurrentSpeed}}</span>
                     </div>
-                    <div style="width: 100%; height: 6px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; border: 1px solid var(--border-glass); margin-bottom: 8px;">
-                        <div id="engine-progress-bar-{{.ID}}" style="width: {{.CurrentPercent}}%; height: 100%; background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary)); transition: width 0.5s ease;"></div>
+                    <div
+                        style="width: 100%; height: 6px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; border: 1px solid var(--border-glass); margin-bottom: 8px;">
+                        <div id="engine-progress-bar-{{.ID}}" style="--progress: {{.CurrentPercent}}%;"
+                            class="progress-bar-fill">
+                        </div>
                     </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); margin-bottom: 5px;">
+                    <div
+                        style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); margin-bottom: 5px;">
                         <span id="engine-elapsed-{{.ID}}">Elapsed: 0s</span>
                         <span id="engine-avg-{{.ID}}">Avg: 0 B/s</span>
                     </div>
-                    <div class="sparkline-container" id="sparkline-{{.ID}}" data-history="{{.SpeedHistory}}"><svg width="100%" height="20" preserveAspectRatio="none"><path d="" fill="none" stroke="var(--accent-primary)" stroke-width="1.5" opacity="0.6"></path></svg></div>
+                    <div class="sparkline-container" id="sparkline-{{.ID}}" data-history="{{.SpeedHistory}}"><svg
+                            width="100%" height="20" preserveAspectRatio="none">
+                            <path d="" fill="none" stroke="var(--accent-primary)" stroke-width="1.5" opacity="0.6">
+                            </path>
+                        </svg></div>
                 </div>
-                {{if .WaitingForApproval}}<div class="warning-box"><span>⚠️</span><span><b>Safety Lock:</b> {{.PendingDeletions}} changes pending.</span></div>{{end}}
+                {{if .WaitingForApproval}}<div class="warning-box"><span>⚠️</span><span><b>Safety Lock:</b>
+                        {{.PendingDeletions}} changes pending.</span></div>{{end}}
                 <div style="display: flex; gap: 10px; margin-top: 12px; margin-bottom: 12px;">
-                    <div style="flex: 1; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);"><div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">Today</div><div id="engine-today-{{.ID}}" style="font-size: 13px; font-weight: bold; color: var(--text-main);">{{.TrafficToday}}</div></div>
-                    <div style="flex: 1; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);"><div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">Total</div><div id="engine-total-{{.ID}}" style="font-size: 13px; font-weight: bold; color: var(--accent-secondary);">{{.TrafficTotal}}</div></div>
+                    <div
+                        style="flex: 1; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
+                        <div
+                            style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">
+                            Today</div>
+                        <div id="engine-today-{{.ID}}"
+                            style="font-size: 13px; font-weight: bold; color: var(--text-main);">{{.TrafficToday}}</div>
+                    </div>
+                    <div
+                        style="flex: 1; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
+                        <div
+                            style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">
+                            Total</div>
+                        <div id="engine-total-{{.ID}}"
+                            style="font-size: 13px; font-weight: bold; color: var(--accent-secondary);">
+                            {{.TrafficTotal}}</div>
+                    </div>
                 </div>
-                <div style="font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between;"><span>Last Sync:</span><span id="engine-lastsync-{{.ID}}" class="relative-time" data-time="{{.LastSync}}" style="color: var(--text-main);">{{.LastSync}}</span></div>
+                <div style="font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between;">
+                    <span>Last Sync:</span><span id="engine-lastsync-{{.ID}}" class="relative-time"
+                        data-time="{{.LastSync}}" style="color: var(--text-main);">{{.LastSync}}</span>
+                </div>
                 <div class="engine-controls">
-                    {{if .WaitingForApproval}}<button onclick="showPreview('{{.ID}}', 'approve')" class="ctrl-btn ctrl-btn-approve">✅ Review & Approve Changes</button>
-                    {{else}}<button onclick="engineAction('{{.ID}}', 'sync')" class="ctrl-btn ctrl-btn-sync">⚡ Sync</button><button onclick="showPreview('{{.ID}}')" class="ctrl-btn ctrl-btn-preview">🔍 Preview</button><button id="engine-btn-toggle-{{.ID}}" onclick="engineAction('{{.ID}}', '{{if .IsPaused}}resume{{else}}pause{{end}}')" class="ctrl-btn">{{if .IsPaused}}▶️ Resume{{else}}⏸️ Pause{{end}}</button>{{end}}
+                    {{if .WaitingForApproval}}<button onclick="showPreview('{{.ID}}', 'approve')"
+                        class="ctrl-btn ctrl-btn-approve">✅ Review & Approve Changes</button>
+                    {{else}}<button onclick="engineAction('{{.ID}}', 'sync')" class="ctrl-btn ctrl-btn-sync">⚡
+                        Sync</button><button onclick="showPreview('{{.ID}}')" class="ctrl-btn ctrl-btn-preview">🔍
+                        Preview</button><button id="engine-btn-toggle-{{.ID}}"
+                        onclick="engineAction('{{.ID}}', '{{if .IsPaused}}resume{{else}}pause{{end}}')"
+                        class="ctrl-btn">{{if .IsPaused}}▶️ Resume{{else}}⏸️ Pause{{end}}</button>{{end}}
                 </div>
             </div>
             {{end}}
@@ -232,74 +332,155 @@
 
         <!-- Lower Panel -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: stretch;">
-            <section class="activity-card"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h2 style="margin: 0; font-size: 18px;">Recent Activity</h2><a href="/history" style="color: var(--accent-secondary); font-size: 12px; text-decoration: none; font-weight: bold;">View All →</a></div>
+            <section class="activity-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0; font-size: 18px;">Recent Activity</h2><a href="/history"
+                        style="color: var(--accent-secondary); font-size: 12px; text-decoration: none; font-weight: bold;">View
+                        All →</a>
+                </div>
                 <ul id="history-list" class="activity-list">
-                    {{range .History}}<li class="activity-item"><span class="action-badge badge-{{lower .Action}}">{{.Action}}</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{.Path}} <span style="color: var(--text-muted); font-size: 11px;">({{.Size}})</span></div><span style="font-family: monospace; font-size: 11px; color: var(--text-muted);">{{.Time}}</span></li>
-                    {{else}}<li style="color: var(--text-muted); text-align: center; padding: 20px;">No recent activity.</li>{{end}}
+                    {{range .History}}<li class="activity-item"><span
+                            class="action-badge badge-{{lower .Action}}">{{.Action}}</span>
+                        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{.Path}}
+                            <span style="color: var(--text-muted); font-size: 11px;">({{.Size}})</span>
+                        </div><span
+                            style="font-family: monospace; font-size: 11px; color: var(--text-muted);">{{.Time}}</span>
+                    </li>
+                    {{else}}<li style="color: var(--text-muted); text-align: center; padding: 20px;">No recent activity.
+                    </li>{{end}}
                 </ul>
             </section>
             <section id="logs" class="terminal-window">
                 <header class="terminal-header">
-                    <div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div>
-                    <div class="live-indicator"><div class="live-dot"></div>LIVE</div>
+                    <div class="dot dot-red"></div>
+                    <div class="dot dot-yellow"></div>
+                    <div class="dot dot-green"></div>
+                    <div class="live-indicator">
+                        <div class="live-dot"></div>LIVE
+                    </div>
                     <div style="display: flex; gap: 5px; margin-left: 10px;">
-                        <button onclick="setLogLevel('all')" class="copy-btn" style="font-size: 8px; padding: 2px 5px;">ALL</button>
-                        <button onclick="setLogLevel('info')" class="copy-btn" style="font-size: 8px; padding: 2px 5px; color: var(--accent-primary);">INFO</button>
-                        <button onclick="setLogLevel('warn')" class="copy-btn" style="font-size: 8px; padding: 2px 5px; color: var(--accent-warning);">WARN</button>
-                        <button onclick="setLogLevel('error')" class="copy-btn" style="font-size: 8px; padding: 2px 5px; color: var(--accent-error);">ERR</button>
+                        <button onclick="setLogLevel('all')" class="copy-btn"
+                            style="font-size: 8px; padding: 2px 5px;">ALL</button>
+                        <button onclick="setLogLevel('info')" class="copy-btn"
+                            style="font-size: 8px; padding: 2px 5px; color: var(--accent-primary);">INFO</button>
+                        <button onclick="setLogLevel('warn')" class="copy-btn"
+                            style="font-size: 8px; padding: 2px 5px; color: var(--accent-warning);">WARN</button>
+                        <button onclick="setLogLevel('error')" class="copy-btn"
+                            style="font-size: 8px; padding: 2px 5px; color: var(--accent-error);">ERR</button>
                     </div>
                     <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
-                        <input type="text" id="log-filter" class="log-search" placeholder="Filter logs..." onkeyup="filterLogs()" style="margin-left: 0;">
-                        <button id="log-scroll-toggle" onclick="toggleLogScroll()" class="copy-btn" title="Lock Scroll" style="opacity: 0.8;">🔒</button>
-                        <button onclick="clearLogs()" class="copy-btn" title="Clear Terminal" style="opacity: 0.8;">🗑️</button>
-                        <button onclick="toggleTerminalFullscreen()" class="copy-btn" title="Toggle Fullscreen" style="opacity: 0.8;">⛶</button>
-                        <button onclick="downloadLogs()" class="copy-btn" title="Download Logs" style="opacity: 0.8;">💾</button>
+                        <input type="text" id="log-filter" class="log-search" placeholder="Filter logs..."
+                            onkeyup="filterLogs()" style="margin-left: 0;">
+                        <button id="log-scroll-toggle" onclick="toggleLogScroll()" class="copy-btn" title="Lock Scroll"
+                            style="opacity: 0.8;">🔒</button>
+                        <button onclick="clearLogs()" class="copy-btn" title="Clear Terminal"
+                            style="opacity: 0.8;">🗑️</button>
+                        <button onclick="toggleTerminalFullscreen()" class="copy-btn" title="Toggle Fullscreen"
+                            style="opacity: 0.8;">⛶</button>
+                        <button onclick="downloadLogs()" class="copy-btn" title="Download Logs"
+                            style="opacity: 0.8;">💾</button>
                     </div>
                 </header>
-                <div class="terminal-body" id="log-container"><div style="color: var(--text-muted);">[SYSTEM] Awaiting logs...</div></div>
+                <div class="terminal-body" id="log-container">
+                    <div style="color: var(--text-muted);">[SYSTEM] Awaiting logs...</div>
+                </div>
             </section>
         </div>
 
-        <h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 50px 0 20px 0;">Performance Analytics</h2>
+        <h2
+            style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 50px 0 20px 0;">
+            Performance Analytics</h2>
         <div style="display: grid; grid-template-columns: 1fr; gap: 30px; margin-bottom: 50px;">
-            <div class="activity-card"><h3 style="margin-top: 0; font-size: 16px;">🏆 Largest Transfers (24h)</h3><ul id="top-files-list" class="activity-list"><li style="color: var(--text-muted); text-align: center; padding: 10px;">Monitoring for large files...</li></ul></div>
+            <div class="activity-card">
+                <h3 style="margin-top: 0; font-size: 16px;">🏆 Largest Transfers (24h)</h3>
+                <ul id="top-files-list" class="activity-list">
+                    <li style="color: var(--text-muted); text-align: center; padding: 10px;">Monitoring for large
+                        files...</li>
+                </ul>
+            </div>
         </div>
 
-        <h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 0 0 20px 0;">Settings</h2>
+        <h2
+            style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 0 0 20px 0;">
+            Settings</h2>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 50px;">
             <div class="activity-card">
                 <h3 style="margin-top: 0; font-size: 16px;">📧 Notifications</h3>
-                <form action="/settings/notifications" method="POST" style="display: flex; flex-direction: column; gap: 15px;">
+                <form action="/settings/notifications" method="POST"
+                    style="display: flex; flex-direction: column; gap: 15px;">
                     <div>
                         <label style="font-size: 12px; color: var(--text-muted);">Discord Webhook URL</label>
                         <div style="position: relative; display: flex; align-items: center; margin-top: 5px;">
-                            <input type="password" id="webhook-input" name="webhook_url" placeholder="https://..." style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; padding-right: 40px;">
-                            <button type="button" onclick="toggleWebhookVisibility()" class="copy-btn" style="position: absolute; right: 10px; opacity: 0.6; padding: 5px;">👁️</button>
+                            <input type="password" id="webhook-input" name="webhook_url" placeholder="https://..."
+                                style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; padding-right: 40px;">
+                            <button type="button" onclick="toggleWebhookVisibility()" class="copy-btn"
+                                style="position: absolute; right: 10px; opacity: 0.6; padding: 5px;">👁️</button>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 10px;"><button type="submit" class="btn-premium btn-outline" style="flex: 1; justify-content: center;">Save</button><a href="/test-notify" class="btn-premium btn-outline" style="padding: 10px;" title="Test Notification">🔔</a></div>
+                    <div style="display: flex; gap: 10px;"><button type="submit" class="btn-premium btn-outline"
+                            style="flex: 1; justify-content: center;">Save</button><a href="/test-notify"
+                            class="btn-premium btn-outline" style="padding: 10px;" title="Test Notification">🔔</a>
+                    </div>
                 </form>
             </div>
             <div class="activity-card">
                 <h3 style="margin-top: 0; font-size: 16px;">📅 Sync Scheduler</h3>
-                <form action="/settings/scheduler" method="POST" style="display: flex; flex-direction: column; gap: 15px;">
-                    <div><label style="font-size: 12px; color: var(--text-muted);">Quiet Hours (e.g. 08:00-18:00)</label><input type="text" name="quiet_hours" placeholder="HH:MM-HH:MM" style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;"></div>
-                    <button type="submit" class="btn-premium btn-outline" style="width: 100%; justify-content: center;">Save Schedule</button>
+                <form action="/settings/scheduler" method="POST"
+                    style="display: flex; flex-direction: column; gap: 15px;">
+                    <div><label style="font-size: 12px; color: var(--text-muted);">Quiet Hours (e.g.
+                            08:00-18:00)</label><input type="text" name="quiet_hours" placeholder="HH:MM-HH:MM"
+                            style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
+                    </div>
+                    <button type="submit" class="btn-premium btn-outline"
+                        style="width: 100%; justify-content: center;">Save Schedule</button>
                 </form>
             </div>
         </div>
     </main>
 
-    <div id="modal-container" style="display: none;"><div class="modal-overlay"><div class="modal-content">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;"><h2 style="margin: 0; color: var(--accent-secondary);">Sync Preview: <span id="preview-id"></span></h2><button onclick="closeModal()" style="background: transparent; border: none; color: white; font-size: 24px; cursor: pointer;">&times;</button></div>
-        <div id="preview-loading" style="text-align:center; padding: 40px; color: var(--text-muted);"><div class="sync-pulse" style="font-size: 32px; margin-bottom: 15px;">🔄</div>Analyzing...</div>
-        <div id="preview-body" style="display:none;"><div id="preview-stats" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:25px;"></div><div id="preview-details" style="max-height: 400px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 20px; border: 1px solid var(--border-glass);"></div></div>
-        <div style="margin-top:30px; display: flex; justify-content: flex-end; gap: 12px;"><button class="btn-premium btn-outline" onclick="closeModal()">Dismiss</button><button id="preview-confirm-btn" class="btn-premium btn-sync-all" onclick="confirmSyncFromPreview()">Execute Now ⚡</button></div>
-    </div></div></div>
+    <div id="modal-container" style="display: none;">
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;">
+                    <h2 style="margin: 0; color: var(--accent-secondary);">Sync Preview: <span id="preview-id"></span>
+                    </h2><button onclick="closeModal()"
+                        style="background: transparent; border: none; color: white; font-size: 24px; cursor: pointer;">&times;</button>
+                </div>
+                <div id="preview-loading" style="text-align:center; padding: 40px; color: var(--text-muted);">
+                    <div class="sync-pulse" style="font-size: 32px; margin-bottom: 15px;">🔄</div>Analyzing...
+                </div>
+                <div id="preview-body" style="display:none;">
+                    <div id="preview-stats"
+                        style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:25px;">
+                    </div>
+                    <div id="preview-details"
+                        style="max-height: 400px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 20px; border: 1px solid var(--border-glass);">
+                    </div>
+                </div>
+                <div style="margin-top:30px; display: flex; justify-content: flex-end; gap: 12px;"><button
+                        class="btn-premium btn-outline" onclick="closeModal()">Dismiss</button><button
+                        id="preview-confirm-btn" class="btn-premium btn-sync-all"
+                        onclick="confirmSyncFromPreview()">Execute Now ⚡</button></div>
+            </div>
+        </div>
+    </div>
 
-    <div id="error-modal" style="display: none;"><div class="modal-overlay"><div class="modal-content" style="max-width: 500px;"><h2 id="error-title" style="color: var(--accent-error);">System Error</h2><div id="error-msg" style="padding: 20px; background: rgba(0,0,0,0.3); border-radius: 12px; font-family: monospace; color: white;"></div><div style="margin-top: 20px; text-align: right;"><button class="btn-premium btn-outline" onclick="closeErrorModal()">Close</button></div></div></div></div>
+    <div id="error-modal" style="display: none;">
+        <div class="modal-overlay">
+            <div class="modal-content" style="max-width: 500px;">
+                <h2 id="error-title" style="color: var(--accent-error);">System Error</h2>
+                <div id="error-msg"
+                    style="padding: 20px; background: rgba(0,0,0,0.3); border-radius: 12px; font-family: monospace; color: white;">
+                </div>
+                <div style="margin-top: 20px; text-align: right;"><button class="btn-premium btn-outline"
+                        onclick="closeErrorModal()">Close</button></div>
+            </div>
+        </div>
+    </div>
 
     <script>window.lastSystemError = "{{.LastErrorMsg}}";</script>
     <script src="/static/js/dashboard.js"></script>
 </body>
+
 </html>

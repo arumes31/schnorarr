@@ -1,12 +1,16 @@
 package sync
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Scanner handles directory traversal and manifest building
@@ -31,8 +35,11 @@ func NewScanner() *Scanner {
 	}
 }
 
-// ScanLocal scans a local directory and builds a manifest using parallel workers
+// ScanLocal scans a local directory or remote rsync target
 func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
+	if strings.Contains(root, "::") || strings.HasPrefix(root, "rsync://") {
+		return s.ScanRemote(root)
+	}
 	manifest := NewManifest(root)
 	log.Printf("[Scanner] Starting parallel scan of %s", root)
 
@@ -198,4 +205,52 @@ func (s *Scanner) shouldInclude(path string) bool {
 		}
 	}
 	return false
+}
+
+// ScanRemote scans a remote target via the Agent API
+// It strictly requires DEST_HOST to be set and the receiver to be reachable via HTTP.
+func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
+	destHost := os.Getenv("DEST_HOST")
+	if destHost == "" {
+		return nil, fmt.Errorf("remote scan failed: DEST_HOST environment variable is not set")
+	}
+
+	// URI is like user@host::module/path
+	// We extract the path part: module/path
+	parts := strings.Split(uri, "::")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid rsync URI format: %s", uri)
+	}
+
+	remotePath := parts[1] // module/path
+	apiURL := fmt.Sprintf("http://%s:8080/api/manifest?path=%s", destHost, remotePath)
+
+	log.Printf("[Scanner] Requesting remote manifest from API: %s", apiURL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact receiver API at %s: %w", destHost, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("receiver API returned status %s", resp.Status)
+	}
+
+	manifest := &Manifest{}
+	if err := json.NewDecoder(resp.Body).Decode(manifest); err != nil {
+		return nil, fmt.Errorf("failed to decode manifest JSON: %w", err)
+	}
+
+	log.Printf("[Scanner] Received valid manifest from API: %d files", len(manifest.Files))
+	return manifest, nil
 }
