@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	stdsync "sync"
 	"time"
 
 	"schnorarr/internal/monitor/config"
@@ -21,12 +22,20 @@ import (
 	"schnorarr/internal/ui"
 )
 
+type manifestCacheEntry struct {
+	manifest *sync.Manifest
+	expiry   time.Time
+}
+
 type App struct {
 	Config      *config.Config
 	HealthState *health.State
 	WSHub       *websocket.Hub
 	Notifier    *notification.Service
 	SyncEngines []*sync.Engine
+
+	manifestCache map[string]manifestCacheEntry
+	cacheMu       stdsync.Mutex
 }
 
 func New() (*App, error) {
@@ -36,7 +45,8 @@ func New() (*App, error) {
 	}
 	app := &App{
 		Config: cfg, HealthState: health.New(), WSHub: websocket.New(),
-		Notifier: notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
+		Notifier:      notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
+		manifestCache: make(map[string]manifestCacheEntry),
 	}
 
 	// Setup structured logging
