@@ -27,6 +27,18 @@ func TestParseRemoteDestination(t *testing.T) {
 			expectedPath: "path/to/file.txt",
 		},
 		{
+			name:         "rsync protocol",
+			dst:          "rsync://host/module/path/to/file.txt",
+			expectedHost: "host",
+			expectedPath: "path/to/file.txt",
+		},
+		{
+			name:         "rsync protocol with user and port",
+			dst:          "rsync://user@host:873/module/path/to/file.txt",
+			expectedHost: "host",
+			expectedPath: "path/to/file.txt",
+		},
+		{
 			name:         "daemon protocol with just module",
 			dst:          "user@host::module",
 			expectedHost: "host",

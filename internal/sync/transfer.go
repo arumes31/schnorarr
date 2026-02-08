@@ -274,6 +274,33 @@ func (t *Transferer) copyRemote(src, dst string) error {
 
 // parseRemoteDestination extracts host and path from rsync destination
 func parseRemoteDestination(dst string) (host, remotePath string) {
+	// Handle rsync://host/module/path format
+	if strings.HasPrefix(dst, "rsync://") {
+		pathPart := strings.TrimPrefix(dst, "rsync://")
+		// Remove user@ if present
+		if idx := strings.Index(pathPart, "@"); idx != -1 {
+			pathPart = pathPart[idx+1:]
+		}
+		// Find first slash which separates host from module/path
+		idx := strings.Index(pathPart, "/")
+		if idx == -1 {
+			return pathPart, ""
+		}
+		host = pathPart[:idx]
+		// Remove port if present
+		if portIdx := strings.Index(host, ":"); portIdx != -1 {
+			host = host[:portIdx]
+		}
+
+		modulePath := pathPart[idx+1:]
+		// Split module and path
+		pathParts := strings.SplitN(modulePath, "/", 2)
+		if len(pathParts) > 1 {
+			remotePath = pathParts[1]
+		}
+		return host, remotePath
+	}
+
 	// Handle user@host::module/path format
 	if strings.Contains(dst, "::") {
 		parts := strings.SplitN(dst, "::", 2)
