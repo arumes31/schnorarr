@@ -217,6 +217,7 @@ func (t *Transferer) copyRemote(src, dst string) error {
 
 	// Parse destination to get host and remote path for size monitoring
 	destHost, remotePath := parseRemoteDestination(dst)
+	log.Printf("[Transferer] DEBUG: Parsed destination - host: %q, path: %q", destHost, remotePath)
 
 	// Monitor progress by polling file size
 	done := make(chan error, 1)
@@ -242,6 +243,7 @@ func (t *Transferer) copyRemote(src, dst string) error {
 
 			// Final progress update with total size
 			if t.opts.OnProgress != nil && totalSize > lastReportedSize {
+				log.Printf("[Transferer] DEBUG: Final progress update - %d/%d bytes", totalSize, totalSize)
 				t.opts.OnProgress(src, totalSize, totalSize)
 			}
 
@@ -255,12 +257,16 @@ func (t *Transferer) copyRemote(src, dst string) error {
 			// Poll destination file size
 			if destHost != "" && remotePath != "" {
 				currentSize := getRemoteFileSize(destHost, remotePath)
+				log.Printf("[Transferer] DEBUG: Polled size for %s: %d bytes (last: %d)", remotePath, currentSize, lastReportedSize)
 				if currentSize > 0 && currentSize != lastReportedSize {
 					if t.opts.OnProgress != nil {
+						log.Printf("[Transferer] DEBUG: Calling OnProgress - %d/%d bytes", currentSize, totalSize)
 						t.opts.OnProgress(src, currentSize, totalSize)
 					}
 					lastReportedSize = currentSize
 				}
+			} else {
+				log.Printf("[Transferer] DEBUG: Cannot poll - destHost=%q, remotePath=%q", destHost, remotePath)
 			}
 		}
 	}
@@ -294,9 +300,11 @@ func parseRemoteDestination(dst string) (host, remotePath string) {
 // getRemoteFileSize queries the receiver's /api/stat endpoint for file size
 func getRemoteFileSize(host, path string) int64 {
 	apiURL := fmt.Sprintf("http://%s:8080/api/stat?path=%s", host, url.QueryEscape(path))
+	log.Printf("[Transferer] DEBUG: Querying stat API: %s", apiURL)
 
 	resp, err := http.Get(apiURL)
 	if err != nil {
+		log.Printf("[Transferer] DEBUG: API request failed: %v", err)
 		return 0
 	}
 	defer func() {
@@ -306,6 +314,7 @@ func getRemoteFileSize(host, path string) int64 {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[Transferer] DEBUG: API returned status %d", resp.StatusCode)
 		return 0
 	}
 
@@ -315,9 +324,11 @@ func getRemoteFileSize(host, path string) int64 {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&statResp); err != nil {
+		log.Printf("[Transferer] DEBUG: Failed to decode response: %v", err)
 		return 0
 	}
 
+	log.Printf("[Transferer] DEBUG: API response - exists: %v, size: %d", statResp.Exists, statResp.Size)
 	return statResp.Size
 }
 
