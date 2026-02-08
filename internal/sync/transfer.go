@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -179,13 +181,20 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		}
 	}
 
+	// Get file size for progress tracking
+	fi, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("failed to stat source file: %w", err)
+	}
+	totalSize := fi.Size()
+
 	// Construct args:
 	// -a: archive mode
-	// -v: verbose (critically important for diagnosing why files are skipped)
 	// --partial: keep partially transferred files
 	// --protect-args: handles spaces and special chars in paths correctly with daemon protocol
 	// --mkpath: create missing parent directories on destination (rsync 3.2.3+)
-	args := []string{"-av", "--partial", "--protect-args", "--mkpath"}
+	// --info=progress2: parseable progress output for real-time tracking
+	args := []string{"-a", "--partial", "--protect-args", "--mkpath", "--info=progress2"}
 
 	if t.opts.BandwidthLimit > 0 {
 		kbps := t.opts.BandwidthLimit / 1024
@@ -203,41 +212,66 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		cmd.Env = append(cmd.Env, "RSYNC_PASSWORD="+pass)
 	}
 
-	// Capture output to see why it fails or what it did
-	var out, errOut strings.Builder
-	cmd.Stdout = &out
-	cmd.Stderr = &errOut
-
-	err := cmd.Run()
-	stdout := strings.TrimSpace(out.String())
-	stderr := strings.TrimSpace(errOut.String())
-
+	// Create pipes for stdout and stderr
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		errMsg := stderr
-		if errMsg == "" {
-			errMsg = err.Error()
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start rsync: %w", err)
+	}
+
+	// Read and parse progress output in real-time
+	var stderrBuf strings.Builder
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := stderr.Read(buf)
+			if n > 0 {
+				stderrBuf.Write(buf[:n])
+			}
+			if err != nil {
+				break
+			}
 		}
-		log.Printf("[Transferer] rsync failed for %s:\nSTDOUT: %s\nSTDERR: %s", src, stdout, stderr)
+	}()
+
+	scanner := bufio.NewScanner(stdout)
+	var lastProgress int64
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Parse progress2 format: "     123,456,789  45%  123.45MB/s    0:00:12"
+		// The format shows: bytes transferred, percentage, speed, and time remaining
+		fields := strings.Fields(line)
+		if len(fields) >= 3 {
+			// First field is bytes transferred (with commas)
+			bytesStr := strings.ReplaceAll(fields[0], ",", "")
+			if bytes, err := strconv.ParseInt(bytesStr, 10, 64); err == nil && bytes > 0 {
+				if t.opts.OnProgress != nil && bytes != lastProgress {
+					t.opts.OnProgress(src, bytes, totalSize)
+					lastProgress = bytes
+				}
+			}
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
+		stderrOutput := strings.TrimSpace(stderrBuf.String())
+		log.Printf("[Transferer] rsync failed for %s:\nSTDERR: %s", src, stderrOutput)
 		if t.opts.OnComplete != nil {
-			t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %s", errMsg))
+			t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %s", stderrOutput))
 		}
-		return fmt.Errorf("rsync command failed: %s", errMsg)
+		return fmt.Errorf("rsync command failed: %s", stderrOutput)
 	}
 
-	// Even on success, if stdout has content and we are in verbose mode, log it?
-	// Rsync -av usually produces output.
-	if stdout != "" {
-		log.Printf("[Transferer] rsync output for %s:\n%s", src, stdout)
-	}
-
-	// On success
-	fi, err := os.Stat(src)
-	fileSize := int64(0)
-	if err == nil {
-		fileSize = fi.Size()
-	}
+	log.Printf("[Transferer] Successfully transferred %s (%d bytes)", src, totalSize)
 	if t.opts.OnComplete != nil {
-		t.opts.OnComplete(filepath.Base(src), fileSize, nil)
+		t.opts.OnComplete(filepath.Base(src), totalSize, nil)
 	}
 	return nil
 }
