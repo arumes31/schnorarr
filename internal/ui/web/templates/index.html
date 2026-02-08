@@ -239,7 +239,8 @@
                         {{if .Rule}}<span class="status-pill pill-rule" title="Rule: {{if eq .Rule " flat"}}Syncs into
                             root{{else if eq .Rule "series" }}Hierarchy{{else}}Standard{{end}}">{{.Rule}}</span>{{end}}
                         <span id="engine-status-{{.ID}}"
-                            class="status-pill {{if .WaitingForApproval}}pill-waiting{{else if (gt .CurrentPercent 0.0)}}pill-syncing{{else if eq .State "ACTIVE"}}pill-active{{else if eq .State "PAUSED" }}pill-paused{{else}}pill-critical{{end}}">
+                            class="status-pill {{if .WaitingForApproval}}pill-waiting{{else if (gt .CurrentPercent 0.0)}}pill-syncing{{else if eq .State "
+                            ACTIVE"}}pill-active{{else if eq .State "PAUSED" }}pill-paused{{else}}pill-critical{{end}}">
                             {{if (gt .CurrentPercent 0.0)}}SYNCING{{else}}{{.State}}{{end}}
                         </span>
                     </div>
@@ -480,7 +481,7 @@
     </div>
 
     <script>window.lastSystemError = "{{.LastErrorMsg}}";</script>
-    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/dashboard.js?v={{.Timestamp}}"></script>
 </body>
 
 </html>
