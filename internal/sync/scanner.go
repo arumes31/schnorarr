@@ -13,6 +13,8 @@ import (
 type Scanner struct {
 	// ExcludePatterns defines glob patterns to exclude from scanning
 	ExcludePatterns []string
+	// IncludePatterns defines glob patterns to include in scanning
+	IncludePatterns []string
 	// ComputeHashes enables hash computation (slower but more accurate)
 	ComputeHashes bool
 }
@@ -101,6 +103,11 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 				continue
 			}
 
+			// Check inclusions (only for files)
+			if !d.IsDir() && !s.shouldInclude(relPath) {
+				continue
+			}
+
 			// Get info
 			info, err := d.Info()
 			if err != nil {
@@ -173,6 +180,21 @@ func (s *Scanner) shouldExclude(path string) bool {
 			if matched, _ := filepath.Match(pattern, part); matched {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// shouldInclude checks if a path matches any inclusion pattern
+// If IncludePatterns is empty, it returns true (include everything)
+func (s *Scanner) shouldInclude(path string) bool {
+	if len(s.IncludePatterns) == 0 {
+		return true
+	}
+	base := filepath.Base(path)
+	for _, pattern := range s.IncludePatterns {
+		if matched, _ := filepath.Match(pattern, base); matched {
+			return true
 		}
 	}
 	return false

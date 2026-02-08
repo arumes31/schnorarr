@@ -123,6 +123,8 @@ Regardless of the configured rule name (`series`, `flat`, etc.), the engine curr
 | `SYNC_N_SOURCE` | Source path for engine `N` (1-10) | `/source/movies` |
 | `SYNC_N_TARGET` | Target path for engine `N` (1-10) | `media/movies` |
 | `SYNC_N_RULE` | Sync rule (`standard`, `series`, `flat`) | `series` |
+| `SYNC_INCLUDE` | Global file filter (default: `*.mkv,*.mp4,*.avi`) | `*.mkv,*.mp4` |
+| `SYNC_N_INCLUDE` | Per-engine file filter override (N=1-10) | `*.txt` |
 | `DISCORD_WEBHOOK_URL` | Discord webhook for notifications | `https://...` |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token | `123456:ABC...` |
 | `TELEGRAM_CHAT_ID` | Telegram chat ID | `987654321` |

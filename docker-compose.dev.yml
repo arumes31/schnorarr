@@ -11,7 +11,6 @@ services:
     volumes:
       - ./receiver:/data
       - receiver_config:/config
-      - receiver_state:/var/lib/tailscale
     cap_add:
       - NET_ADMIN
     devices:
@@ -24,6 +23,7 @@ services:
       - MODE=sender
       - DEST_HOST=receiver
       - DEST_MODULE=video-sync
+      - SYNC_INCLUDE=*.mkv,*.mp4,*.avi
       - DRY_RUN=false
       - RSYNC_USER=syncuser
       - RSYNC_PASSWORD=secretpassword
@@ -45,7 +45,6 @@ services:
     volumes:
       - ./sender:/data
       - sender_config:/config
-      - sender_state:/var/lib/tailscale
     cap_add:
       - NET_ADMIN
     devices:
@@ -57,5 +56,3 @@ services:
 volumes:
   sender_config:
   receiver_config:
-  sender_state:
-  receiver_state:

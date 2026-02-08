@@ -5,6 +5,7 @@ services:
       - MODE=sender
       - DEST_HOST=${DEST_HOST:-receiver}
       - DEST_MODULE=video-sync
+      - SYNC_INCLUDE=*.mkv,*.mp4,*.avi
       - RSYNC_USER=${RSYNC_USER:-syncuser}
       - RSYNC_PASSWORD=${RSYNC_PASSWORD:-secretpassword}
       - BWLIMIT_MBPS=${BWLIMIT_MBPS:-50}
@@ -35,7 +36,6 @@ services:
     volumes:
       - ./sender:/data
       - sender_config:/config
-      - sender_state:/var/lib/tailscale
     cap_add:
       - NET_ADMIN
     devices:
@@ -44,4 +44,3 @@ services:
 
 volumes:
   sender_config:
-  sender_state:

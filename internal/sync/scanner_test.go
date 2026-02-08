@@ -103,3 +103,53 @@ func TestScanner_Exclusions(t *testing.T) {
 		t.Error("file1.txt should be included")
 	}
 }
+
+func TestScanner_Inclusions(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create files including ones that should be excluded by inclusion filter
+	testFiles := []string{
+		"video.mkv",
+		"video.mp4",
+		"image.jpg",
+		"doc.txt",
+		"subdir/movie.avi",
+		"subdir/script.sh",
+	}
+
+	for _, file := range testFiles {
+		fullPath := filepath.Join(tmpDir, file)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fullPath, []byte("test"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	scanner := NewScanner()
+	scanner.IncludePatterns = []string{"*.mkv", "*.mp4", "*.avi"}
+
+	manifest, err := scanner.ScanLocal(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to scan: %v", err)
+	}
+
+	// Should include: video.mkv, video.mp4, subdir/movie.avi
+	// Should exclude: image.jpg, doc.txt, subdir/script.sh
+
+	included := []string{"video.mkv", "video.mp4", "subdir/movie.avi"}
+	excluded := []string{"image.jpg", "doc.txt", "subdir/script.sh"}
+
+	for _, f := range included {
+		if !manifest.HasFile(f) {
+			t.Errorf("File %s should be INCLUDED", f)
+		}
+	}
+
+	for _, f := range excluded {
+		if manifest.HasFile(f) {
+			t.Errorf("File %s should be EXCLUDED", f)
+		}
+	}
+}
