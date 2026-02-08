@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -223,7 +224,7 @@ func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
 	}
 
 	remotePath := parts[1] // module/path
-	apiURL := fmt.Sprintf("http://%s:8080/api/manifest?path=%s", destHost, remotePath)
+	apiURL := fmt.Sprintf("http://%s:8080/api/manifest?path=%s", destHost, url.QueryEscape(remotePath))
 
 	log.Printf("[Scanner] Requesting remote manifest from API: %s", apiURL)
 
@@ -252,9 +253,10 @@ func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
 
 	manifest := &Manifest{}
 	if err := json.NewDecoder(resp.Body).Decode(manifest); err != nil {
+		log.Printf("[Scanner] Failed to decode manifest from %s: %v", apiURL, err)
 		return nil, fmt.Errorf("failed to decode manifest JSON: %w", err)
 	}
 
-	log.Printf("[Scanner] Received valid manifest from API: %d files", len(manifest.Files))
+	log.Printf("[Scanner] Successfully received %d items from %s", len(manifest.Files)+len(manifest.Dirs), apiURL)
 	return manifest, nil
 }
