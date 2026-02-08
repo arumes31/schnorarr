@@ -252,16 +252,21 @@ func (t *Transferer) copyRemote(src, dst string) error {
 				// End of a progress line, parse it
 				line := strings.TrimSpace(currentLine.String())
 				if line != "" {
+					log.Printf("[Transferer] DEBUG: rsync output line: %q", line)
 					// Parse progress2 format: "     123,456,789  45%  123.45MB/s    0:00:12"
 					fields := strings.Fields(line)
 					if len(fields) >= 2 {
 						// First field is bytes transferred (with commas)
 						bytesStr := strings.ReplaceAll(fields[0], ",", "")
 						if bytes, parseErr := strconv.ParseInt(bytesStr, 10, 64); parseErr == nil && bytes > 0 {
+							log.Printf("[Transferer] DEBUG: Parsed %d bytes transferred out of %d total", bytes, totalSize)
 							if t.opts.OnProgress != nil && bytes != lastProgress {
+								log.Printf("[Transferer] DEBUG: Calling OnProgress(%s, %d, %d)", src, bytes, totalSize)
 								t.opts.OnProgress(src, bytes, totalSize)
 								lastProgress = bytes
 							}
+						} else {
+							log.Printf("[Transferer] DEBUG: Failed to parse bytes from %q: %v", bytesStr, parseErr)
 						}
 					}
 				}
