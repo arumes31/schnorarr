@@ -372,8 +372,8 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	e.planRemainingBytes = totalPlanSize
 	e.pausedMu.Unlock()
 
-	log.Printf("[Engine:%s] Sync cycle started for %s", e.config.ID, e.alias)
-	log.Printf("[%s] Sync Plan: %d syncs, %d deletes, %d renames, %d mkdirs, %d conflicts",
+	log.Printf("[Engine:%s] Sync cycle started for %s (Rule: %s, Remote: %v)", e.config.ID, e.alias, e.config.Rule, e.IsRemoteScan())
+	log.Printf("[Engine:%s] Sync Plan: %d syncs, %d deletes, %d renames, %d mkdirs, %d conflicts",
 		e.config.ID, len(plan.FilesToSync), len(plan.FilesToDelete), len(plan.Renames), len(plan.DirsToCreate), len(plan.Conflicts))
 
 	hasChanges := len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.Renames) > 0 || len(plan.DirsToCreate) > 0
