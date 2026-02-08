@@ -10,7 +10,8 @@ if [ -n "$TAILSCALE_AUTHKEY" ]; then
         mknod /dev/net/tun c 10 200
     fi
     
-    tailscaled --state=/config/tailscale.state &
+    mkdir -p /config/tailscale
+    tailscaled --state=/config/tailscale/ &
     sleep 2
     
     HOSTNAME=${TS_HOSTNAME:-"schnorarr-${MODE}"}
