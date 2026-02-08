@@ -64,6 +64,7 @@ type Engine struct {
 func NewEngine(config SyncConfig) *Engine {
 	scanner := NewScanner()
 	scanner.ExcludePatterns = config.ExcludePatterns
+	scanner.IncludePatterns = config.IncludePatterns
 
 	e := &Engine{
 		config:       config,

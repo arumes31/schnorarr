@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -43,10 +44,28 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			}
 		}
 
+		// Determine include patterns
+		// 1. Default
+		includePatterns := []string{"*.mkv", "*.mp4", "*.avi"}
+		// 2. Global Override
+		if env := os.Getenv("SYNC_INCLUDE"); env != "" {
+			includePatterns = strings.Split(env, ",")
+		}
+		// 3. Per-Engine Override
+		if env := os.Getenv(prefix + "_INCLUDE"); env != "" {
+			includePatterns = strings.Split(env, ",")
+		}
+		// Clean up patterns
+		for i := range includePatterns {
+			includePatterns[i] = strings.TrimSpace(includePatterns[i])
+		}
+
 		engine := sync.NewEngine(sync.SyncConfig{
 			ID: id, SourceDir: src, TargetDir: resolvedTgt, Rule: rule,
-			ExcludePatterns: []string{".git", ".DS_Store", "Thumbs.db"}, BandwidthLimit: bwlimitBytes,
-			PollInterval: 60 * time.Second, WatchInterval: 12 * time.Hour, AutoApproveDeletions: database.GetSetting("auto_approve", "off") == "on",
+			ExcludePatterns: []string{".git", ".DS_Store", "Thumbs.db"},
+			IncludePatterns: includePatterns,
+			BandwidthLimit:  bwlimitBytes,
+			PollInterval:    60 * time.Second, WatchInterval: 12 * time.Hour, AutoApproveDeletions: database.GetSetting("auto_approve", "off") == "on",
 			DryRunFunc: func() bool { return database.GetSetting("sync_mode", "dry") == "dry" },
 			OnSyncEvent: func(ts, act, p string, sz int64) {
 				_ = database.LogEvent(ts, act, p, sz, id)

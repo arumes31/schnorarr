@@ -18,6 +18,8 @@ type SyncConfig struct {
 	Rule string
 	// ExcludePatterns are glob patterns to exclude from syncing
 	ExcludePatterns []string
+	// IncludePatterns are glob patterns to include in syncing (default: all)
+	IncludePatterns []string
 	// BandwidthLimit in bytes per second (0 = unlimited)
 	BandwidthLimit int64
 	// WatchInterval is how often to perform full scans (0 = only on file changes)
