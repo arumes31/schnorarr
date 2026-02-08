@@ -276,9 +276,9 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	if err := cmd.Wait(); err != nil {
 		log.Printf("[Transferer] rsync failed for %s: %v", src, err)
 		if t.opts.OnComplete != nil {
-			t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %s", stderrOutput))
+			t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %v", err))
 		}
-		return fmt.Errorf("rsync command failed: %s", stderrOutput)
+		return fmt.Errorf("rsync command failed: %w", err)
 	}
 
 	log.Printf("[Transferer] Successfully transferred %s (%d bytes)", src, totalSize)
