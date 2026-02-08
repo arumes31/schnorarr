@@ -122,22 +122,23 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 		allPaused := true
 		atomicLatency := atomic.LoadInt64(latency)
 		type EngineProgress struct {
-			ID           string  `json:"id"`
-			File         string  `json:"file"`
-			Percent      float64 `json:"percent"`
-			Speed        string  `json:"speed"`
-			Today        string  `json:"today"`
-			Total        string  `json:"total"`
-			IsActive     bool    `json:"is_active"`
-			ETA          string  `json:"eta"`
-			QueueCount   int     `json:"queue_count"`
-			IsScanning   bool    `json:"is_scanning"`
-			AvgSpeed     string  `json:"avg_speed"`
-			Elapsed      string  `json:"elapsed"`
-			SpeedHistory []int64 `json:"speed_history"`
-			IsPaused     bool    `json:"is_paused"`
-			LastSync     string  `json:"last_sync"`
-			IsRemoteScan bool    `json:"is_remote_scan"`
+			ID                string  `json:"id"`
+			File              string  `json:"file"`
+			Percent           float64 `json:"percent"`
+			Speed             string  `json:"speed"`
+			Today             string  `json:"today"`
+			Total             string  `json:"total"`
+			IsActive          bool    `json:"is_active"`
+			ETA               string  `json:"eta"`
+			QueueCount        int     `json:"queue_count"`
+			IsScanning        bool    `json:"is_scanning"`
+			AvgSpeed          string  `json:"avg_speed"`
+			Elapsed           string  `json:"elapsed"`
+			SpeedHistory      []int64 `json:"speed_history"`
+			IsPaused          bool    `json:"is_paused"`
+			LastSync          string  `json:"last_sync"`
+			IsRemoteScan      bool    `json:"is_remote_scan"`
+			IsWaitingApproval bool    `json:"is_waiting_approval"`
 		}
 		engineStats := make([]EngineProgress, 0)
 		for _, engine := range syncEngines {
@@ -184,6 +185,7 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 			engineStats = append(engineStats, EngineProgress{
 				ID: engine.GetConfig().ID, File: filepath.Base(file), Percent: percent, Speed: database.FormatBytes(speed) + "/s", Today: database.FormatBytes(stats.Today), Total: database.FormatBytes(stats.Total), IsActive: speed > 0, ETA: etaStr, QueueCount: queuedCount, IsScanning: engine.IsScanning(),
 				AvgSpeed: database.FormatBytes(avgSpeed) + "/s", Elapsed: elapsedStr, SpeedHistory: engine.GetSpeedHistory(), IsPaused: isPaused, LastSync: engine.GetLastSyncTime().Format(time.RFC3339), IsRemoteScan: engine.IsRemoteScan(),
+				IsWaitingApproval: engine.IsWaitingForApproval(),
 			})
 		}
 		state := "ACTIVE"

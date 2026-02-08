@@ -259,8 +259,19 @@ function updateProgress(data) {
             if (radar) radar.style.display = eng.is_scanning ? 'flex' : 'none';
             if (remoteBadge) remoteBadge.style.display = eng.is_remote_scan ? 'block' : 'none';
             if (statusPill) {
-                if (eng.is_active) { statusPill.innerText = 'SYNCING'; statusPill.className = 'status-pill pill-syncing'; }
-                else { const st = eng.is_paused ? 'PAUSED' : 'ACTIVE'; statusPill.innerText = st; statusPill.className = `status-pill pill-${st.toLowerCase()}`; }
+                if (eng.is_waiting_approval) {
+                    statusPill.innerText = 'WAITING APPROVAL';
+                    statusPill.className = 'status-pill pill-waiting';
+                }
+                else if (eng.is_active) {
+                    statusPill.innerText = 'SYNCING';
+                    statusPill.className = 'status-pill pill-syncing';
+                }
+                else {
+                    const st = eng.is_paused ? 'PAUSED' : 'ACTIVE';
+                    statusPill.innerText = st;
+                    statusPill.className = `status-pill pill-${st.toLowerCase()}`;
+                }
             }
             if (container && eng.is_active) {
                 container.style.display = 'block';
