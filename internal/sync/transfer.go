@@ -232,34 +232,29 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	// Read output byte-by-byte to handle \r (carriage return) from --progress
 	var currentLine strings.Builder
 	var lastProgress int64
+	var hadProgress bool
 	buf := make([]byte, 1)
 	for {
 		n, err := combinedOutput.Read(buf)
 		if n > 0 {
 			ch := buf[0]
 			if ch == '\r' || ch == '\n' {
-				// End of a progress line, parse it
+				// End of a line, parse it
 				line := strings.TrimSpace(currentLine.String())
 				if line != "" {
-					log.Printf("[Transferer] DEBUG: rsync output line: %q", line)
 					// Parse progress format: "    1,234,567  12%  123.45kB/s    0:01:23"
-					// or progress2 format: "     123,456,789  45%  123.45MB/s    0:00:12"
-					// Both formats have bytes as the first field
-					// Only parse lines that start with numbers (skip headers like "sending incremental file list")
+					// Both --progress and --info=progress2 have bytes as the first field
 					fields := strings.Fields(line)
 					if len(fields) >= 2 {
 						// First field is bytes transferred (with commas)
 						bytesStr := strings.ReplaceAll(fields[0], ",", "")
 						// Check if first field is actually a number
 						if bytes, parseErr := strconv.ParseInt(bytesStr, 10, 64); parseErr == nil && bytes > 0 {
-							log.Printf("[Transferer] DEBUG: Parsed %d bytes transferred out of %d total", bytes, totalSize)
+							hadProgress = true
 							if t.opts.OnProgress != nil && bytes != lastProgress {
-								log.Printf("[Transferer] DEBUG: Calling OnProgress(%s, %d, %d)", src, bytes, totalSize)
 								t.opts.OnProgress(src, bytes, totalSize)
 								lastProgress = bytes
 							}
-						} else {
-							log.Printf("[Transferer] DEBUG: Skipping non-progress line: %q", line)
 						}
 					}
 				}
@@ -281,7 +276,11 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		return fmt.Errorf("rsync command failed: %w", err)
 	}
 
-	log.Printf("[Transferer] Successfully transferred %s (%d bytes)", src, totalSize)
+	if !hadProgress {
+		log.Printf("[Transferer] File already up-to-date, skipped: %s", filepath.Base(src))
+	} else {
+		log.Printf("[Transferer] Successfully transferred %s (%d bytes)", src, totalSize)
+	}
 	if t.opts.OnComplete != nil {
 		t.opts.OnComplete(filepath.Base(src), totalSize, nil)
 	}
