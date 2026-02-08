@@ -191,7 +191,9 @@ func TestScanner_ScanRemote_URI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("DEST_HOST", tt.destHost)
+			if err := os.Setenv("DEST_HOST", tt.destHost); err != nil {
+				t.Fatalf("Failed to set env: %v", err)
+			}
 			host, path := ParseRemoteDestination(tt.uri)
 			if host == "" {
 				host = os.Getenv("DEST_HOST")
