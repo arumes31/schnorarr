@@ -28,14 +28,14 @@ func TestTransferer_CopyParallel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	dstFile, err := os.Create(dstPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// We close explicitly after copy to flush, but defer just in case
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	tr := NewTransferer(TransferOptions{})
 
@@ -52,7 +52,7 @@ func TestTransferer_CopyParallel(t *testing.T) {
 	if err := dstFile.Sync(); err != nil {
 		t.Fatal(err)
 	}
-	dstFile.Close()
+	_ = dstFile.Close()
 
 	// Verify content
 	dstData, err := os.ReadFile(dstPath)

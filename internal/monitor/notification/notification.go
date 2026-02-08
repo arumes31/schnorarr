@@ -41,9 +41,10 @@ func New(discordWebhook, telegramToken, telegramChatID string) *Service {
 // Send sends a notification to all configured services
 func (s *Service) Send(msg, msgType string) {
 	emoji := "🔵"
-	if msgType == "ERROR" {
+	switch msgType {
+	case "ERROR":
 		emoji = "🔴"
-	} else if msgType == "SUCCESS" {
+	case "SUCCESS":
 		emoji = "🟢"
 	}
 	fullMsg := fmt.Sprintf("[schnorarr] %s %s", emoji, msg)
@@ -68,7 +69,7 @@ func (d *Discord) Send(msg, msgType string) error {
 	if err != nil {
 		return fmt.Errorf("discord request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("discord returned status %d", resp.StatusCode)
@@ -92,7 +93,7 @@ func (t *Telegram) Send(msg, msgType string) error {
 	if err != nil {
 		return fmt.Errorf("telegram request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("telegram returned status %d", resp.StatusCode)

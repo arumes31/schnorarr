@@ -215,7 +215,9 @@ func checkReceiverHealth(healthState *health.State, engines []*sync.Engine, late
 				version = data.Version
 				uptime = data.Uptime
 			}
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				fmt.Printf("Error closing receiver health body: %v\n", err)
+			}
 		}
 		if !healthy && len(engines) > 0 {
 			if _, err := os.Stat(engines[0].GetConfig().TargetDir); err == nil {

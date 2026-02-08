@@ -22,25 +22,25 @@ func TestStartSyncEngines_LoopCapture(t *testing.T) {
 	}
 
 	// Setup Env
-	os.Setenv("SYNC_1_SOURCE", src1)
-	os.Setenv("SYNC_1_TARGET", "/tmp/tgt1")
-	os.Setenv("SYNC_1_RULE", "flat")
+	_ = os.Setenv("SYNC_1_SOURCE", src1)
+	_ = os.Setenv("SYNC_1_TARGET", "/tmp/tgt1")
+	_ = os.Setenv("SYNC_1_RULE", "flat")
 
-	os.Setenv("SYNC_2_SOURCE", src2)
-	os.Setenv("SYNC_2_TARGET", "/tmp/tgt2")
-	os.Setenv("SYNC_2_RULE", "series")
+	_ = os.Setenv("SYNC_2_SOURCE", src2)
+	_ = os.Setenv("SYNC_2_TARGET", "/tmp/tgt2")
+	_ = os.Setenv("SYNC_2_RULE", "series")
 
 	defer os.Clearenv() // Clean up all envs
 	// Restoring original envs might be better but Clearenv is safe for test process isolation usually.
 	// Actually, careful with Clearenv if other tests run in parallel.
 	// But defer os.Unsetenv is safer.
 	defer func() {
-		os.Unsetenv("SYNC_1_SOURCE")
-		os.Unsetenv("SYNC_1_TARGET")
-		os.Unsetenv("SYNC_1_RULE")
-		os.Unsetenv("SYNC_2_SOURCE")
-		os.Unsetenv("SYNC_2_TARGET")
-		os.Unsetenv("SYNC_2_RULE")
+		_ = os.Unsetenv("SYNC_1_SOURCE")
+		_ = os.Unsetenv("SYNC_1_TARGET")
+		_ = os.Unsetenv("SYNC_1_RULE")
+		_ = os.Unsetenv("SYNC_2_SOURCE")
+		_ = os.Unsetenv("SYNC_2_TARGET")
+		_ = os.Unsetenv("SYNC_2_RULE")
 	}()
 
 	// Mock health state
@@ -65,11 +65,12 @@ func TestStartSyncEngines_LoopCapture(t *testing.T) {
 	for _, e := range engines {
 		cfg := e.GetConfig()
 		ids[cfg.ID] = true
-		if cfg.ID == "1" {
+		switch cfg.ID {
+		case "1":
 			if cfg.SourceDir != src1 {
 				t.Errorf("Engine 1 source mismatch: %s", cfg.SourceDir)
 			}
-		} else if cfg.ID == "2" {
+		case "2":
 			if cfg.SourceDir != src2 {
 				t.Errorf("Engine 2 source mismatch: %s", cfg.SourceDir)
 			}

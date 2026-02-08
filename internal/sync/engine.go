@@ -187,7 +187,7 @@ func (e *Engine) Start() error {
 func (e *Engine) Stop() {
 	close(e.stopCh)
 	if e.watcher != nil {
-		e.watcher.Close()
+		_ = e.watcher.Close()
 	}
 }
 

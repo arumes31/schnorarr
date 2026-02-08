@@ -7,9 +7,9 @@ import (
 
 func TestLoad(t *testing.T) {
 	// Set env vars
-	os.Setenv("DISCORD_WEBHOOK_URL", "https://discord.webhook.test")
-	os.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
-	os.Setenv("TELEGRAM_CHAT_ID", "12345")
+	_ = os.Setenv("DISCORD_WEBHOOK_URL", "https://discord.webhook.test")
+	_ = os.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
+	_ = os.Setenv("TELEGRAM_CHAT_ID", "12345")
 
 	cfg := Load()
 
@@ -24,9 +24,9 @@ func TestLoad(t *testing.T) {
 	}
 
 	// Clean up
-	os.Unsetenv("DISCORD_WEBHOOK_URL")
-	os.Unsetenv("TELEGRAM_BOT_TOKEN")
-	os.Unsetenv("TELEGRAM_CHAT_ID")
+	_ = os.Unsetenv("DISCORD_WEBHOOK_URL")
+	_ = os.Unsetenv("TELEGRAM_BOT_TOKEN")
+	_ = os.Unsetenv("TELEGRAM_CHAT_ID")
 }
 
 func TestSave(t *testing.T) {

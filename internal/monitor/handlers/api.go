@@ -65,7 +65,7 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 		for _, e := range h.engines {
 			go func(eng *sync.Engine) { _ = eng.RunSync(nil) }(e)
 		}
-		http.Redirect(w, r, "/", 303)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
 
@@ -76,7 +76,7 @@ func (h *Handlers) GlobalPause(w http.ResponseWriter, r *http.Request) {
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "true")
 		}
 		_ = database.LogSystemEvent(h.GetUser(r), "Paused All", "User paused all engines")
-		http.Redirect(w, r, "/", 303)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
 
@@ -87,14 +87,14 @@ func (h *Handlers) GlobalResume(w http.ResponseWriter, r *http.Request) {
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "false")
 		}
 		_ = database.LogSystemEvent(h.GetUser(r), "Resumed All", "User resumed all engines")
-		http.Redirect(w, r, "/", 303)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
 
 func (h *Handlers) BulkAction(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		var req struct {
@@ -210,7 +210,7 @@ func (h *Handlers) EngineAction(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) EngineAlias(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/engine/"), "/alias")
@@ -251,7 +251,7 @@ func (h *Handlers) UpdateSyncMode(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 			return
 		}
-		http.Redirect(w, r, "/", 303)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
 
@@ -268,14 +268,14 @@ func (h *Handlers) UpdateAutoApprove(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 			return
 		}
-		http.Redirect(w, r, "/", 303)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
 
 func (h *Handlers) UpdateSenderOverride(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		val := r.FormValue("enabled") == "true"
@@ -288,7 +288,7 @@ func (h *Handlers) UpdateSenderOverride(w http.ResponseWriter, r *http.Request) 
 func (h *Handlers) TestNotify(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
 		go h.notifier.Send("Test from Dashboard", "INFO")
-		http.Redirect(w, r, "/", 303)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
 
@@ -296,7 +296,7 @@ func (h *Handlers) SetScheduler(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
 		h.config.QuietStart = r.FormValue("quiet_hours")
 		_ = h.config.Save()
-		http.Redirect(w, r, "/", 303)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
 
@@ -304,7 +304,7 @@ func (h *Handlers) SetNotifications(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
 		h.config.DiscordWebhook = r.FormValue("webhook_url")
 		_ = h.config.Save()
-		http.Redirect(w, r, "/", 303)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
 
@@ -313,9 +313,13 @@ func (h *Handlers) ExportHistory(w http.ResponseWriter, r *http.Request) {
 		history, _ := database.GetHistory(0, 0, "")
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", "attachment;filename=schnorarr-history.csv")
-		fmt.Fprintln(w, "Timestamp,Action,Path,Size")
+		if _, err := fmt.Fprintln(w, "Timestamp,Action,Path,Size"); err != nil {
+			return
+		}
 		for _, item := range history {
-			fmt.Fprintf(w, "%s,%s,\"%s\",%s\n", item.Time, item.Action, item.Path, item.Size)
+			if _, err := fmt.Fprintf(w, "%s,%s,\"%s\",%s\n", item.Time, item.Action, item.Path, item.Size); err != nil {
+				return
+			}
 		}
 	})(w, r)
 }
