@@ -261,18 +261,23 @@ func (e *Engine) PreviewSync() (*SyncPlan, error) {
 	// Lock to protect targetManifest initialization
 	e.pausedMu.Lock()
 	if e.targetManifest == nil {
-		cachePath := e.getCachePath()
-		var err error
-		e.targetManifest, err = LoadFromFile(cachePath)
-		if err != nil {
+		// Optimization: For remote scans, we ALWAYS want the fresh truth for a preview
+		// rather than a potentially stale local JSON file.
+		if e.IsRemoteScan() {
 			e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
 			if err != nil {
-				// Safety: If remote scan fails, do NOT fallback to empty manifest in preview
-				if e.IsRemoteScan() {
-					e.pausedMu.Unlock()
-					return nil, fmt.Errorf("failed to scan remote target: %w", err)
+				e.pausedMu.Unlock()
+				return nil, fmt.Errorf("failed to scan remote target: %w", err)
+			}
+		} else {
+			cachePath := e.getCachePath()
+			var err error
+			e.targetManifest, err = LoadFromFile(cachePath)
+			if err != nil {
+				e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
+				if err != nil {
+					e.targetManifest = NewManifest(e.config.TargetDir)
 				}
-				e.targetManifest = NewManifest(e.config.TargetDir)
 			}
 		}
 	}
@@ -330,22 +335,25 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	}
 	e.pausedMu.Lock()
 	if e.targetManifest == nil {
-		cachePath := e.getCachePath()
-		var err error
-		target, err := LoadFromFile(cachePath)
-		if err != nil {
-			target, err = e.scanner.ScanLocal(e.config.TargetDir)
+		if e.IsRemoteScan() {
+			target, err := e.scanner.ScanLocal(e.config.TargetDir)
 			if err != nil {
-				// CRITICAL: If remote scan fails, do NOT fallback to empty manifest.
-				// This prevents wiping/copying everything if the receiver API is down.
-				if strings.Contains(e.config.TargetDir, "::") || strings.HasPrefix(e.config.TargetDir, "rsync://") {
-					e.pausedMu.Unlock()
-					return fmt.Errorf("aborted sync: failed to fetch remote manifest: %w", err)
-				}
-				target = NewManifest(e.config.TargetDir)
+				e.pausedMu.Unlock()
+				return fmt.Errorf("aborted sync: failed to fetch remote manifest: %w", err)
 			}
+			e.targetManifest = target
+		} else {
+			cachePath := e.getCachePath()
+			var err error
+			target, err := LoadFromFile(cachePath)
+			if err != nil {
+				target, err = e.scanner.ScanLocal(e.config.TargetDir)
+				if err != nil {
+					target = NewManifest(e.config.TargetDir)
+				}
+			}
+			e.targetManifest = target
 		}
-		e.targetManifest = target
 	}
 	// Capture targetManifest to local variable to use outside lock
 	localTarget := e.targetManifest
