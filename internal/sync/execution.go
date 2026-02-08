@@ -2,6 +2,7 @@ package sync
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 	"time"
 )
@@ -23,6 +24,7 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 			e.reportEvent(timestamp, "DRY-Created", dirPath, 0)
 		} else {
 			if err := e.transferer.CreateDir(fullPath); err != nil {
+				log.Printf("[%s] Error: Failed to create dir %s: %v", e.config.ID, dirPath, err)
 				e.reportError(fmt.Sprintf("Failed to create dir %s: %v", dirPath, err))
 				continue
 			}
@@ -45,6 +47,7 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 				}
 				e.reportEvent(timestamp, "Renamed", fmt.Sprintf("%s -> %s", oldPath, newPath), 0)
 			} else {
+				log.Printf("[%s] Error: Failed to rename %s -> %s: %v", e.config.ID, oldPath, newPath, err)
 				e.reportError(fmt.Sprintf("Failed to rename %s -> %s: %v", oldPath, newPath, err))
 			}
 		}
@@ -57,6 +60,7 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 		} else {
 			srcPath, dstPath := filepath.Join(e.config.SourceDir, file.Path), filepath.Join(e.config.TargetDir, file.Path)
 			if err := e.transferer.CopyFile(srcPath, dstPath); err != nil {
+				log.Printf("[%s] Error: Failed to copy %s: %v", e.config.ID, file.Path, err)
 				e.reportError(fmt.Sprintf("Failed to copy %s: %v", file.Path, err))
 				e.pausedMu.Lock()
 				e.failedFiles[file.Path] = time.Now()
@@ -94,6 +98,7 @@ func (e *Engine) executeCleanupPhase(plan *SyncPlan, targetManifest *Manifest, t
 				delete(targetManifest.Files, filePath)
 				e.reportEvent(timestamp, "Deleted", filePath, 0)
 			} else {
+				log.Printf("[%s] Error: Failed to delete %s: %v", e.config.ID, filePath, err)
 				e.reportError(fmt.Sprintf("Failed to delete %s: %v", filePath, err))
 			}
 		}
@@ -109,6 +114,7 @@ func (e *Engine) executeCleanupPhase(plan *SyncPlan, targetManifest *Manifest, t
 				delete(targetManifest.Files, dirPath)
 				e.reportEvent(timestamp, "Deleted", dirPath, 0)
 			} else {
+				log.Printf("[%s] Error: Failed to delete dir %s: %v", e.config.ID, dirPath, err)
 				e.reportError(fmt.Sprintf("Failed to delete dir %s: %v", dirPath, err))
 			}
 		}

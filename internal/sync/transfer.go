@@ -161,12 +161,16 @@ func (t *Transferer) CopyFile(src, dst string) error {
 
 // copyRemote uses the rsync command to transfer a file to a remote destination
 func (t *Transferer) copyRemote(src, dst string) error {
-	// Construct rsync command
-	// rsync -av --partial <src> <dst>
+	// Ensure remote paths use forward slashes for rsync
+	if strings.HasPrefix(dst, "syncuser@") {
+		parts := strings.Split(dst, "::")
+		if len(parts) == 2 {
+			dst = parts[0] + "::" + strings.ReplaceAll(parts[1], "\\", "/")
+		}
+	}
+
 	args := []string{"-av", "--partial"}
 	if t.opts.BandwidthLimit > 0 {
-		// Convert bytes/s to Kbit/s roughly or use specialized logic.
-		// Rsync --bwlimit is in KBytes per second
 		kbps := t.opts.BandwidthLimit / 1024
 		if kbps > 0 {
 			args = append(args, fmt.Sprintf("--bwlimit=%d", kbps))
@@ -180,22 +184,29 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		cmd.Env = append(cmd.Env, "RSYNC_PASSWORD="+pass)
 	}
 
-	// Capture output for logging? Or just run it.
-	// Ideally we parse progress, but rsync progress parsing is complex.
-	// For now, let's just run it.
-	// Maybe we can assume success = 100% progress for the file.
+	// Capture stderr to see why it fails
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		if t.opts.OnComplete != nil {
-			t.opts.OnComplete(filepath.Base(src), 0, err)
+		errMsg := stderr.String()
+		if errMsg == "" {
+			errMsg = err.Error()
 		}
-		return fmt.Errorf("rsync command failed: %w", err)
+		if t.opts.OnComplete != nil {
+			t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %s", errMsg))
+		}
+		return fmt.Errorf("rsync command failed: %s", errMsg)
 	}
 
 	// On success
-	fi, _ := os.Stat(src)
+	fi, err := os.Stat(src)
+	fileSize := int64(0)
+	if err == nil {
+		fileSize = fi.Size()
+	}
 	if t.opts.OnComplete != nil {
-		t.opts.OnComplete(filepath.Base(src), fi.Size(), nil)
+		t.opts.OnComplete(filepath.Base(src), fileSize, nil)
 	}
 	return nil
 }
