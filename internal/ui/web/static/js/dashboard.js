@@ -266,14 +266,17 @@ function updateProgress(data) {
                     statusPill.innerText = 'WAITING APPROVAL';
                     statusPill.className = 'status-pill pill-waiting';
                 }
+                else if (eng.is_paused) {
+                    statusPill.innerText = 'PAUSED';
+                    statusPill.className = 'status-pill pill-paused';
+                }
                 else if (eng.is_active) {
                     statusPill.innerText = 'SYNCING';
                     statusPill.className = 'status-pill pill-syncing';
                 }
                 else {
-                    const st = eng.is_paused ? 'PAUSED' : 'ACTIVE';
-                    statusPill.innerText = st;
-                    statusPill.className = `status-pill pill-${st.toLowerCase()}`;
+                    statusPill.innerText = 'ACTIVE';
+                    statusPill.className = 'status-pill pill-active';
                 }
             }
             if (container && eng.is_active) {

@@ -77,11 +77,11 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 				AvgSpeed: database.FormatBytes(avg) + "/s", Alias: engine.GetAlias(),
 				HealthGrade: grade, HealthColor: color, IsRemoteScan: engine.IsRemoteScan(),
 			})
-			if engine.IsPaused() {
-				engineViews[len(engineViews)-1].State = "PAUSED"
-			}
 			if isSyncing {
 				engineViews[len(engineViews)-1].State = "SYNCING"
+			}
+			if engine.IsPaused() {
+				engineViews[len(engineViews)-1].State = "PAUSED"
 			}
 			if engine.IsWaitingForApproval() {
 				engineViews[len(engineViews)-1].State = "WAITING_APPROVAL"

@@ -63,7 +63,8 @@ func (h *Handlers) GetProgressInfo() (progress, speed, eta string, queued int, s
 func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
 		for _, e := range h.engines {
-			go func(eng *sync.Engine) { _ = eng.RunSync(nil) }(e)
+			e.Resume()
+			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "false")
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
@@ -76,6 +77,11 @@ func (h *Handlers) GlobalPause(w http.ResponseWriter, r *http.Request) {
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "true")
 		}
 		_ = database.LogSystemEvent(h.GetUser(r), "Paused All", "User paused all engines")
+		if r.Header.Get("Accept") == "application/json" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+			return
+		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
@@ -87,6 +93,11 @@ func (h *Handlers) GlobalResume(w http.ResponseWriter, r *http.Request) {
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "false")
 		}
 		_ = database.LogSystemEvent(h.GetUser(r), "Resumed All", "User resumed all engines")
+		if r.Header.Get("Accept") == "application/json" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+			return
+		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
 }
@@ -119,7 +130,8 @@ func (h *Handlers) BulkAction(w http.ResponseWriter, r *http.Request) {
 			switch req.Action {
 			case "sync":
 				if !engine.IsBusy() {
-					go func(e *sync.Engine) { _ = e.RunSync(nil) }(engine)
+					engine.Resume()
+					_ = database.SaveSetting("engine_paused_"+id, "false")
 				}
 			case "pause":
 				engine.Pause()
@@ -190,7 +202,8 @@ func (h *Handlers) EngineAction(w http.ResponseWriter, r *http.Request) {
 			_ = database.SaveSetting("engine_paused_"+id, "false")
 		case "sync":
 			if !engine.IsBusy() {
-				go func() { _ = engine.RunSync(nil) }()
+				engine.Resume()
+				_ = database.SaveSetting("engine_paused_"+id, "false")
 			}
 		case "approve":
 			engine.ApproveDeletions()
