@@ -47,8 +47,9 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 	// Mutex for manifest map writes
 	var mu sync.Mutex
 
-	// Semaphore to limit concurrency (prevent opening too many file descriptors)
-	sem := make(chan struct{}, 8)
+	// Worker pool for directory processing
+	numWorkers := 8
+	jobs := make(chan string, 10000)
 	var wg sync.WaitGroup
 
 	// Error handling with cancellation
@@ -56,103 +57,100 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 	done := make(chan struct{})
 	var errOnce sync.Once
 
-	// Helper to process a directory
-	var walkDir func(string)
-	walkDir = func(dir string) {
-		defer wg.Done()
+	worker := func() {
+		for dir := range jobs {
+			func() {
+				defer wg.Done()
 
-		// Check for cancellation
-		select {
-		case <-done:
-			return
-		default:
-		}
-
-		// Acquire semaphore
-		select {
-		case sem <- struct{}{}:
-		case <-done:
-			return
-		}
-		defer func() { <-sem }()
-
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			errOnce.Do(func() {
-				// Non-blocking send
+				// Check for cancellation
 				select {
-				case errCh <- fmt.Errorf("failed to read dir %s: %w", dir, err):
+				case <-done:
+					return
 				default:
 				}
-				close(done) // Signal cancellation
-			})
-			return
-		}
 
-		for _, d := range entries {
-			// Check for cancellation
-			select {
-			case <-done:
-				return
-			default:
-			}
-
-			fullPath := filepath.Join(dir, d.Name())
-			relPath, err := filepath.Rel(root, fullPath)
-			if err != nil {
-				continue
-			}
-
-			// Check exclusions
-			if s.shouldExclude(relPath) {
-				if d.IsDir() {
-					log.Printf("[Scanner] Skipping excluded directory: %s", relPath)
+				entries, err := os.ReadDir(dir)
+				if err != nil {
+					errOnce.Do(func() {
+						select {
+						case errCh <- fmt.Errorf("failed to read dir %s: %w", dir, err):
+						default:
+						}
+						close(done) // Signal cancellation
+					})
+					return
 				}
-				continue
-			}
 
-			// Check inclusions (only for files)
-			if !d.IsDir() && !s.shouldInclude(relPath) {
-				continue
-			}
+				for _, d := range entries {
+					select {
+					case <-done:
+						return
+					default:
+					}
 
-			// Get info
-			info, err := d.Info()
-			if err != nil {
-				continue
-			}
+					fullPath := filepath.Join(dir, d.Name())
+					relPath, err := filepath.Rel(root, fullPath)
+					if err != nil {
+						continue
+					}
 
-			fileInfo := &FileInfo{
-				Path:    filepath.ToSlash(relPath),
-				Size:    info.Size(),
-				ModTime: info.ModTime(),
-				IsDir:   d.IsDir(),
-			}
+					if s.shouldExclude(relPath) {
+						continue
+					}
 
-			if s.ComputeHashes && !d.IsDir() {
-				if err := fileInfo.ComputeHash(fullPath); err != nil {
-					log.Printf("[Scanner] Hash error for %s: %v", fullPath, err)
+					if !d.IsDir() && !s.shouldInclude(relPath) {
+						continue
+					}
+
+					info, err := d.Info()
+					if err != nil {
+						continue
+					}
+
+					fileInfo := &FileInfo{
+						Path:    filepath.ToSlash(relPath),
+						Size:    info.Size(),
+						ModTime: info.ModTime(),
+						IsDir:   d.IsDir(),
+					}
+
+					if s.ComputeHashes && !d.IsDir() {
+						if err := fileInfo.ComputeHash(fullPath); err != nil {
+							log.Printf("[Scanner] Hash error for %s: %v", fullPath, err)
+						}
+					}
+
+					mu.Lock()
+					manifest.Add(fileInfo)
+					mu.Unlock()
+
+					if d.IsDir() {
+						wg.Add(1)
+						// Ensure we don't block on jobs channel if cancelled
+						select {
+						case jobs <- fullPath:
+						case <-done:
+							wg.Done()
+						}
+					}
 				}
-			}
-
-			mu.Lock()
-			manifest.Add(fileInfo)
-			mu.Unlock()
-
-			if d.IsDir() {
-				wg.Add(1)
-				go walkDir(fullPath)
-			}
+			}()
 		}
 	}
 
-	// Start root walk
+	// Start workers
+	for i := 0; i < numWorkers; i++ {
+		go worker()
+	}
+
+	// Initial job
 	wg.Add(1)
-	go walkDir(root)
+	jobs <- root
 
 	// Wait for completion in background
 	go func() {
 		wg.Wait()
+		close(jobs)
 		// Only close errCh if not already cancelled/closed via error
 		select {
 		case <-done:
@@ -167,9 +165,7 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 		if err != nil {
 			return nil, err
 		}
-		// If err is nil (closed channel), we are done success
 	case <-done:
-		// Cancelled (should have error in errCh)
 		return nil, <-errCh
 	}
 
