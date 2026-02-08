@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -9,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -192,8 +192,7 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	// --partial: keep partially transferred files
 	// --protect-args: handles spaces and special chars in paths correctly with daemon protocol
 	// --mkpath: create missing parent directories on destination (rsync 3.2.3+)
-	// --progress: show progress during transfer (daemon-compatible)
-	args := []string{"-a", "--partial", "--protect-args", "--mkpath", "--progress"}
+	args := []string{"-a", "--partial", "--protect-args", "--mkpath"}
 
 	if t.opts.BandwidthLimit > 0 {
 		kbps := t.opts.BandwidthLimit / 1024
@@ -211,80 +210,115 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		cmd.Env = append(cmd.Env, "RSYNC_PASSWORD="+pass)
 	}
 
-	// Create pipes for stdout and stderr
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stdout pipe: %w", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stderr pipe: %w", err)
-	}
-
+	// Start rsync in background
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start rsync: %w", err)
 	}
 
-	// Combine stdout and stderr for progress parsing
-	// rsync sends progress to stderr by default
-	combinedOutput := io.MultiReader(stdout, stderr)
+	// Parse destination to get host and remote path for size monitoring
+	destHost, remotePath := parseRemoteDestination(dst)
 
-	// Read output byte-by-byte to handle \r (carriage return) from --progress
-	var currentLine strings.Builder
-	var lastProgress int64
-	var hadProgress bool
-	buf := make([]byte, 1)
+	// Monitor progress by polling file size
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	var lastReportedSize int64
 	for {
-		n, err := combinedOutput.Read(buf)
-		if n > 0 {
-			ch := buf[0]
-			if ch == '\r' || ch == '\n' {
-				// End of a line, parse it
-				line := strings.TrimSpace(currentLine.String())
-				if line != "" {
-					// Parse progress format: "    1,234,567  12%  123.45kB/s    0:01:23"
-					// Both --progress and --info=progress2 have bytes as the first field
-					fields := strings.Fields(line)
-					if len(fields) >= 2 {
-						// First field is bytes transferred (with commas)
-						bytesStr := strings.ReplaceAll(fields[0], ",", "")
-						// Check if first field is actually a number
-						if bytes, parseErr := strconv.ParseInt(bytesStr, 10, 64); parseErr == nil && bytes > 0 {
-							hadProgress = true
-							if t.opts.OnProgress != nil && bytes != lastProgress {
-								t.opts.OnProgress(src, bytes, totalSize)
-								lastProgress = bytes
-							}
-						}
-					}
+		select {
+		case err := <-done:
+			// Rsync completed
+			if err != nil {
+				log.Printf("[Transferer] rsync failed for %s: %v", src, err)
+				if t.opts.OnComplete != nil {
+					t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %w", err))
 				}
-				currentLine.Reset()
-			} else {
-				currentLine.WriteByte(ch)
+				return fmt.Errorf("rsync command failed: %w", err)
+			}
+
+			// Final progress update with total size
+			if t.opts.OnProgress != nil && totalSize > lastReportedSize {
+				t.opts.OnProgress(src, totalSize, totalSize)
+			}
+
+			log.Printf("[Transferer] Successfully transferred %s (%d bytes)", src, totalSize)
+			if t.opts.OnComplete != nil {
+				t.opts.OnComplete(filepath.Base(src), totalSize, nil)
+			}
+			return nil
+
+		case <-ticker.C:
+			// Poll destination file size
+			if destHost != "" && remotePath != "" {
+				currentSize := getRemoteFileSize(destHost, remotePath)
+				if currentSize > 0 && currentSize != lastReportedSize {
+					if t.opts.OnProgress != nil {
+						t.opts.OnProgress(src, currentSize, totalSize)
+					}
+					lastReportedSize = currentSize
+				}
 			}
 		}
-		if err != nil {
-			break
+	}
+}
+
+// parseRemoteDestination extracts host and path from rsync destination
+func parseRemoteDestination(dst string) (host, remotePath string) {
+	// Handle user@host::module/path format
+	if strings.Contains(dst, "::") {
+		parts := strings.SplitN(dst, "::", 2)
+		hostPart := parts[0]
+		// Extract just the hostname (remove user@ if present)
+		if strings.Contains(hostPart, "@") {
+			hostPart = strings.SplitN(hostPart, "@", 2)[1]
 		}
+
+		// Extract path from module/path
+		if len(parts) > 1 {
+			modulePath := parts[1]
+			// Split module and path
+			pathParts := strings.SplitN(modulePath, "/", 2)
+			if len(pathParts) > 1 {
+				remotePath = pathParts[1]
+			}
+		}
+		return hostPart, remotePath
+	}
+	return "", ""
+}
+
+// getRemoteFileSize queries the receiver's /api/stat endpoint for file size
+func getRemoteFileSize(host, path string) int64 {
+	apiURL := fmt.Sprintf("http://%s:8080/api/stat?path=%s", host, url.QueryEscape(path))
+
+	resp, err := http.Get(apiURL)
+	if err != nil {
+		return 0
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("[Transferer] Failed to close response body: %v", closeErr)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0
 	}
 
-	if err := cmd.Wait(); err != nil {
-		log.Printf("[Transferer] rsync failed for %s: %v", src, err)
-		if t.opts.OnComplete != nil {
-			t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %v", err))
-		}
-		return fmt.Errorf("rsync command failed: %w", err)
+	var statResp struct {
+		Size   int64 `json:"size"`
+		Exists bool  `json:"exists"`
 	}
 
-	if !hadProgress {
-		log.Printf("[Transferer] File already up-to-date, skipped: %s", filepath.Base(src))
-	} else {
-		log.Printf("[Transferer] Successfully transferred %s (%d bytes)", src, totalSize)
+	if err := json.NewDecoder(resp.Body).Decode(&statResp); err != nil {
+		return 0
 	}
-	if t.opts.OnComplete != nil {
-		t.opts.OnComplete(filepath.Base(src), totalSize, nil)
-	}
-	return nil
+
+	return statResp.Size
 }
 
 func (t *Transferer) copyParallel(filename string, srcFile, dstFile *os.File, totalSize int64) (int64, error) {
