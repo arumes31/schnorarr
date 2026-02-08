@@ -13,23 +13,44 @@ func ResolveTargetPath(target, destHost, destModule string) string {
 		return target
 	}
 
-	// Pattern for syncuser@host::module/path
-	pattern := regexp.MustCompile(`^[^@]+@([^:]+)::([^/]+)(/.*)?$`)
-	matches := pattern.FindStringSubmatch(target)
+	var host, module, subPath string
 
-	if len(matches) >= 3 {
-		host := matches[1]
-		module := matches[2]
-		subPath := ""
-		if len(matches) > 3 {
-			subPath = matches[3]
+	// Handle rsync://host/module/path
+	if strings.HasPrefix(target, "rsync://") {
+		pathPart := strings.TrimPrefix(target, "rsync://")
+		if idx := strings.Index(pathPart, "@"); idx != -1 {
+			pathPart = pathPart[idx+1:]
 		}
+		idx := strings.Index(pathPart, "/")
+		if idx != -1 {
+			host = pathPart[:idx]
+			if pIdx := strings.Index(host, ":"); pIdx != -1 {
+				host = host[:pIdx]
+			}
+			modulePath := pathPart[idx+1:]
+			pParts := strings.SplitN(modulePath, "/", 2)
+			module = pParts[0]
+			if len(pParts) > 1 {
+				subPath = "/" + pParts[1]
+			}
+		}
+	} else {
+		// Pattern for syncuser@host::module/path
+		pattern := regexp.MustCompile(`^[^@]+@([^:]+)::([^/]+)(/.*)?$`)
+		matches := pattern.FindStringSubmatch(target)
+		if len(matches) >= 3 {
+			host = matches[1]
+			module = matches[2]
+			if len(matches) > 3 {
+				subPath = matches[3]
+			}
+		}
+	}
 
-		// If it matches our destination, treat it as /data/subPath
-		if host == destHost && module == destModule {
-			resolved := "/data" + subPath
-			return strings.ReplaceAll(resolved, "//", "/")
-		}
+	// If it matches our destination, treat it as /data/subPath
+	if host == destHost && module == destModule {
+		resolved := "/data" + subPath
+		return strings.ReplaceAll(resolved, "//", "/")
 	}
 
 	return target

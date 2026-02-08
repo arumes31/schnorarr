@@ -254,12 +254,6 @@ func (e *Engine) IsBusy() bool {
 }
 
 func (e *Engine) PreviewSync() (*SyncPlan, error) {
-	e.pausedMu.RLock()
-	isPaused := e.paused
-	e.pausedMu.RUnlock()
-	if isPaused {
-		return nil, fmt.Errorf("sync is paused")
-	}
 	sourceManifest, err := e.scanner.ScanLocal(e.config.SourceDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan source: %w", err)
@@ -273,6 +267,11 @@ func (e *Engine) PreviewSync() (*SyncPlan, error) {
 		if err != nil {
 			e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
 			if err != nil {
+				// Safety: If remote scan fails, do NOT fallback to empty manifest in preview
+				if e.IsRemoteScan() {
+					e.pausedMu.Unlock()
+					return nil, fmt.Errorf("failed to scan remote target: %w", err)
+				}
 				e.targetManifest = NewManifest(e.config.TargetDir)
 			}
 		}

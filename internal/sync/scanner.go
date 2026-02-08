@@ -211,19 +211,34 @@ func (s *Scanner) shouldInclude(path string) bool {
 // ScanRemote scans a remote target via the Agent API
 // It strictly requires DEST_HOST to be set and the receiver to be reachable via HTTP.
 func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
-	destHost := os.Getenv("DEST_HOST")
+	uriHost, remotePath := ParseRemoteDestination(uri)
+
+	destHost := uriHost
 	if destHost == "" {
-		return nil, fmt.Errorf("remote scan failed: DEST_HOST environment variable is not set")
+		destHost = os.Getenv("DEST_HOST")
 	}
 
-	// URI is like user@host::module/path
-	// We extract the path part: module/path
-	parts := strings.Split(uri, "::")
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid rsync URI format: %s", uri)
+	if destHost == "" {
+		return nil, fmt.Errorf("remote scan failed: could not determine destination host from URI %q or DEST_HOST environment variable", uri)
 	}
 
-	remotePath := parts[1] // module/path
+	if remotePath == "" {
+		// If ParseRemoteDestination couldn't find a path, it might be just a module name without path
+		// or an invalid format. Let's try to extract at least something.
+		if strings.Contains(uri, "::") {
+			parts := strings.SplitN(uri, "::", 2)
+			if len(parts) > 1 {
+				remotePath = parts[1]
+			}
+		} else if strings.HasPrefix(uri, "rsync://") {
+			pathPart := strings.TrimPrefix(uri, "rsync://")
+			idx := strings.Index(pathPart, "/")
+			if idx != -1 {
+				remotePath = pathPart[idx+1:]
+			}
+		}
+	}
+
 	apiURL := fmt.Sprintf("http://%s:8080/api/manifest?path=%s", destHost, url.QueryEscape(remotePath))
 
 	log.Printf("[Scanner] Requesting remote manifest from API: %s", apiURL)
