@@ -12,12 +12,14 @@ import (
 
 func TestHandlers_Login(t *testing.T) {
 	// Setup
-	os.Setenv("AUTH_ENABLED", "true")
-	os.Setenv("ADMIN_USER", "admin")
-	os.Setenv("ADMIN_PASS", "password")
-	defer os.Unsetenv("AUTH_ENABLED")
-	defer os.Unsetenv("ADMIN_USER")
-	defer os.Unsetenv("ADMIN_PASS")
+	_ = os.Setenv("AUTH_ENABLED", "true")
+	_ = os.Setenv("ADMIN_USER", "admin")
+	_ = os.Setenv("ADMIN_PASS", "password")
+	defer func() {
+		_ = os.Unsetenv("AUTH_ENABLED")
+		_ = os.Unsetenv("ADMIN_USER")
+		_ = os.Unsetenv("ADMIN_PASS")
+	}()
 
 	h := New(nil, nil, nil, nil, nil, nil)
 

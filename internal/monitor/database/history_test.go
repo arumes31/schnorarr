@@ -32,7 +32,7 @@ func setupTestDB(t *testing.T) {
 
 func TestLogEvent(t *testing.T) {
 	setupTestDB(t)
-	defer DB.Close()
+	defer func() { _ = DB.Close() }()
 
 	err := LogEvent("2023-01-01 10:00:00", "Sync", "/path/to/file", 1234, "engine1")
 	if err != nil {
@@ -60,7 +60,7 @@ func TestLogEvent(t *testing.T) {
 
 func TestPruneHistory(t *testing.T) {
 	setupTestDB(t)
-	defer DB.Close()
+	defer func() { _ = DB.Close() }()
 
 	// Insert old record (10 days ago)
 	_, err := DB.Exec("INSERT INTO history (timestamp, action, file_path) VALUES (date('now', '-10 days'), 'Old', '/old/file')")

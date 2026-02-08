@@ -33,7 +33,7 @@ func SaveEngineState(engineID string, waiting bool, deletions []string, conflict
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// 1. Save general state
 	_, err = tx.Exec(`INSERT OR REPLACE INTO engine_state (engine_id, waiting_for_approval) VALUES (?, ?)`, engineID, waiting)
@@ -89,7 +89,7 @@ func LoadEngineState(engineID string) (*PersistentState, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var p string
 		if err := rows.Scan(&p); err != nil {
@@ -103,7 +103,7 @@ func LoadEngineState(engineID string) (*PersistentState, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer crows.Close()
+	defer func() { _ = crows.Close() }()
 	for crows.Next() {
 		var c ConflictPersistence
 		if err := crows.Scan(&c.Path, &c.SourceSize, &c.SourceTime, &c.ReceiverSize, &c.ReceiverTime); err != nil {
