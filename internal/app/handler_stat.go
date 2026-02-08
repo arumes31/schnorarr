@@ -49,6 +49,34 @@ func (a *App) StatHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if os.IsNotExist(err) {
+			// Check for rsync partial file (--partial creates .filename.XXXXXX temp files)
+			// Look in the same directory for files matching .basename.*
+			dir := filepath.Dir(fullPath)
+			basename := filepath.Base(fullPath)
+			partialPattern := "." + basename + ".*"
+
+			entries, readErr := os.ReadDir(dir)
+			if readErr == nil {
+				for _, entry := range entries {
+					matched, _ := filepath.Match(partialPattern, entry.Name())
+					if matched && !entry.IsDir() {
+						// Found a partial file, get its size
+						partialPath := filepath.Join(dir, entry.Name())
+						if partialInfo, statErr := os.Stat(partialPath); statErr == nil {
+							log.Printf("[StatHandler] Found partial file: %s (size: %d)", entry.Name(), partialInfo.Size())
+							response.Exists = true
+							response.Size = partialInfo.Size()
+							w.Header().Set("Content-Type", "application/json")
+							if encodeErr := json.NewEncoder(w).Encode(response); encodeErr != nil {
+								log.Printf("[StatHandler] Error encoding response: %v", encodeErr)
+							}
+							return
+						}
+					}
+				}
+			}
+
+			// No file or partial file found
 			response.Exists = false
 			response.Size = 0
 		} else {
