@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -200,20 +202,31 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		cmd.Env = append(cmd.Env, "RSYNC_PASSWORD="+pass)
 	}
 
-	// Capture stderr to see why it fails
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
+	// Capture output to see why it fails or what it did
+	var out, errOut strings.Builder
+	cmd.Stdout = &out
+	cmd.Stderr = &errOut
 
-	if err := cmd.Run(); err != nil {
-		errMsg := stderr.String()
+	err := cmd.Run()
+	stdout := strings.TrimSpace(out.String())
+	stderr := strings.TrimSpace(errOut.String())
+
+	if err != nil {
+		errMsg := stderr
 		if errMsg == "" {
 			errMsg = err.Error()
 		}
-		log.Printf("[Transferer] rsync failed for %s: %s", src, errMsg)
+		log.Printf("[Transferer] rsync failed for %s:\nSTDOUT: %s\nSTDERR: %s", src, stdout, stderr)
 		if t.opts.OnComplete != nil {
 			t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %s", errMsg))
 		}
 		return fmt.Errorf("rsync command failed: %s", errMsg)
+	}
+
+	// Even on success, if stdout has content and we are in verbose mode, log it?
+	// Rsync -av usually produces output.
+	if stdout != "" {
+		log.Printf("[Transferer] rsync output for %s:\n%s", src, stdout)
 	}
 
 	// On success
@@ -381,16 +394,7 @@ func (t *Transferer) CreateDir(path string) error {
 }
 func (t *Transferer) DeleteFile(path string) error {
 	if strings.Contains(path, "::") || strings.HasPrefix(path, "rsync://") {
-		// Deletion via rsync requires sending a delete list or using a specialized command?
-		// Actually, rsync delete is usually part of sync.
-		// But here we are deleting specific files.
-		// Rsync doesn't have a direct "delete single file" command without syncing a directory.
-		// We might need to handle this differently or skip for now.
-		// If we sync an empty source to it... dangerous.
-		// For now, let's log warning and return nil to avoid crashing,
-		// but acknowledging we can't delete remote files easily without SSH.
-		log.Printf("[Transferer] Warning: Deleting remote files is not fully supported via rsync:// yet: %s", path)
-		return nil
+		return t.deleteRemote(path, false)
 	}
 	err := os.Remove(path)
 	if err != nil && os.IsNotExist(err) {
@@ -398,17 +402,49 @@ func (t *Transferer) DeleteFile(path string) error {
 	}
 	return err
 }
+
 func (t *Transferer) DeleteDir(path string) error {
 	if strings.Contains(path, "::") || strings.HasPrefix(path, "rsync://") {
-		log.Printf("[Transferer] Warning: Deleting remote dirs is not fully supported via rsync:// yet: %s", path)
-		return nil
+		return t.deleteRemote(path, true)
 	}
-	err := os.Remove(path)
+	err := os.RemoveAll(path)
 	if err != nil && os.IsNotExist(err) {
 		return nil
 	}
 	return err
 }
+
+func (t *Transferer) deleteRemote(uri string, isDir bool) error {
+	destHost := os.Getenv("DEST_HOST")
+	if destHost == "" {
+		return fmt.Errorf("remote delete failed: DEST_HOST not set")
+	}
+
+	parts := strings.Split(uri, "::")
+	if len(parts) < 2 {
+		return fmt.Errorf("invalid rsync URI format: %s", uri)
+	}
+	remotePath := parts[1]
+
+	apiURL := fmt.Sprintf("http://%s:8080/api/delete?path=%s&dir=%v",
+		destHost, url.QueryEscape(remotePath), isDir)
+
+	log.Printf("[Transferer] Requesting remote delete: %s", apiURL)
+
+	resp, err := http.Post(apiURL, "application/json", nil)
+	if err != nil {
+		return fmt.Errorf("failed to contact receiver API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("receiver API returned status %s", resp.Status)
+	}
+
+	log.Printf("[Transferer] Remote delete successful: %s", remotePath)
+	return nil
+}
+
 func (t *Transferer) RenameFile(oldPath, newPath string) error {
 	if strings.Contains(oldPath, "::") || strings.HasPrefix(oldPath, "rsync://") ||
 		strings.Contains(newPath, "::") || strings.HasPrefix(newPath, "rsync://") {
