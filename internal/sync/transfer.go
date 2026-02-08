@@ -161,15 +161,29 @@ func (t *Transferer) CopyFile(src, dst string) error {
 
 // copyRemote uses the rsync command to transfer a file to a remote destination
 func (t *Transferer) copyRemote(src, dst string) error {
-	// Ensure remote paths use forward slashes for rsync
-	if strings.HasPrefix(dst, "syncuser@") {
-		parts := strings.Split(dst, "::")
-		if len(parts) == 2 {
+	// Root paths in Docker/Linux should already use forward slashes.
+	// But ensure we don't have backslashes from legacy Windows-style configs.
+	src = filepath.ToSlash(src)
+
+	// Normalize remote destination path
+	if strings.Contains(dst, "::") || strings.HasPrefix(dst, "rsync://") {
+		// Force forward slashes in the path part of the URI
+		if strings.Contains(dst, "::") {
+			parts := strings.SplitN(dst, "::", 2)
 			dst = parts[0] + "::" + strings.ReplaceAll(parts[1], "\\", "/")
+		} else {
+			parts := strings.SplitN(dst, "rsync://", 2)
+			dst = "rsync://" + strings.ReplaceAll(parts[1], "\\", "/")
 		}
 	}
 
-	args := []string{"-av", "--partial"}
+	// Construct args:
+	// -a: archive mode
+	// -v: verbose (critically important for diagnosing why files are skipped)
+	// --partial: keep partially transferred files
+	// --protect-args: handles spaces and special chars in paths correctly with daemon protocol
+	args := []string{"-av", "--partial", "--protect-args"}
+
 	if t.opts.BandwidthLimit > 0 {
 		kbps := t.opts.BandwidthLimit / 1024
 		if kbps > 0 {
@@ -177,6 +191,8 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		}
 	}
 	args = append(args, src, dst)
+
+	log.Printf("[Transferer] Executing rsync: %s", strings.Join(args, " "))
 
 	cmd := exec.Command("rsync", args...)
 	cmd.Env = os.Environ()
@@ -193,6 +209,7 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		if errMsg == "" {
 			errMsg = err.Error()
 		}
+		log.Printf("[Transferer] rsync failed for %s: %s", src, errMsg)
 		if t.opts.OnComplete != nil {
 			t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %s", errMsg))
 		}
