@@ -216,7 +216,7 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	}
 
 	// Parse destination to get host and remote path for size monitoring
-	destHost, remotePath := parseRemoteDestination(dst)
+	destHost, remotePath := ParseRemoteDestination(dst)
 	log.Printf("[Transferer] DEBUG: Parsed destination - host: %q, path: %q", destHost, remotePath)
 
 	// Monitor progress by polling file size
@@ -272,8 +272,8 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	}
 }
 
-// parseRemoteDestination extracts host and path from rsync destination
-func parseRemoteDestination(dst string) (host, remotePath string) {
+// ParseRemoteDestination extracts host and path from rsync destination
+func ParseRemoteDestination(dst string) (host, remotePath string) {
 	// Handle rsync://host/module/path format
 	if strings.HasPrefix(dst, "rsync://") {
 		pathPart := strings.TrimPrefix(dst, "rsync://")
@@ -287,6 +287,10 @@ func parseRemoteDestination(dst string) (host, remotePath string) {
 			return pathPart, ""
 		}
 		host = pathPart[:idx]
+		// Remove user@ if present in the host part (extra safety)
+		if uIdx := strings.Index(host, "@"); uIdx != -1 {
+			host = host[uIdx+1:]
+		}
 		// Remove port if present
 		if portIdx := strings.Index(host, ":"); portIdx != -1 {
 			host = host[:portIdx]

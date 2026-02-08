@@ -60,7 +60,7 @@ func TestParseRemoteDestination(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			host, path := parseRemoteDestination(tt.dst)
+			host, path := ParseRemoteDestination(tt.dst)
 			if host != tt.expectedHost {
 				t.Errorf("parseRemoteDestination(%q) host = %q, want %q", tt.dst, host, tt.expectedHost)
 			}

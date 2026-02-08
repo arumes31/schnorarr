@@ -153,3 +153,56 @@ func TestScanner_Inclusions(t *testing.T) {
 		}
 	}
 }
+
+func TestScanner_ScanRemote_URI(t *testing.T) {
+	// Since ScanRemote makes actual HTTP calls, we can't easily test the full function
+	// without a real receiver. But we can test the URI parsing and construction.
+	// Actually, ScanRemote logic was moved to use ParseRemoteDestination.
+	
+	tests := []struct {
+		name     string
+		uri      string
+		destHost string // Environment variable
+		expectedPath string
+		expectedHost string
+	}{
+		{
+			name: "daemon style",
+			uri: "user@host::module/path",
+			destHost: "fallback",
+			expectedPath: "path",
+			expectedHost: "host",
+		},
+		{
+			name: "rsync style",
+			uri: "rsync://host/module/path",
+			destHost: "fallback",
+			expectedPath: "path",
+			expectedHost: "host",
+		},
+		{
+			name: "rsync style with user and port",
+			uri: "rsync://user@host:873/module/path",
+			destHost: "fallback",
+			expectedPath: "path",
+			expectedHost: "host",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv("DEST_HOST", tt.destHost)
+			host, path := ParseRemoteDestination(tt.uri)
+			if host == "" {
+				host = os.Getenv("DEST_HOST")
+			}
+			
+			if host != tt.expectedHost {
+				t.Errorf("Expected host %q, got %q", tt.expectedHost, host)
+			}
+			if path != tt.expectedPath {
+				t.Errorf("Expected path %q, got %q", tt.expectedPath, path)
+			}
+		})
+	}
+}
