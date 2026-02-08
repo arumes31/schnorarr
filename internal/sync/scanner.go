@@ -240,7 +240,11 @@ func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to contact receiver API at %s: %w", destHost, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("[Scanner] Error closing response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("receiver API returned status %s", resp.Status)
