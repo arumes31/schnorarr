@@ -256,10 +256,12 @@ func (t *Transferer) copyRemote(src, dst string) error {
 					// Parse progress format: "    1,234,567  12%  123.45kB/s    0:01:23"
 					// or progress2 format: "     123,456,789  45%  123.45MB/s    0:00:12"
 					// Both formats have bytes as the first field
+					// Only parse lines that start with numbers (skip headers like "sending incremental file list")
 					fields := strings.Fields(line)
 					if len(fields) >= 2 {
 						// First field is bytes transferred (with commas)
 						bytesStr := strings.ReplaceAll(fields[0], ",", "")
+						// Check if first field is actually a number
 						if bytes, parseErr := strconv.ParseInt(bytesStr, 10, 64); parseErr == nil && bytes > 0 {
 							log.Printf("[Transferer] DEBUG: Parsed %d bytes transferred out of %d total", bytes, totalSize)
 							if t.opts.OnProgress != nil && bytes != lastProgress {
@@ -268,7 +270,7 @@ func (t *Transferer) copyRemote(src, dst string) error {
 								lastProgress = bytes
 							}
 						} else {
-							log.Printf("[Transferer] DEBUG: Failed to parse bytes from %q: %v", bytesStr, parseErr)
+							log.Printf("[Transferer] DEBUG: Skipping non-progress line: %q", line)
 						}
 					}
 				}
