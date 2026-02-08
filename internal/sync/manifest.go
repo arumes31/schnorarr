@@ -12,18 +12,18 @@ import (
 
 // FileInfo represents metadata about a single file
 type FileInfo struct {
-	Path    string    // Relative path from sync root
-	Size    int64     // File size in bytes
-	ModTime time.Time // Last modification time
-	Hash    string    // SHA256 hash (computed on demand)
-	IsDir   bool      // True if this is a directory
+	Path    string    `json:"path"`
+	Size    int64     `json:"size"`
+	ModTime time.Time `json:"mod_time"`
+	Hash    string    `json:"hash,omitempty"`
+	IsDir   bool      `json:"is_dir"`
 }
 
 // Manifest represents the complete file tree of a sync location
 type Manifest struct {
-	Root  string               // Absolute path to sync root
-	Files map[string]*FileInfo // Map of relative path -> FileInfo
-	Dirs  map[string]bool      // Set of directories (for quick lookup)
+	Root  string               `json:"root"`
+	Files map[string]*FileInfo `json:"files"`
+	Dirs  map[string]bool      `json:"dirs"`
 }
 
 // NewManifest creates an empty manifest for the given root path

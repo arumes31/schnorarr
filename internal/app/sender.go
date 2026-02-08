@@ -35,7 +35,24 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 		if src == "" || tgt == "" {
 			continue
 		}
-		resolvedTgt := sync.ResolveTargetPath(tgt, os.Getenv("DEST_HOST"), os.Getenv("DEST_MODULE"))
+		var resolvedTgt string
+		destHost := os.Getenv("DEST_HOST")
+		destModule := os.Getenv("DEST_MODULE")
+
+		if destHost != "" && destModule != "" {
+			// Construct Rsync URI: user@host::module/path
+			// e.g. syncuser@192.168.1.50::video-sync/movies
+			rsyncUser := os.Getenv("RSYNC_USER")
+			if rsyncUser == "" {
+				rsyncUser = "syncuser" // Default
+			}
+			// resolvedTgt = fmt.Sprintf("%s@%s::%s/%s", rsyncUser, destHost, destModule, tgt)
+			// Using rsync:// syntax is sometimes safer for parsing, but :: is standard for daemon
+			resolvedTgt = fmt.Sprintf("%s@%s::%s/%s", rsyncUser, destHost, destModule, tgt)
+		} else {
+			// Local fallback (for testing or local-only mode)
+			resolvedTgt = sync.ResolveTargetPath(tgt, "", "")
+		}
 
 		bwlimitBytes := int64(0)
 		if bwStr := os.Getenv("BWLIMIT_MBPS"); bwStr != "" {

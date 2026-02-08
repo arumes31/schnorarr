@@ -84,6 +84,7 @@ func (a *App) Start(port string) error {
 	mux.HandleFunc("/logout", h.Logout)
 
 	// Engine API
+	mux.HandleFunc("/api/manifest", a.ManifestHandler) // NEW
 	mux.HandleFunc("/api/engines/bulk", h.BulkAction)
 	mux.HandleFunc("/api/engine/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/preview") {
