@@ -192,8 +192,8 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	// --partial: keep partially transferred files
 	// --protect-args: handles spaces and special chars in paths correctly with daemon protocol
 	// --mkpath: create missing parent directories on destination (rsync 3.2.3+)
-	// --info=progress2: parseable progress output for real-time tracking
-	args := []string{"-a", "--partial", "--protect-args", "--mkpath", "--info=progress2"}
+	// --progress: show progress during transfer (daemon-compatible)
+	args := []string{"-a", "--partial", "--protect-args", "--mkpath", "--progress"}
 
 	if t.opts.BandwidthLimit > 0 {
 		kbps := t.opts.BandwidthLimit / 1024
@@ -240,7 +240,7 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		}
 	}()
 
-	// Read stdout byte-by-byte to handle \r (carriage return) from --info=progress2
+	// Read stdout byte-by-byte to handle \r (carriage return) from --progress
 	var currentLine strings.Builder
 	var lastProgress int64
 	buf := make([]byte, 1)
@@ -253,7 +253,9 @@ func (t *Transferer) copyRemote(src, dst string) error {
 				line := strings.TrimSpace(currentLine.String())
 				if line != "" {
 					log.Printf("[Transferer] DEBUG: rsync output line: %q", line)
-					// Parse progress2 format: "     123,456,789  45%  123.45MB/s    0:00:12"
+					// Parse progress format: "    1,234,567  12%  123.45kB/s    0:01:23"
+					// or progress2 format: "     123,456,789  45%  123.45MB/s    0:00:12"
+					// Both formats have bytes as the first field
 					fields := strings.Fields(line)
 					if len(fields) >= 2 {
 						// First field is bytes transferred (with commas)
