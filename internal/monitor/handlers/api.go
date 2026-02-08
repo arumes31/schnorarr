@@ -313,9 +313,13 @@ func (h *Handlers) ExportHistory(w http.ResponseWriter, r *http.Request) {
 		history, _ := database.GetHistory(0, 0, "")
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", "attachment;filename=schnorarr-history.csv")
-		_, _ = fmt.Fprintln(w, "Timestamp,Action,Path,Size")
+		if _, err := fmt.Fprintln(w, "Timestamp,Action,Path,Size"); err != nil {
+			return
+		}
 		for _, item := range history {
-			_, _ = fmt.Fprintf(w, "%s,%s,\"%s\",%s\n", item.Time, item.Action, item.Path, item.Size)
+			if _, err := fmt.Fprintf(w, "%s,%s,\"%s\",%s\n", item.Time, item.Action, item.Path, item.Size); err != nil {
+				return
+			}
 		}
 	})(w, r)
 }

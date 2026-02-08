@@ -31,7 +31,9 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 
 	h.wsHub.Register(wsConn)
 	defer func() {
-		_ = wsConn.Close()
+		if err := wsConn.Close(); err != nil {
+			log.Printf("Error closing websocket: %v", err)
+		}
 		h.wsHub.Unregister(wsConn)
 	}()
 
