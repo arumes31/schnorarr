@@ -243,6 +243,7 @@ function updateProgress(data) {
             const speedText = document.getElementById(`engine-current-speed-${eng.id}`);
             const statusPill = document.getElementById(`engine-status-${eng.id}`);
             const radar = document.getElementById(`engine-radar-${eng.id}`);
+            const remoteBadge = document.getElementById(`engine-remote-${eng.id}`);
             const todayText = document.getElementById(`engine-today-${eng.id}`);
             const totalText = document.getElementById(`engine-total-${eng.id}`);
             const elapsedEl = document.getElementById(`engine-elapsed-${eng.id}`);
@@ -256,6 +257,7 @@ function updateProgress(data) {
             if (todayText) todayText.innerText = eng.today;
             if (totalText) totalText.innerText = eng.total;
             if (radar) radar.style.display = eng.is_scanning ? 'flex' : 'none';
+            if (remoteBadge) remoteBadge.style.display = eng.is_remote_scan ? 'block' : 'none';
             if (statusPill) {
                 if (eng.is_active) { statusPill.innerText = 'SYNCING'; statusPill.className = 'status-pill pill-syncing'; }
                 else { const st = eng.is_paused ? 'PAUSED' : 'ACTIVE'; statusPill.innerText = st; statusPill.className = `status-pill pill-${st.toLowerCase()}`; }

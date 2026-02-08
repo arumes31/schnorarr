@@ -1,16 +1,13 @@
 package sync
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -210,121 +207,50 @@ func (s *Scanner) shouldInclude(path string) bool {
 	return false
 }
 
-// ScanRemote scans a remote rsync target first by trying the Agent API, then falling back to rsync
+// ScanRemote scans a remote target via the Agent API
+// It strictly requires DEST_HOST to be set and the receiver to be reachable via HTTP.
 func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
-	// 1. Try API if DEST_HOST is available
 	destHost := os.Getenv("DEST_HOST")
-	if destHost != "" && !strings.HasPrefix(uri, "http") {
-		// Construct API URL
-		// URI is like user@host::module/path
-		// We extract the path part: module/path
-		// Regex or string splitting
-
-		// Expected URI: user@host::module/path
-		parts := strings.Split(uri, "::")
-		if len(parts) > 1 {
-			remotePath := parts[1] // module/path
-			apiURL := fmt.Sprintf("http://%s:8080/api/manifest?path=%s", destHost, remotePath)
-
-			log.Printf("[Scanner] Requesting remote manifest from API: %s", apiURL)
-
-			client := &http.Client{Timeout: 2 * time.Minute}
-			resp, err := client.Get(apiURL)
-			if err == nil && resp.StatusCode == http.StatusOK {
-				defer resp.Body.Close()
-				manifest := &Manifest{}
-				if err := json.NewDecoder(resp.Body).Decode(manifest); err == nil {
-					log.Printf("[Scanner] Received valid manifest from API: %d files", len(manifest.Files))
-					return manifest, nil
-				} else {
-					log.Printf("[Scanner] Failed to decode API manifest: %v", err)
-				}
-			} else {
-				log.Printf("[Scanner] API request failed (trying rsync fallback): %v", err)
-			}
-		}
+	if destHost == "" {
+		return nil, fmt.Errorf("remote scan failed: DEST_HOST environment variable is not set")
 	}
 
-	// 2. Fallback to Rsync CLI (Legacy/Non-Agent)
-	manifest := NewManifest(uri)
-	log.Printf("[Scanner] Scanning remote target via rsync-cli: %s", uri)
+	// URI is like user@host::module/path
+	// We extract the path part: module/path
+	parts := strings.Split(uri, "::")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid rsync URI format: %s", uri)
+	}
 
-	// Set timeout for the scan
+	remotePath := parts[1] // module/path
+	apiURL := fmt.Sprintf("http://%s:8080/api/manifest?path=%s", destHost, remotePath)
+
+	log.Printf("[Scanner] Requesting remote manifest from API: %s", apiURL)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "rsync", "--list-only", "-r", uri)
-
-	// Pass RSYNC_PASSWORD if set
-	cmd.Env = os.Environ()
-	if pass := os.Getenv("RSYNC_PASSWORD"); pass != "" {
-		cmd.Env = append(cmd.Env, "RSYNC_PASSWORD="+pass)
-	}
-
-	out, err := cmd.Output()
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("rsync scan failed: %v, stderr: %s", err, string(exitErr.Stderr))
-		}
-		return nil, fmt.Errorf("rsync scan failed: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		line := scanner.Text()
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact receiver API at %s: %w", destHost, err)
+	}
+	defer resp.Body.Close()
 
-		fields := strings.Fields(line)
-		if len(fields) < 5 {
-			continue
-		}
-
-		// Mode is roughly fields[0]
-		mode := fields[0]
-		isDir := strings.HasPrefix(mode, "d")
-
-		// Size is fields[1], remove commas
-		sizeStr := strings.ReplaceAll(fields[1], ",", "")
-		size, _ := strconv.ParseInt(sizeStr, 10, 64)
-
-		// Simple heuristics: find the date/time combo and take everything after
-		// Looking for YYYY/MM/DD
-		var path string
-		for i, f := range fields {
-			if strings.Contains(f, "/") && strings.Count(f, "/") == 2 && len(f) == 10 {
-				// Found date at index i
-				// Time should be at i+1
-				if i+2 < len(fields) {
-					pathParts := fields[i+2:]
-					path = strings.Join(pathParts, " ")
-				}
-				break
-			}
-		}
-
-		if path == "" || path == "." || path == "./" {
-			continue
-		}
-
-		// Clean path
-		path = strings.TrimPrefix(path, "./")
-
-		// Apply Filters
-		if s.shouldExclude(path) {
-			continue
-		}
-		if !isDir && !s.shouldInclude(path) {
-			continue
-		}
-
-		fileInfo := &FileInfo{
-			Path:  filepath.ToSlash(path),
-			Size:  size,
-			IsDir: isDir,
-		}
-
-		manifest.Add(fileInfo)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("receiver API returned status %s", resp.Status)
 	}
 
-	log.Printf("[Scanner] Finished remote scan of %s: found %d items", uri, len(manifest.Files)+len(manifest.Dirs))
+	manifest := &Manifest{}
+	if err := json.NewDecoder(resp.Body).Decode(manifest); err != nil {
+		return nil, fmt.Errorf("failed to decode manifest JSON: %w", err)
+	}
+
+	log.Printf("[Scanner] Received valid manifest from API: %d files", len(manifest.Files))
 	return manifest, nil
 }

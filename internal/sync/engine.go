@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	stdsync "sync"
 	"time"
 
@@ -288,6 +289,12 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		if err != nil {
 			target, err = e.scanner.ScanLocal(e.config.TargetDir)
 			if err != nil {
+				// CRITICAL: If remote scan fails, do NOT fallback to empty manifest.
+				// This prevents wiping/copying everything if the receiver API is down.
+				if strings.Contains(e.config.TargetDir, "::") || strings.HasPrefix(e.config.TargetDir, "rsync://") {
+					e.pausedMu.Unlock()
+					return fmt.Errorf("aborted sync: failed to fetch remote manifest: %w", err)
+				}
 				target = NewManifest(e.config.TargetDir)
 			}
 		}
@@ -534,11 +541,9 @@ func (e *Engine) sourcePollLoop() {
 			}
 			e.pausedMu.Unlock()
 
-			if lastSource != nil {
-				plan := CompareManifests(currentSource, lastSource, e.config.Rule)
-				if len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.DirsToCreate) > 0 || len(plan.DirsToDelete) > 0 || len(plan.Renames) > 0 {
-					go func() { _ = e.RunSync(currentSource) }()
-				}
+			plan := CompareManifests(currentSource, lastSource, e.config.Rule)
+			if len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.DirsToCreate) > 0 || len(plan.DirsToDelete) > 0 || len(plan.Renames) > 0 {
+				go func() { _ = e.RunSync(currentSource) }()
 			}
 		}
 	}
@@ -707,4 +712,10 @@ func (e *Engine) GetSpeedHistory() []int64 {
 	res := make([]int64, len(e.speedHistory))
 	copy(res, e.speedHistory)
 	return res
+}
+
+func (e *Engine) IsRemoteScan() bool {
+	e.pausedMu.RLock()
+	defer e.pausedMu.RUnlock()
+	return strings.Contains(e.config.TargetDir, "::") || strings.HasPrefix(e.config.TargetDir, "rsync://")
 }
