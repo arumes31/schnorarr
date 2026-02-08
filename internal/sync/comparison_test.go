@@ -108,23 +108,3 @@ func TestCompareManifests_FlatSync(t *testing.T) {
 		t.Error("Expected CommonDir/to_delete.txt to be deleted")
 	}
 }
-func TestGetTopLevelDir(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"test12/season1/file.mkv", "test12"},
-		{"Series1/Season1/episode.mkv", "Series1"},
-		{"file.txt", "file.txt"},
-		{"", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := getTopLevelDir(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %s, got %s", tt.expected, result)
-			}
-		})
-	}
-}

@@ -21,9 +21,6 @@ if [ -n "$TAILSCALE_AUTHKEY" ]; then
     tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="$HOSTNAME" $UP_ARGS
 fi
 
-# Clear rsync caches on startup to ensure fresh state
-rm -f /config/receiver_cache_*.json
-
 if [ "$MODE" = "receiver" ]; then
     echo "Starting rsync daemon (Receiver MODE)..."
     
