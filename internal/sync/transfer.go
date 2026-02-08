@@ -184,7 +184,8 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	// -v: verbose (critically important for diagnosing why files are skipped)
 	// --partial: keep partially transferred files
 	// --protect-args: handles spaces and special chars in paths correctly with daemon protocol
-	args := []string{"-av", "--partial", "--protect-args"}
+	// --mkpath: create missing parent directories on destination (rsync 3.2.3+)
+	args := []string{"-av", "--partial", "--protect-args", "--mkpath"}
 
 	if t.opts.BandwidthLimit > 0 {
 		kbps := t.opts.BandwidthLimit / 1024
