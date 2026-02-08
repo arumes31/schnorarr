@@ -5,20 +5,20 @@ import "time"
 // ConflictDetail provides side-by-side info for files that exist on both ends but differ
 type ConflictDetail struct {
 	Path         string    `json:"path"`
-	SourceSize   int64     `json:"source_size"`
-	SourceTime   time.Time `json:"source_time"`
-	ReceiverSize int64     `json:"receiver_size"`
-	ReceiverTime time.Time `json:"receiver_time"`
+	SourceSize   int64     `json:"sourceSize"`
+	SourceTime   time.Time `json:"sourceTime"`
+	ReceiverSize int64     `json:"receiverSize"`
+	ReceiverTime time.Time `json:"receiverTime"`
 }
 
 // SyncPlan describes the actions needed to sync sender to receiver
 type SyncPlan struct {
-	FilesToSync   []*FileInfo       // Files to copy/update
-	FilesToDelete []string          // Files to delete on receiver
-	DirsToCreate  []string          // Directories to create on receiver
-	DirsToDelete  []string          // Directories to delete on receiver
-	Renames       map[string]string // oldPath -> newPath (on receiver)
-	Conflicts     []*ConflictDetail // Detailed side-by-side info
+	FilesToSync   []*FileInfo       `json:"filesToSync"`
+	FilesToDelete []string          `json:"filesToDelete"`
+	DirsToCreate  []string          `json:"dirsToCreate"`
+	DirsToDelete  []string          `json:"dirsToDelete"`
+	Renames       map[string]string `json:"renames"`
+	Conflicts     []*ConflictDetail `json:"conflicts"`
 }
 
 // CompareManifests compares sender and receiver manifests and creates a sync plan
@@ -53,7 +53,7 @@ func CompareManifests(sender, receiver *Manifest, rule string) *SyncPlan {
 			}
 		}
 	}
-	
+
 	plan.FilesToDelete, plan.DirsToDelete = identifyDeletions(sender, receiver, rule)
 	plan.detectRenames(receiver)
 	return plan

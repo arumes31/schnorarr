@@ -27,7 +27,7 @@ function updateTopFiles(files) {
         list.innerHTML = '<li style="color: var(--text-muted); text-align: center; padding: 10px;">Monitoring for large files...</li>';
         return;
     }
-    list.innerHTML = files.map(f => `<li class="activity-item"><span class="action-badge badge-added">LARGE</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(f.Path)} <span style="color: var(--text-muted); font-size: 11px;">(${f.Size})</span></div></li>`).join('');
+    list.innerHTML = files.map(f => `<li class="activity-item"><span class="action-badge badge-added">LARGE</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(f.path)} <span style="color: var(--text-muted); font-size: 11px;">(${f.size})</span></div></li>`).join('');
 }
 
 function addLogLine(data) {
@@ -259,8 +259,19 @@ function updateProgress(data) {
             if (radar) radar.style.display = eng.is_scanning ? 'flex' : 'none';
             if (remoteBadge) remoteBadge.style.display = eng.is_remote_scan ? 'block' : 'none';
             if (statusPill) {
-                if (eng.is_active) { statusPill.innerText = 'SYNCING'; statusPill.className = 'status-pill pill-syncing'; }
-                else { const st = eng.is_paused ? 'PAUSED' : 'ACTIVE'; statusPill.innerText = st; statusPill.className = `status-pill pill-${st.toLowerCase()}`; }
+                if (eng.is_waiting_approval) {
+                    statusPill.innerText = 'WAITING APPROVAL';
+                    statusPill.className = 'status-pill pill-waiting';
+                }
+                else if (eng.is_active) {
+                    statusPill.innerText = 'SYNCING';
+                    statusPill.className = 'status-pill pill-syncing';
+                }
+                else {
+                    const st = eng.is_paused ? 'PAUSED' : 'ACTIVE';
+                    statusPill.innerText = st;
+                    statusPill.className = `status-pill pill-${st.toLowerCase()}`;
+                }
             }
             if (container && eng.is_active) {
                 container.style.display = 'block';
@@ -488,10 +499,10 @@ async function showPreview(id, mode = 'preview') {
         const plan = await resp.json();
         if (loading) loading.style.display = 'none'; if (body) body.style.display = 'block';
 
-        let totalCount = plan.FilesToSync.length + plan.FilesToDelete.length + plan.Conflicts.length + (plan.Renames ? Object.keys(plan.Renames).length : 0);
-        let deleteCount = plan.FilesToDelete.length + plan.DirsToDelete.length;
+        let totalCount = plan.filesToSync.length + plan.filesToDelete.length + plan.conflicts.length + (plan.renames ? Object.keys(plan.renames).length : 0);
+        let deleteCount = plan.filesToDelete.length + plan.dirsToDelete.length;
 
-        if (stats) stats.innerHTML = `<div class="stat-card" style="padding:15px;"><div class="stat-label">Changes</div><div class="stat-value" style="font-size:20px;">${totalCount}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Sync</div><div class="stat-value" style="font-size:20px;">${plan.FilesToSync.length}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Delete</div><div class="stat-value" style="font-size:20px; color:var(--accent-error);">${deleteCount}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Conflicts</div><div class="stat-value" style="font-size:20px; color:var(--accent-warning);">${plan.Conflicts.length}</div></div>`;
+        if (stats) stats.innerHTML = `<div class="stat-card" style="padding:15px;"><div class="stat-label">Changes</div><div class="stat-value" style="font-size:20px;">${totalCount}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Sync</div><div class="stat-value" style="font-size:20px;">${plan.filesToSync.length}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Delete</div><div class="stat-value" style="font-size:20px; color:var(--accent-error);">${deleteCount}</div></div><div class="stat-card" style="padding:15px;"><div class="stat-label">Conflicts</div><div class="stat-value" style="font-size:20px; color:var(--accent-warning);">${plan.conflicts.length}</div></div>`;
 
         let html = '<table style="width:100%; border-collapse: collapse; font-size:12px;">';
         html += '<tr style="text-align:left; color:var(--text-muted); border-bottom:1px solid var(--border-glass);">';
@@ -507,32 +518,32 @@ async function showPreview(id, mode = 'preview') {
             </tr>`;
         };
 
-        plan.Conflicts.forEach(c => {
-            const isSourceNewer = new Date(c.source_time) > new Date(c.receiver_time);
-            html += renderRow("DIFF", c.path, `<div style="font-size:10px; color:var(--accent-warning);">${isSourceNewer ? 'Sender is NEWER' : 'Sender is OLDER'}</div><div style="font-size:9px; opacity:0.6;">Size diff: ${formatBytes(Math.abs(c.source_size - c.receiver_size))}</div>`, "badge-renamed", false);
+        plan.conflicts.forEach(c => {
+            const isSourceNewer = new Date(c.sourceTime) > new Date(c.receiverTime);
+            html += renderRow("DIFF", c.path, `<div style="font-size:10px; color:var(--accent-warning);">${isSourceNewer ? 'Sender is NEWER' : 'Sender is OLDER'}</div><div style="font-size:9px; opacity:0.6;">Size diff: ${formatBytes(Math.abs(c.sourceSize - c.receiverSize))}</div>`, "badge-renamed", false);
         });
 
-        plan.FilesToSync.forEach(f => {
-            if (!plan.Conflicts.some(c => c.path === f.Path)) {
-                html += renderRow("ADD", f.Path, formatBytes(f.Size), "badge-added");
+        plan.filesToSync.forEach(f => {
+            if (!plan.conflicts.some(c => c.path === f.path)) {
+                html += renderRow("ADD", f.path, formatBytes(f.size), "badge-added");
             }
         });
 
-        plan.Renames = plan.Renames || {};
-        for (const [oldPath, newPath] of Object.entries(plan.Renames)) {
+        plan.renames = plan.renames || {};
+        for (const [oldPath, newPath] of Object.entries(plan.renames)) {
             html += renderRow("MOVE", oldPath, `-> ${escapeHtml(newPath)}`, "badge-renamed");
         }
 
-        plan.FilesToDelete.forEach(p => {
+        plan.filesToDelete.forEach(p => {
             html += renderRow("DEL", p, "-", "badge-deleted");
         });
 
-        plan.DirsToDelete.forEach(p => {
+        plan.dirsToDelete.forEach(p => {
             html += renderRow("DEL-DIR", p, "-", "badge-deleted");
         });
 
-        if (plan.DirsToCreate) {
-            plan.DirsToCreate.forEach(p => {
+        if (plan.dirsToCreate) {
+            plan.dirsToCreate.forEach(p => {
                 html += renderRow("ADD-DIR", p, "-", "badge-added");
             });
         }
@@ -608,8 +619,8 @@ function addHistoryItem(data) {
     if (!list) return;
     const li = document.createElement('li');
     li.className = 'activity-item';
-    const actionClass = data.Action.toLowerCase().trim().replace(/\s+/g, '-');
-    li.innerHTML = `<span class="action-badge badge-${actionClass}">${escapeHtml(data.Action)}</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(data.Path)}</div>`;
+    const actionClass = data.action.toLowerCase().trim().replace(/\s+/g, '-');
+    li.innerHTML = `<span class="action-badge badge-${actionClass}">${escapeHtml(data.action)}</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(data.path)}</div>`;
     list.insertBefore(li, list.firstChild);
     if (list.childNodes.length > 10) list.removeChild(list.lastChild);
 }

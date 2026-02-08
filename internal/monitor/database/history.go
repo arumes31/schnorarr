@@ -8,10 +8,10 @@ import (
 
 // HistoryItem represents a single sync event
 type HistoryItem struct {
-	Time   string
-	Action string
-	Path   string
-	Size   string
+	Time   string `json:"time"`
+	Action string `json:"action"`
+	Path   string `json:"path"`
+	Size   string `json:"size"`
 }
 
 // LogEvent saves a sync event to the database

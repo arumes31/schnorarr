@@ -228,7 +228,6 @@ body {
     flex: 1;
     margin-left: var(--sidebar-width);
     padding: 40px;
-    max-width: 1400px;
 }
 
 /* Top Stats */
@@ -1027,8 +1026,8 @@ input:checked+.slider:before {
     border: 1px solid var(--border-glass);
     border-radius: 16px;
     padding: 30px;
-    width: 90%;
-    max-width: 800px;
+    width: 95%;
+    max-width: 1200px;
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
