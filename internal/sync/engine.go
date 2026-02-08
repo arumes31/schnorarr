@@ -232,7 +232,7 @@ func (e *Engine) PreviewSync() (*SyncPlan, error) {
 		}
 	}
 	e.pausedMu.Unlock()
-	plan := CompareManifests(sourceManifest, e.targetManifest, e.config.Rule)
+	plan := CompareManifests(sourceManifest, e.targetManifest, e.config.Rule, e.IsRemoteScan())
 	return plan, nil
 }
 
@@ -304,7 +304,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	localTarget := e.targetManifest
 	e.pausedMu.Unlock()
 
-	plan := CompareManifests(sourceManifest, localTarget, e.config.Rule)
+	plan := CompareManifests(sourceManifest, localTarget, e.config.Rule, e.IsRemoteScan())
 
 	if len(plan.FilesToSync) == 0 && len(plan.FilesToDelete) == 0 && len(plan.Renames) == 0 && len(plan.DirsToCreate) == 0 && len(plan.DirsToDelete) == 0 {
 		e.pausedMu.Lock()
@@ -543,7 +543,7 @@ func (e *Engine) sourcePollLoop() {
 			}
 			e.pausedMu.Unlock()
 
-			plan := CompareManifests(currentSource, lastSource, e.config.Rule)
+			plan := CompareManifests(currentSource, lastSource, e.config.Rule, false)
 			if len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.DirsToCreate) > 0 || len(plan.DirsToDelete) > 0 || len(plan.Renames) > 0 {
 				go func() { _ = e.RunSync(currentSource) }()
 			}

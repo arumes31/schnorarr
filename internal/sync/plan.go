@@ -22,7 +22,7 @@ type SyncPlan struct {
 }
 
 // CompareManifests compares sender and receiver manifests and creates a sync plan
-func CompareManifests(sender, receiver *Manifest, rule string) *SyncPlan {
+func CompareManifests(sender, receiver *Manifest, rule string, skipRenames bool) *SyncPlan {
 	plan := &SyncPlan{
 		FilesToSync:   make([]*FileInfo, 0),
 		FilesToDelete: make([]string, 0),
@@ -55,7 +55,9 @@ func CompareManifests(sender, receiver *Manifest, rule string) *SyncPlan {
 	}
 
 	plan.FilesToDelete, plan.DirsToDelete = identifyDeletions(sender, receiver, rule)
-	plan.detectRenames(receiver)
+	if !skipRenames {
+		plan.detectRenames(receiver)
+	}
 	return plan
 }
 

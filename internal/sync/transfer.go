@@ -382,10 +382,27 @@ func (t *Transferer) DeleteDir(path string) error {
 	return err
 }
 func (t *Transferer) RenameFile(oldPath, newPath string) error {
+	if strings.Contains(oldPath, "::") || strings.HasPrefix(oldPath, "rsync://") ||
+		strings.Contains(newPath, "::") || strings.HasPrefix(newPath, "rsync://") {
+		return fmt.Errorf("rename not supported for remote targets")
+	}
+
 	dstDir := filepath.Dir(newPath)
 	if err := os.MkdirAll(dstDir, 0755); err != nil {
 		return err
 	}
-	return os.Rename(oldPath, newPath)
+
+	err := os.Rename(oldPath, newPath)
+	if err == nil {
+		return nil
+	}
+
+	// Fallback for cross-device rename: Copy then Delete
+	log.Printf("[Transferer] Rename failed (%v), falling back to copy+delete for %s -> %s", err, oldPath, newPath)
+	if err := t.CopyFile(oldPath, newPath); err != nil {
+		return fmt.Errorf("fallback copy failed: %w", err)
+	}
+
+	return os.Remove(oldPath)
 }
 func (t *Transferer) SetBandwidthLimit(limit int64) { t.opts.BandwidthLimit = limit }
