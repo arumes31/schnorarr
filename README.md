@@ -50,6 +50,7 @@ services:
       - "8080:8080"
     volumes:
       - ./config:/config
+      - ./tailscale-state:/var/lib/tailscale
       - /mnt/media/movies:/source/movies
     environment:
       - MODE=sender
@@ -82,6 +83,7 @@ services:
       # - TAILSCALE_UP_ARGS=--accept-routes
     volumes:
       - /mnt/storage/media:/media
+      - ./tailscale-state:/var/lib/tailscale
     restart: unless-stopped
 ```
 
