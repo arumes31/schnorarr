@@ -181,7 +181,7 @@ func TestGetRemoteFileSize_MalformedJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		// Write invalid JSON
-		w.Write([]byte("{invalid json}"))
+		_, _ = w.Write([]byte("{invalid json}"))
 	}))
 	defer server.Close()
 
