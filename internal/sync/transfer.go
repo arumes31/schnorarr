@@ -50,6 +50,9 @@ func NewTransferer(opts TransferOptions) *Transferer {
 
 // CopyFile copies a file from src to dst with bandwidth limiting and progress reporting
 func (t *Transferer) CopyFile(src, dst string) error {
+	if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
+		return fmt.Errorf("transfer interrupted by pause")
+	}
 	pool.Acquire()
 	defer pool.Release()
 
@@ -164,6 +167,9 @@ func (t *Transferer) CopyFile(src, dst string) error {
 
 // copyRemote uses the rsync command to transfer a file to a remote destination
 func (t *Transferer) copyRemote(src, dst string) error {
+	if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
+		return fmt.Errorf("transfer interrupted by pause")
+	}
 	// Root paths in Docker/Linux should already use forward slashes.
 	// But ensure we don't have backslashes from legacy Windows-style configs.
 	src = filepath.ToSlash(src)
@@ -254,6 +260,15 @@ func (t *Transferer) copyRemote(src, dst string) error {
 			return nil
 
 		case <-ticker.C:
+			// Check if transfer should be paused
+			if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
+				log.Printf("[Transferer] Transfer paused for %s, killing rsync...", src)
+				if cmd.Process != nil {
+					_ = cmd.Process.Kill()
+				}
+				return fmt.Errorf("transfer interrupted by pause")
+			}
+
 			// Poll destination file size
 			if destHost != "" && remotePath != "" {
 				currentSize := getRemoteFileSize(destHost, remotePath)

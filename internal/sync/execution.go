@@ -14,6 +14,9 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 	touchedDirs := make(map[string]bool)
 
 	for _, dirPath := range plan.DirsToCreate {
+		if e.IsPaused() {
+			return touchedDirs, fmt.Errorf("sync interrupted by pause")
+		}
 		fullPath := filepath.Join(e.config.TargetDir, dirPath)
 		parentDir := filepath.Dir(dirPath)
 		if parentDir == "." {
@@ -33,6 +36,9 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 	}
 
 	for oldPath, newPath := range plan.Renames {
+		if e.IsPaused() {
+			return touchedDirs, fmt.Errorf("sync interrupted by pause")
+		}
 		touchedDirs[filepath.Dir(oldPath)] = true
 		touchedDirs[filepath.Dir(newPath)] = true
 		if isDryRun {
@@ -54,12 +60,18 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 	}
 
 	for _, file := range plan.FilesToSync {
+		if e.IsPaused() {
+			return touchedDirs, fmt.Errorf("sync interrupted by pause")
+		}
 		touchedDirs[filepath.Dir(file.Path)] = true
 		if isDryRun {
 			e.reportEvent(timestamp, "DRY-Added", file.Path, file.Size)
 		} else {
 			srcPath, dstPath := filepath.Join(e.config.SourceDir, file.Path), filepath.Join(e.config.TargetDir, file.Path)
 			if err := e.transferer.CopyFile(srcPath, dstPath); err != nil {
+				if err.Error() == "transfer interrupted by pause" {
+					return touchedDirs, err
+				}
 				log.Printf("[%s] Error: Failed to copy %s: %v", e.config.ID, file.Path, err)
 				e.reportError(fmt.Sprintf("Failed to copy %s: %v", file.Path, err))
 				e.pausedMu.Lock()
@@ -91,6 +103,9 @@ func (e *Engine) executeCleanupPhase(plan *SyncPlan, targetManifest *Manifest, t
 	}
 
 	for _, filePath := range plan.FilesToDelete {
+		if e.IsPaused() {
+			return fmt.Errorf("sync interrupted by pause")
+		}
 		if isDryRun {
 			e.reportEvent(timestamp, "DRY-Deleted", filePath, 0)
 		} else {
@@ -105,6 +120,9 @@ func (e *Engine) executeCleanupPhase(plan *SyncPlan, targetManifest *Manifest, t
 	}
 
 	for i := len(plan.DirsToDelete) - 1; i >= 0; i-- {
+		if e.IsPaused() {
+			return fmt.Errorf("sync interrupted by pause")
+		}
 		dirPath := plan.DirsToDelete[i]
 		if isDryRun {
 			e.reportEvent(timestamp, "DRY-Deleted", dirPath, 0)
