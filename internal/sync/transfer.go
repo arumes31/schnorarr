@@ -159,29 +159,10 @@ func (t *Transferer) CopyFile(src, dst string) error {
 	}
 
 	log.Printf("[Transferer] Successfully copied %s (%d bytes)", src, bytesTransferred)
-	if strings.Contains(dst, "::") || strings.HasPrefix(dst, "rsync://") {
-		t.notifyReceiver(dst)
-	}
 	if t.opts.OnComplete != nil {
 		t.opts.OnComplete(filepath.Base(src), bytesTransferred, nil)
 	}
 	return nil
-}
-
-// notifyReceiver calls the /api/notify endpoint on the receiver to invalidate cache
-func (t *Transferer) notifyReceiver(uri string) {
-	host, path := ParseRemoteDestination(uri)
-	if host == "" {
-		return
-	}
-
-	apiURL := fmt.Sprintf("http://%s:8080/api/notify?path=%s", host, url.QueryEscape(path))
-	resp, err := http.Post(apiURL, "application/json", nil)
-	if err != nil {
-		log.Printf("[Transferer] Warning: Failed to notify receiver: %v", err)
-		return
-	}
-	_ = resp.Body.Close()
 }
 
 // copyRemote uses the rsync command to transfer a file to a remote destination
@@ -290,7 +271,6 @@ func (t *Transferer) copyRemote(src, dst string) error {
 				}
 
 				log.Printf("[Transferer] Successfully transferred %s (%d bytes)", src, totalSize)
-				t.notifyReceiver(dst)
 				if t.opts.OnComplete != nil {
 					t.opts.OnComplete(filepath.Base(src), totalSize, nil)
 				}
@@ -627,7 +607,6 @@ func (t *Transferer) deleteRemote(uri string, isDir bool) error {
 	}
 
 	log.Printf("[Transferer] Remote delete successful: %s", remotePath)
-	t.notifyReceiver(uri)
 	return nil
 }
 

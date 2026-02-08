@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"schnorarr/internal/sync"
 )
@@ -94,19 +93,6 @@ func (a *App) ManifestHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check cache
-	a.cacheMu.Lock()
-	entry, exists := a.manifestCache[fullPath]
-	if exists && time.Now().Before(entry.expiry) {
-		a.cacheMu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(entry.manifest); err != nil {
-			log.Printf("Failed to encode cached manifest: %v", err)
-		}
-		return
-	}
-	a.cacheMu.Unlock()
-
 	// Scan!
 	scanner := sync.NewScanner()
 	manifest, err := scanner.ScanLocal(fullPath)
@@ -114,14 +100,6 @@ func (a *App) ManifestHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Scan failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// Update cache
-	a.cacheMu.Lock()
-	a.manifestCache[fullPath] = manifestCacheEntry{
-		manifest: manifest,
-		expiry:   time.Now().Add(12 * time.Hour),
-	}
-	a.cacheMu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(manifest); err != nil {
