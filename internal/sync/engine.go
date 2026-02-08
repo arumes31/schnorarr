@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -155,7 +156,52 @@ func NewEngine(config SyncConfig) *Engine {
 	})
 
 	e.transferer = transferer
+	e.LoadState()
 	return e
+}
+
+func (e *Engine) LoadState() {
+	state, err := database.LoadEngineState(e.config.ID)
+	if err != nil {
+		log.Printf("[%s] Failed to load engine state: %v", e.config.ID, err)
+		return
+	}
+
+	e.pausedMu.Lock()
+	e.waitingForApproval = state.WaitingForApproval
+	e.pendingDeletions = state.PendingDeletions
+	e.pausedMu.Unlock()
+
+	// Handle queued sync if any
+	jsonStr, err := database.LoadEngineQueue(e.config.ID)
+	if err == nil && jsonStr != "" {
+		var m Manifest
+		if err := json.Unmarshal([]byte(jsonStr), &m); err == nil {
+			e.pausedMu.Lock()
+			e.syncQueued = true
+			e.queuedManifest = &m
+			e.pausedMu.Unlock()
+			log.Printf("[%s] Restored queued sync from persistence", e.config.ID)
+		}
+	}
+}
+
+func (e *Engine) savePersistentState() {
+	_ = database.SaveEngineState(e.config.ID, e.waitingForApproval, e.pendingDeletions, nil)
+}
+
+func (e *Engine) savePersistentStateWithConflicts(conflicts []*ConflictDetail) {
+	persConflicts := make([]database.ConflictPersistence, len(conflicts))
+	for i, c := range conflicts {
+		persConflicts[i] = database.ConflictPersistence{
+			Path:         c.Path,
+			SourceSize:   c.SourceSize,
+			SourceTime:   c.SourceTime.Unix(),
+			ReceiverSize: c.ReceiverSize,
+			ReceiverTime: c.ReceiverTime.Unix(),
+		}
+	}
+	_ = database.SaveEngineState(e.config.ID, e.waitingForApproval, e.pendingDeletions, persConflicts)
 }
 
 func (e *Engine) SetHealthState(s *health.State) {
@@ -249,6 +295,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		e.syncQueued = true
 		if sourceManifest != nil {
 			e.queuedManifest = sourceManifest
+			_ = database.SaveEngineQueue(e.config.ID, sourceManifest)
 		}
 		e.pausedMu.Unlock()
 		return nil
@@ -260,6 +307,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		nextManifest := e.queuedManifest
 		e.syncQueued = false
 		e.queuedManifest = nil
+		_ = database.ClearEngineQueue(e.config.ID)
 		e.pausedMu.Unlock()
 		if wasQueued {
 			time.Sleep(1 * time.Second)
@@ -311,6 +359,8 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		e.lastSyncTime = time.Now()
 		e.lastSourceManifest = sourceManifest
 		e.pausedMu.Unlock()
+		// Clear persistent state on clean sync
+		_ = database.SaveEngineState(e.config.ID, false, nil, nil)
 		return nil
 	}
 
@@ -340,6 +390,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		for oldP := range plan.Renames {
 			e.pendingDeletions = append(e.pendingDeletions, oldP)
 		}
+		e.savePersistentState()
 		e.pausedMu.Unlock()
 		return nil
 	}
@@ -349,6 +400,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		for _, c := range plan.Conflicts {
 			e.pendingDeletions = append(e.pendingDeletions, c.Path)
 		}
+		e.savePersistentStateWithConflicts(plan.Conflicts)
 		e.pausedMu.Unlock()
 		return nil
 	}
@@ -361,6 +413,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		e.pausedMu.Lock()
 		e.waitingForApproval = true
 		e.pendingDeletions = append(plan.FilesToDelete, plan.DirsToDelete...)
+		e.savePersistentState()
 		e.pausedMu.Unlock()
 		return nil
 	}
@@ -415,6 +468,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		e.deletionAllowed = false
 		e.waitingForApproval = false
 		e.pendingDeletions = nil
+		_ = database.SaveEngineState(e.config.ID, false, nil, nil) // Clear state once approved
 	}
 	e.pausedMu.Unlock()
 
