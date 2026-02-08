@@ -1,7 +1,6 @@
 package sync
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -241,22 +240,38 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		}
 	}()
 
-	scanner := bufio.NewScanner(stdout)
+	// Read stdout byte-by-byte to handle \r (carriage return) from --info=progress2
+	var currentLine strings.Builder
 	var lastProgress int64
-	for scanner.Scan() {
-		line := scanner.Text()
-		// Parse progress2 format: "     123,456,789  45%  123.45MB/s    0:00:12"
-		// The format shows: bytes transferred, percentage, speed, and time remaining
-		fields := strings.Fields(line)
-		if len(fields) >= 3 {
-			// First field is bytes transferred (with commas)
-			bytesStr := strings.ReplaceAll(fields[0], ",", "")
-			if bytes, err := strconv.ParseInt(bytesStr, 10, 64); err == nil && bytes > 0 {
-				if t.opts.OnProgress != nil && bytes != lastProgress {
-					t.opts.OnProgress(src, bytes, totalSize)
-					lastProgress = bytes
+	buf := make([]byte, 1)
+	for {
+		n, err := stdout.Read(buf)
+		if n > 0 {
+			ch := buf[0]
+			if ch == '\r' || ch == '\n' {
+				// End of a progress line, parse it
+				line := strings.TrimSpace(currentLine.String())
+				if line != "" {
+					// Parse progress2 format: "     123,456,789  45%  123.45MB/s    0:00:12"
+					fields := strings.Fields(line)
+					if len(fields) >= 2 {
+						// First field is bytes transferred (with commas)
+						bytesStr := strings.ReplaceAll(fields[0], ",", "")
+						if bytes, parseErr := strconv.ParseInt(bytesStr, 10, 64); parseErr == nil && bytes > 0 {
+							if t.opts.OnProgress != nil && bytes != lastProgress {
+								t.opts.OnProgress(src, bytes, totalSize)
+								lastProgress = bytes
+							}
+						}
+					}
 				}
+				currentLine.Reset()
+			} else {
+				currentLine.WriteByte(ch)
 			}
+		}
+		if err != nil {
+			break
 		}
 	}
 
