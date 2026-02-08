@@ -306,7 +306,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 
 	plan := CompareManifests(sourceManifest, localTarget, e.config.Rule)
 
-	if len(plan.FilesToSync) == 0 && len(plan.FilesToDelete) == 0 && len(plan.DirsToCreate) == 0 && len(plan.DirsToDelete) == 0 && len(plan.Renames) == 0 {
+	if len(plan.FilesToSync) == 0 && len(plan.FilesToDelete) == 0 && len(plan.Renames) == 0 && len(plan.DirsToCreate) == 0 && len(plan.DirsToDelete) == 0 {
 		e.pausedMu.Lock()
 		e.lastSyncTime = time.Now()
 		e.lastSourceManifest = sourceManifest
@@ -322,6 +322,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	e.planRemainingBytes = totalPlanSize
 	e.pausedMu.Unlock()
 
+	log.Printf("[Engine:%s] Sync cycle started for %s", e.config.ID, e.alias)
 	log.Printf("[%s] Sync Plan: %d syncs, %d deletes, %d renames, %d mkdirs, %d conflicts",
 		e.config.ID, len(plan.FilesToSync), len(plan.FilesToDelete), len(plan.Renames), len(plan.DirsToCreate), len(plan.Conflicts))
 
@@ -449,7 +450,8 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	e.lastSourceManifest = sourceManifest
 	e.pausedMu.Unlock()
 
-	log.Printf("[%s] Sync completed in %v", e.config.ID, time.Since(start))
+	log.Printf("[Engine:%s] Sync completed in %v. Files: %d, Deletes: %d, Renames: %d",
+		e.config.ID, time.Since(start), len(plan.FilesToSync), len(plan.FilesToDelete), len(plan.Renames))
 	return nil
 }
 

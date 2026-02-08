@@ -87,6 +87,9 @@ function addLogLine(data) {
         else if (content.includes('Transferer')) cls = 'log-comp-transferer';
         else if (content.includes('Database')) cls = 'log-comp-database';
         else if (content.includes('Health')) cls = 'log-comp-health';
+        else if (content.includes('SYSTEM')) cls = 'log-comp-error';
+        else if (content.includes('Engine')) cls = 'log-comp-scanner';
+        else if (content.includes('Event')) cls = 'log-comp-health';
         else if (content.match(/^\d+$/)) cls = 'log-comp-number';
         else if (content.includes('ERROR')) cls = 'log-comp-error';
 
@@ -622,7 +625,13 @@ function addHistoryItem(data) {
     const actionClass = data.action.toLowerCase().trim().replace(/\s+/g, '-');
     li.innerHTML = `<span class="action-badge badge-${actionClass}">${escapeHtml(data.action)}</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(data.path)}</div>`;
     list.insertBefore(li, list.firstChild);
-    if (list.childNodes.length > 10) list.removeChild(list.lastChild);
+    if (list.childNodes.length > 15) list.removeChild(list.lastChild);
+
+    // Mirror to live log
+    addLogLine({
+        msg: `[Event] ${data.action}: ${data.path}`,
+        level: 'info'
+    });
 }
 
 const NodeMap = {
