@@ -115,6 +115,7 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			Engines                                    []EngineView
 			ReceiverVersion, ReceiverUptime            string
 			SenderOverride                             bool
+			Timestamp                                  int64
 		}{
 			Time: time.Now().Format("2006-01-02 15:04:05"), Healthy: healthy, State: state, LastErrorMsg: lastErr, Progress: progress, LsyncdStatus: status, Queued: queued, History: history,
 			TrafficToday: database.FormatBytes(traffic.Today), TrafficTotal: database.FormatBytes(traffic.Total), TrafficYesterday: database.FormatBytes(yesterday),
@@ -122,6 +123,7 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			CurrentSpeed: currentSpeed, ETA: eta, SyncMode: database.GetSetting("sync_mode", "dry"), AutoApproveDeletions: database.GetSetting("auto_approve", "off"),
 			Engines: engineViews, ReceiverHealthy: h_rec,
 			ReceiverVersion: rVer, ReceiverUptime: rUp, SenderOverride: h.healthState.IsOverrideEnabled(),
+			Timestamp: time.Now().Unix(),
 		}
 
 		funcMap := template.FuncMap{"lower": strings.ToLower}

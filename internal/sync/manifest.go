@@ -14,9 +14,9 @@ import (
 type FileInfo struct {
 	Path    string    `json:"path"`
 	Size    int64     `json:"size"`
-	ModTime time.Time `json:"mod_time"`
+	ModTime time.Time `json:"modTime"`
 	Hash    string    `json:"hash,omitempty"`
-	IsDir   bool      `json:"is_dir"`
+	IsDir   bool      `json:"isDir"`
 }
 
 // Manifest represents the complete file tree of a sync location

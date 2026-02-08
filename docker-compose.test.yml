@@ -22,6 +22,9 @@ services:
       - POLL_INTERVAL=10
       - DEST_HOST=receiver
       - DEST_MODULE=video-sync
+      - AUTH_ENABLED=true
+      - ADMIN_USER=admin
+      - ADMIN_PASS=schnorarr
 
       # 1. Sender 1 -> Receiver 1 (Series Profile)
       - SYNC_1_SOURCE=/data/sender1

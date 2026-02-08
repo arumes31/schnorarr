@@ -24,6 +24,7 @@ func LogEvent(timestamp, action, path string, size int64, engineID string) error
 // LogSystemEvent saves a system/admin event to the database
 func LogSystemEvent(user, action, details string) error {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	log.Printf("[SYSTEM] %s: %s (%s)", user, action, details)
 	_, err := DB.Exec("INSERT INTO history (timestamp, action, file_path, size_bytes, engine_id) VALUES (?, ?, ?, ?, ?)",
 		timestamp, action, details, 0, "SYSTEM")
 	return err

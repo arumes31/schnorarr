@@ -76,8 +76,8 @@
             <div class="mode-toggle-container">
                 <span style="font-size: 11px; font-weight: bold; color: var(--text-muted);">AUTO-APPROVE</span>
                 <label class="switch">
-                    <input type="checkbox" id="auto-approve-toggle" onchange="updateAutoApprove(this)" {{if eq
-                        .AutoApproveDeletions "on" }}checked{{end}}>
+                    {{$checked := ""}}{{if eq .AutoApproveDeletions "on"}}{{$checked = "checked"}}{{end}}
+                    <input type="checkbox" id="auto-approve-toggle" onchange="updateAutoApprove(this)" {{$checked}}>
                     <span class="slider"></span>
                 </label>
             </div>
@@ -132,9 +132,11 @@
             <div>
                 <h1 style="font-size: 32px; font-weight: 800; margin: 0;">Sync Center</h1>
                 <p style="color: var(--text-muted); margin: 5px 0 0 0;">
-                    System: <span id="main-status-badge" class="status-pill {{if eq .State " ACTIVE"}}pill-active{{else
-                        if eq .State "PAUSED" }}pill-paused{{else if eq .State "SYNCING"
-                        }}pill-syncing{{else}}pill-critical{{end}}">{{.State}}</span>
+                    {{$sysClass := "pill-critical"}}
+                    {{if eq .State "ACTIVE"}}{{$sysClass = "pill-active"}}
+                    {{else if eq .State "PAUSED"}}{{$sysClass = "pill-paused"}}
+                    {{else if eq .State "SYNCING"}}{{$sysClass = "pill-syncing"}}{{end}}
+                    System: <span id="main-status-badge" class="status-pill {{$sysClass}}">{{.State}}</span>
                     <span style="margin: 0 8px; color: var(--border-glass);">|</span>
                     Receiver: <span id="receiver-badge"
                         class="status-pill {{if .ReceiverHealthy}}pill-active{{else}}pill-critical{{end}}"
@@ -236,10 +238,19 @@
                     <div style="display: flex; gap: 8px; align-items: center;">
                         <span id="engine-queue-{{.ID}}" class="status-pill pill-rule"
                             style="display: none; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6;"></span>
-                        {{if .Rule}}<span class="status-pill pill-rule" title="Rule: {{if eq .Rule " flat"}}Syncs into
-                            root{{else if eq .Rule "series" }}Hierarchy{{else}}Standard{{end}}">{{.Rule}}</span>{{end}}
-                        <span id="engine-status-{{.ID}}"
-                            class="status-pill {{if .WaitingForApproval}}pill-waiting{{else if (gt .CurrentPercent 0.0)}}pill-syncing{{else if eq .State "ACTIVE"}}pill-active{{else if eq .State "PAUSED" }}pill-paused{{else}}pill-critical{{end}}">
+
+                        {{$ruleTitle := "Standard"}}{{$rule := .Rule}}
+                        {{if eq $rule "flat"}}{{$ruleTitle = "Syncs into root"}}
+                        {{else if eq $rule "series"}}{{$ruleTitle = "Hierarchy"}}{{end}}
+                        {{if .Rule}}<span class="status-pill pill-rule"
+                            title="Rule: {{$ruleTitle}}">{{.Rule}}</span>{{end}}
+
+                        {{$engClass := "pill-critical"}}
+                        {{if .WaitingForApproval}}{{$engClass = "pill-waiting"}}
+                        {{else if (gt .CurrentPercent 0.0)}}{{$engClass = "pill-syncing"}}
+                        {{else if eq .State "ACTIVE"}}{{$engClass = "pill-active"}}
+                        {{else if eq .State "PAUSED"}}{{$engClass = "pill-paused"}}{{end}}
+                        <span id="engine-status-{{.ID}}" class="status-pill {{$engClass}}">
                             {{if (gt .CurrentPercent 0.0)}}SYNCING{{else}}{{.State}}{{end}}
                         </span>
                     </div>
@@ -480,7 +491,7 @@
     </div>
 
     <script>window.lastSystemError = "{{.LastErrorMsg}}";</script>
-    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/dashboard.js?v={{.Timestamp}}"></script>
 </body>
 
 </html>
