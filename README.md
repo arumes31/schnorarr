@@ -234,7 +234,7 @@ Beyond the basic setup, you can fine-tune Schnorarr using these environment vari
 | :--- | :--- | :--- |
 | `MIN_DISK_SPACE_GB` | (Sender) Stop syncing if source disk space falls below this. | `0` (Disabled) |
 | `MAX_RETRIES` | (Sender) Number of attempts to connect to receiver before failing. | `30` |
-| `CONFIG_DIR` | Path to store logs and cached manifests. | `/config` |
+| `CONFIG_DIR` | Path to store logs and database. | `/config` |
 | `BWLIMIT_MBPS` | Global bandwidth limit for all transfers in Mbps. | `0` (Unlimited) |
 | `RSYNC_PASSWORD` | Optional: Password for authenticated rsync transfers. | - |
 
@@ -261,7 +261,7 @@ Power users can interact with Schnorarr via its REST API:
 
 *   **Receiver Offline**: Ensure `DEST_HOST` is reachable from the sender container and port `873` (rsync) and `8080` (health) are open.
 *   **Permission Denied**: Check `PUID`/`PGID` settings. Ensure the container has write access to the mounted volumes.
-*   **Stuck Sync**: Use the **"Reset Engine"** button in the dashboard to clear the local manifest cache and force a full re-scan.
+*   **Stuck Sync**: Use the **"Reset Engine"** button in the dashboard to force a full re-scan.
 
 ## 🖼️ Screenshots
 

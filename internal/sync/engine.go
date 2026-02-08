@@ -27,7 +27,6 @@ type Engine struct {
 	paused             bool
 	lastSyncTime       time.Time
 	lastSourceManifest *Manifest // Cached source manifest for quick polling comparison
-	targetManifest     *Manifest // In-memory cache of receiver state
 	syncMu             stdsync.Mutex
 	syncQueued         bool      // True if a sync is requested while one is running
 	queuedManifest     *Manifest // Store provided manifest for the queued run
@@ -258,31 +257,13 @@ func (e *Engine) PreviewSync() (*SyncPlan, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan source: %w", err)
 	}
-	// Lock to protect targetManifest initialization
-	e.pausedMu.Lock()
-	if e.targetManifest == nil {
-		// Optimization: For remote scans, we ALWAYS want the fresh truth for a preview
-		// rather than a potentially stale local JSON file.
-		if e.IsRemoteScan() {
-			e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
-			if err != nil {
-				e.pausedMu.Unlock()
-				return nil, fmt.Errorf("failed to scan remote target: %w", err)
-			}
-		} else {
-			cachePath := e.getCachePath()
-			var err error
-			e.targetManifest, err = LoadFromFile(cachePath)
-			if err != nil {
-				e.targetManifest, err = e.scanner.ScanLocal(e.config.TargetDir)
-				if err != nil {
-					e.targetManifest = NewManifest(e.config.TargetDir)
-				}
-			}
-		}
+
+	targetManifest, err := e.scanner.ScanLocal(e.config.TargetDir)
+	if err != nil {
+		targetManifest = NewManifest(e.config.TargetDir)
 	}
-	e.pausedMu.Unlock()
-	plan := CompareManifests(sourceManifest, e.targetManifest, e.config.Rule, e.IsRemoteScan())
+
+	plan := CompareManifests(sourceManifest, targetManifest, e.config.Rule, e.IsRemoteScan())
 	return plan, nil
 }
 
@@ -333,33 +314,13 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 			return fmt.Errorf("failed to scan source: %w", err)
 		}
 	}
-	e.pausedMu.Lock()
-	if e.targetManifest == nil {
-		if e.IsRemoteScan() {
-			target, err := e.scanner.ScanLocal(e.config.TargetDir)
-			if err != nil {
-				e.pausedMu.Unlock()
-				return fmt.Errorf("aborted sync: failed to fetch remote manifest: %w", err)
-			}
-			e.targetManifest = target
-		} else {
-			cachePath := e.getCachePath()
-			var err error
-			target, err := LoadFromFile(cachePath)
-			if err != nil {
-				target, err = e.scanner.ScanLocal(e.config.TargetDir)
-				if err != nil {
-					target = NewManifest(e.config.TargetDir)
-				}
-			}
-			e.targetManifest = target
-		}
-	}
-	// Capture targetManifest to local variable to use outside lock
-	localTarget := e.targetManifest
-	e.pausedMu.Unlock()
 
-	plan := CompareManifests(sourceManifest, localTarget, e.config.Rule, e.IsRemoteScan())
+	targetManifest, err := e.scanner.ScanLocal(e.config.TargetDir)
+	if err != nil {
+		targetManifest = NewManifest(e.config.TargetDir)
+	}
+
+	plan := CompareManifests(sourceManifest, targetManifest, e.config.Rule, e.IsRemoteScan())
 
 	if len(plan.FilesToSync) == 0 && len(plan.FilesToDelete) == 0 && len(plan.Renames) == 0 && len(plan.DirsToCreate) == 0 && len(plan.DirsToDelete) == 0 {
 		e.pausedMu.Lock()
@@ -493,18 +454,17 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	plan.FilesToSync = finalFilesToSync
 	e.pausedMu.Unlock()
 
-	touchedDirs, err := e.executeSyncPhase(plan, e.targetManifest)
+	touchedDirs, err := e.executeSyncPhase(plan, targetManifest)
 	if err != nil {
 		database.ReportEngineError(e.config.ID, err.Error())
 		return fmt.Errorf("sync failed: %w", err)
 	}
-	if err := e.executeCleanupPhase(plan, e.targetManifest, touchedDirs); err != nil {
+	if err := e.executeCleanupPhase(plan, targetManifest, touchedDirs); err != nil {
 		database.ReportEngineError(e.config.ID, err.Error())
 		return fmt.Errorf("cleanup failed: %w", err)
 	}
 
 	database.ReportEngineSuccess(e.config.ID)
-	_ = e.targetManifest.SaveToFile(e.getCachePath())
 
 	e.pausedMu.Lock()
 	e.lastSyncTime = time.Now()
@@ -514,14 +474,6 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	log.Printf("[Engine:%s] Sync completed in %v. Files: %d, Deletes: %d, Renames: %d",
 		e.config.ID, time.Since(start), len(plan.FilesToSync), len(plan.FilesToDelete), len(plan.Renames))
 	return nil
-}
-
-func (e *Engine) getCachePath() string {
-	configDir := os.Getenv("CONFIG_DIR")
-	if configDir == "" {
-		configDir = "/config"
-	}
-	return filepath.Join(configDir, fmt.Sprintf("receiver_cache_%s.json", e.config.ID))
 }
 
 func (e *Engine) isDryRun() bool {

@@ -3,7 +3,6 @@ package sync
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -88,41 +87,4 @@ func (fi *FileInfo) NeedsUpdate(other *FileInfo) bool {
 	// File needs update if size differs or sender is newer
 	// We use a small epsilon for time comparison to account for filesystem precision differences
 	return fi.Size != other.Size || fi.ModTime.After(other.ModTime.Add(time.Second))
-}
-
-// SaveToFile saves the manifest to a JSON file
-func (m *Manifest) SaveToFile(path string) error {
-	data, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal manifest: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("failed to write manifest to file: %w", err)
-	}
-
-	return nil
-}
-
-// LoadFromFile loads a manifest from a JSON file
-func LoadFromFile(path string) (*Manifest, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest file: %w", err)
-	}
-
-	var m Manifest
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
-	}
-
-	// Ensure maps are not nil
-	if m.Files == nil {
-		m.Files = make(map[string]*FileInfo)
-	}
-	if m.Dirs == nil {
-		m.Dirs = make(map[string]bool)
-	}
-
-	return &m, nil
 }

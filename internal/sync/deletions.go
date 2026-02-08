@@ -10,51 +10,71 @@ import (
 func identifyDeletions(sender, receiver *Manifest, rule string) (filesToDelete, dirsToDelete []string) {
 	filesToDelete = make([]string, 0)
 
-	// Identify receiver-only top-level directories
-	receiverOnlyDirs := make(map[string]bool)
+	// Identify receiver-only directories
+	// A directory is considered "protected" if it or any of its parent directories
+	// do not exist on the sender.
+	protectedDirs := make(map[string]bool)
 
 	for dir := range receiver.Dirs {
-		// Get top-level directory
-		topLevel := getTopLevelDir(dir)
-		if topLevel == "" {
-			continue
-		}
+		parts := strings.Split(filepath.ToSlash(dir), "/")
+		current := ""
+		for i, part := range parts {
+			if i == 0 {
+				current = part
+			} else {
+				current = current + "/" + part
+			}
 
-		// Check if this top-level dir exists on sender
-		if !sender.HasDir(topLevel) && !sender.HasFile(topLevel) {
-			receiverOnlyDirs[topLevel] = true
+			// If this directory component does not exist on the sender,
+			// then the entire directory tree from here down is protected.
+			if !sender.HasDir(current) && !sender.HasFile(current) {
+				protectedDirs[dir] = true
+				break
+			}
 		}
 	}
 
 	// Process receiver files
 	for path, receiverFile := range receiver.Files {
-		// Get top-level component for this file
-		topLevel := getTopLevelDir(path)
+		if receiverFile.IsDir {
+			continue
+		}
 
-		// Skip if this path is protected (resides in or IS a receiver-only top-level dir)
-		if receiverOnlyDirs[topLevel] {
+		// Check if the file's parent directory is protected
+		parent := filepath.ToSlash(filepath.Dir(path))
+		if parent == "." {
+			// At root, check if the file itself exists on sender
+			if !sender.HasFile(path) {
+				filesToDelete = append(filesToDelete, path)
+			}
+			continue
+		}
+
+		isProtected := false
+		parts := strings.Split(parent, "/")
+		current := ""
+		for i, part := range parts {
+			if i == 0 {
+				current = part
+			} else {
+				current = current + "/" + part
+			}
+			if protectedDirs[current] {
+				isProtected = true
+				break
+			}
+		}
+
+		if isProtected {
 			continue
 		}
 
 		// Check if file exists on sender
 		if !sender.HasFile(path) {
-			if !receiverFile.IsDir {
-				filesToDelete = append(filesToDelete, path)
-			}
+			filesToDelete = append(filesToDelete, path)
 		}
 	}
 
 	return filesToDelete, []string{}
 }
 
-// getTopLevelDir extracts the first directory component from a path
-// e.g., "test12/season1/file.mkv" -> "test12"
-// e.g., "Series1" -> "Series1"
-func getTopLevelDir(path string) string {
-	normalized := filepath.ToSlash(path)
-	parts := strings.Split(normalized, "/")
-	if len(parts) == 0 {
-		return ""
-	}
-	return parts[0]
-}
