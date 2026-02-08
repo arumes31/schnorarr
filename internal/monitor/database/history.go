@@ -50,7 +50,7 @@ func GetHistory(limit, offset int, query string) ([]HistoryItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []HistoryItem
 	for rows.Next() {
@@ -88,7 +88,7 @@ func GetTopFiles() []HistoryItem {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []HistoryItem
 	for rows.Next() {

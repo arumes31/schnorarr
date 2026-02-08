@@ -50,7 +50,7 @@ func (t *Tailer) Start() {
 		log.Printf("Failed to open Log: %v", err)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Move to end
 	if _, err := file.Seek(0, 2); err != nil {

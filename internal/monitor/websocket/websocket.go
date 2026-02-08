@@ -76,7 +76,7 @@ func (h *Hub) Broadcast(msgType string, data interface{}) {
 		err := client.WriteJSON(msg)
 		if err != nil {
 			fmt.Printf("WS Error: %v\n", err)
-			client.Close()
+			_ = client.Close()
 			h.Unregister(client)
 		}
 	}

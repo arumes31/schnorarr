@@ -31,7 +31,7 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 
 	h.wsHub.Register(wsConn)
 	defer func() {
-		wsConn.Close()
+		_ = wsConn.Close()
 		h.wsHub.Unregister(wsConn)
 	}()
 

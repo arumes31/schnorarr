@@ -65,11 +65,12 @@ func TestStartSyncEngines_LoopCapture(t *testing.T) {
 	for _, e := range engines {
 		cfg := e.GetConfig()
 		ids[cfg.ID] = true
-		if cfg.ID == "1" {
+		switch cfg.ID {
+		case "1":
 			if cfg.SourceDir != src1 {
 				t.Errorf("Engine 1 source mismatch: %s", cfg.SourceDir)
 			}
-		} else if cfg.ID == "2" {
+		case "2":
 			if cfg.SourceDir != src2 {
 				t.Errorf("Engine 2 source mismatch: %s", cfg.SourceDir)
 			}

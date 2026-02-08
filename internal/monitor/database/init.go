@@ -46,17 +46,17 @@ func Init() error {
 		DB.SetConnMaxLifetime(time.Hour)
 
 		if _, err = DB.Exec("PRAGMA journal_mode=WAL"); err != nil {
-			DB.Close()
+			_ = DB.Close()
 			continue
 		}
 
 		if _, err = DB.Exec("PRAGMA busy_timeout=5000"); err != nil {
-			DB.Close()
+			_ = DB.Close()
 			continue
 		}
 
 		if err := runMigrations(); err != nil {
-			DB.Close()
+			_ = DB.Close()
 			continue
 		}
 

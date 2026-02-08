@@ -54,7 +54,7 @@ func (t *Transferer) CopyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	srcInfo, err := srcFile.Stat()
 	if err != nil {
@@ -112,7 +112,7 @@ func (t *Transferer) CopyFile(src, dst string) error {
 		if err := dstFile.Sync(); err != nil {
 			log.Printf("[Transferer] Warning: failed to sync destination file: %v", err)
 		}
-		dstFile.Close()
+		_ = dstFile.Close()
 
 		if copyErr == nil {
 			break

@@ -71,9 +71,9 @@ func (p *Poller) Start() {
 func (p *Poller) logError(err error) {
 	f, e := os.OpenFile(RsyncLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if e == nil {
-		defer f.Close()
-		if _, err := f.WriteString(fmt.Sprintf("%s [ERROR] Polling failed: %v\n",
-			time.Now().Format("2006/01/02 15:04:05"), err)); err != nil {
+		defer func() { _ = f.Close() }()
+		if _, err := fmt.Fprintf(f, "%s [ERROR] Polling failed: %v\n",
+			time.Now().Format("2006/01/02 15:04:05"), err); err != nil {
 			log.Printf("Failed to write to rsync log: %v", err)
 		}
 	}
