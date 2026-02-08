@@ -29,23 +29,16 @@ func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.wsHub.Register(wsConn)
-	defer func() {
-		if err := wsConn.Close(); err != nil {
-			log.Printf("Error closing websocket: %v", err)
-		}
-		h.wsHub.Unregister(wsConn)
-	}()
+	client := h.wsHub.RegisterClient(wsConn)
+	defer h.wsHub.UnregisterClient(client)
 
 	// Send initial state
-	if err := wsConn.WriteJSON(struct {
-		Type string
-		Data string
-	}{Type: "init", Data: "Connected"}); err != nil {
-		log.Printf("WS Init Error: %v", err)
-	}
+	client.SendDirect("init", "Connected")
 
 	// Keep alive / Read loop
+	wsConn.SetReadLimit(512)
+	_ = wsConn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	wsConn.SetPongHandler(func(string) error { _ = wsConn.SetReadDeadline(time.Now().Add(60 * time.Second)); return nil })
 	for {
 		_, _, err := wsConn.ReadMessage()
 		if err != nil {

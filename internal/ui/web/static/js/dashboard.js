@@ -327,18 +327,46 @@ function parseDuration(str) {
 }
 
 // --- 3. WebSocket Setup ---
-const socket = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws');
-socket.onmessage = function (event) {
-    try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'progress') {
-            updateProgress(msg.data);
-            if (msg.data.top_files) updateTopFiles(msg.data.top_files);
+let socket;
+let reconnectDelay = 1000;
+
+function connectWS() {
+    socket = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws');
+    
+    socket.onopen = function() {
+        console.log("WebSocket Connected");
+        reconnectDelay = 1000; // Reset delay on success
+    };
+
+    socket.onmessage = function (event) {
+        try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'progress') {
+                updateProgress(msg.data);
+                if (msg.data.top_files) updateTopFiles(msg.data.top_files);
+            }
+            else if (msg.type === 'history') addHistoryItem(msg.data);
+            else if (msg.type === 'log') addLogLine(msg.data);
+        } catch (e) { 
+            if (event.data) {
+                console.error("WS Message Error:", e, "Data:", event.data); 
+            }
         }
-        else if (msg.type === 'history') addHistoryItem(msg.data);
-        else if (msg.type === 'log') addLogLine(msg.data);
-    } catch (e) { console.error("WS Message Error:", e); }
-};
+    };
+
+    socket.onclose = function(e) {
+        console.log(`WebSocket closed: ${e.reason}. Reconnecting in ${reconnectDelay}ms...`);
+        setTimeout(connectWS, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 1.5, 30000); // Exponential backoff
+    };
+
+    socket.onerror = function(err) {
+        console.error("WebSocket Error:", err);
+        socket.close();
+    };
+}
+
+connectWS();
 
 // --- 4. Sidebar & Settings ---
 function setTheme(name) {
