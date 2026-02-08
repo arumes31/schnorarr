@@ -39,11 +39,11 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 		destHost := os.Getenv("DEST_HOST")
 		destModule := os.Getenv("DEST_MODULE")
 
-		if destHost != "" && destModule != "" {
+		if destHost != "" {
 			// Check if target is already a full rsync URI
 			if strings.Contains(tgt, "::") || strings.HasPrefix(tgt, "rsync://") {
-				resolvedTgt = tgt
-			} else {
+				resolvedTgt = sync.UpdateTargetHost(tgt, destHost)
+			} else if destModule != "" {
 				// Construct Rsync URI: user@host::module/path
 				// e.g. syncuser@192.168.1.50::video-sync/movies
 				rsyncUser := os.Getenv("RSYNC_USER")
