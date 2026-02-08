@@ -11,7 +11,7 @@ if [ -n "$TAILSCALE_AUTHKEY" ]; then
     fi
     
     mkdir -p /config/tailscale
-    tailscaled --state=/config/tailscale/ &
+    tailscaled --state=/config/tailscale/tailscaled.state &
     sleep 2
     
     HOSTNAME=${TS_HOSTNAME:-"schnorarr-${MODE}"}
