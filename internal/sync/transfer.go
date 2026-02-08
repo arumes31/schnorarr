@@ -208,83 +208,111 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	}
 	args = append(args, src, dst)
 
-	log.Printf("[Transferer] Executing rsync: %s", strings.Join(args, " "))
-
-	cmd := exec.Command("rsync", args...)
-	cmd.Env = os.Environ()
-	if pass := os.Getenv("RSYNC_PASSWORD"); pass != "" {
-		cmd.Env = append(cmd.Env, "RSYNC_PASSWORD="+pass)
-	}
-
-	// Start rsync in background
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start rsync: %w", err)
-	}
-
 	// Parse destination to get host and remote path for size monitoring
 	destHost, remotePath := ParseRemoteDestination(dst)
 	log.Printf("[Transferer] DEBUG: Parsed destination - host: %q, path: %q", destHost, remotePath)
 
-	// Monitor progress by polling file size
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
+	maxRetries := 3
+	stuckThreshold := 60 * time.Second
 
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			log.Printf("[Transferer] Retry %d/%d for %s (previous attempt stuck or failed)...", attempt, maxRetries, src)
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
+		}
 
-	var lastReportedSize int64
-	for {
-		select {
-		case err := <-done:
-			// Rsync completed
-			if err != nil {
-				log.Printf("[Transferer] rsync failed for %s: %v", src, err)
-				if t.opts.OnComplete != nil {
-					t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %w", err))
-				}
-				return fmt.Errorf("rsync command failed: %w", err)
+		log.Printf("[Transferer] Executing rsync: %s", strings.Join(args, " "))
+		cmd := exec.Command("rsync", args...)
+		cmd.Env = os.Environ()
+		if pass := os.Getenv("RSYNC_PASSWORD"); pass != "" {
+			cmd.Env = append(cmd.Env, "RSYNC_PASSWORD="+pass)
+		}
+
+		// Start rsync in background
+		if err := cmd.Start(); err != nil {
+			if attempt == maxRetries {
+				return fmt.Errorf("failed to start rsync: %w", err)
 			}
+			continue
+		}
 
-			// Final progress update with total size
-			if t.opts.OnProgress != nil && totalSize > lastReportedSize {
-				log.Printf("[Transferer] DEBUG: Final progress update - %d/%d bytes", totalSize, totalSize)
-				t.opts.OnProgress(src, totalSize, totalSize)
-			}
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
 
-			log.Printf("[Transferer] Successfully transferred %s (%d bytes)", src, totalSize)
-			if t.opts.OnComplete != nil {
-				t.opts.OnComplete(filepath.Base(src), totalSize, nil)
-			}
-			return nil
+		ticker := time.NewTicker(1 * time.Second)
+		lastReportedSize := int64(0)
+		lastProgressTime := time.Now()
+		isStuck := false
 
-		case <-ticker.C:
-			// Check if transfer should be paused
-			if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
-				log.Printf("[Transferer] Transfer paused for %s, killing rsync...", src)
-				if cmd.Process != nil {
-					_ = cmd.Process.Kill()
-				}
-				return fmt.Errorf("transfer interrupted by pause")
-			}
-
-			// Poll destination file size
-			if destHost != "" && remotePath != "" {
-				currentSize := getRemoteFileSize(destHost, remotePath)
-				log.Printf("[Transferer] DEBUG: Polled size for %s: %d bytes (last: %d)", remotePath, currentSize, lastReportedSize)
-				if currentSize > 0 && currentSize != lastReportedSize {
-					if t.opts.OnProgress != nil {
-						log.Printf("[Transferer] DEBUG: Calling OnProgress - %d/%d bytes", currentSize, totalSize)
-						t.opts.OnProgress(src, currentSize, totalSize)
+		for !isStuck {
+			select {
+			case err := <-done:
+				ticker.Stop()
+				// Rsync completed
+				if err != nil {
+					log.Printf("[Transferer] rsync failed for %s: %v", src, err)
+					if attempt == maxRetries {
+						if t.opts.OnComplete != nil {
+							t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %w", err))
+						}
+						return fmt.Errorf("rsync command failed: %w", err)
 					}
-					lastReportedSize = currentSize
+					// Exit the inner loop to retry
+					isStuck = true
+					break
 				}
-			} else {
-				log.Printf("[Transferer] DEBUG: Cannot poll - destHost=%q, remotePath=%q", destHost, remotePath)
+
+				// Final progress update with total size
+				if t.opts.OnProgress != nil && totalSize > lastReportedSize {
+					log.Printf("[Transferer] DEBUG: Final progress update - %d/%d bytes", totalSize, totalSize)
+					t.opts.OnProgress(src, totalSize, totalSize)
+				}
+
+				log.Printf("[Transferer] Successfully transferred %s (%d bytes)", src, totalSize)
+				if t.opts.OnComplete != nil {
+					t.opts.OnComplete(filepath.Base(src), totalSize, nil)
+				}
+				return nil
+
+			case <-ticker.C:
+				// Check if transfer should be paused
+				if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
+					ticker.Stop()
+					log.Printf("[Transferer] Transfer paused for %s, killing rsync...", src)
+					if cmd.Process != nil {
+						_ = cmd.Process.Kill()
+					}
+					return fmt.Errorf("transfer interrupted by pause")
+				}
+
+				// Poll destination file size
+				if destHost != "" && remotePath != "" {
+					currentSize := getRemoteFileSize(destHost, remotePath)
+					if currentSize > 0 && currentSize != lastReportedSize {
+						if t.opts.OnProgress != nil {
+							t.opts.OnProgress(src, currentSize, totalSize)
+						}
+						lastReportedSize = currentSize
+						lastProgressTime = time.Now()
+					}
+				}
+
+				// Check if stuck
+				if time.Since(lastProgressTime) > stuckThreshold {
+					log.Printf("[Transferer] WARNING: rsync seems stuck for %s (no progress for %v). Killing process...", src, stuckThreshold)
+					if cmd.Process != nil {
+						_ = cmd.Process.Kill()
+					}
+					isStuck = true
+					ticker.Stop()
+				}
 			}
 		}
 	}
+
+	return fmt.Errorf("rsync failed after %d retries", maxRetries)
 }
 
 // ParseRemoteDestination extracts host and path from rsync destination
