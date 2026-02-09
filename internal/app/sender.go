@@ -21,9 +21,14 @@ import (
 func (a *App) startSenderServices() {
 	// Shared latency variable
 	var latency int64
-	a.SyncEngines = startSyncEngines(a.WSHub, a.HealthState, a.Notifier)
-	go startSyncStatusBroadcaster(a.WSHub, a.SyncEngines, a.HealthState, &latency)
-	go checkReceiverHealth(a.HealthState, a.SyncEngines, &latency)
+	engines := startSyncEngines(a.WSHub, a.HealthState, a.Notifier)
+
+	a.engineMu.Lock()
+	a.SyncEngines = engines
+	a.engineMu.Unlock()
+
+	go startSyncStatusBroadcaster(a.WSHub, engines, a.HealthState, &latency)
+	go checkReceiverHealth(a.HealthState, engines, &latency)
 }
 
 func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier *notification.Service) []*sync.Engine {

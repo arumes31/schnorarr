@@ -20,9 +20,9 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 		state := "ACTIVE"
 		if !healthy {
 			state = "CRITICAL"
-		} else if len(h.engines) > 0 {
+		} else if len(h.engineProvider()) > 0 {
 			allPaused := true
-			for _, e := range h.engines {
+			for _, e := range h.engineProvider() {
 				if !e.IsPaused() {
 					allPaused = false
 					break
@@ -53,7 +53,7 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			IsRemoteScan               bool
 		}
 		var engineViews []EngineView
-		for _, engine := range h.engines {
+		for _, engine := range h.engineProvider() {
 			cfg := engine.GetConfig()
 			stats := database.GetEngineTrafficStats(cfg.ID)
 			isSyncing := engine.IsBusy()

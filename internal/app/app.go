@@ -16,17 +16,19 @@ import (
 	"schnorarr/internal/monitor/health"
 	"schnorarr/internal/monitor/notification"
 	"schnorarr/internal/monitor/tailer"
-	"schnorarr/internal/monitor/websocket"
-	"schnorarr/internal/sync"
+	ws "schnorarr/internal/monitor/websocket"
+	syncpkg "schnorarr/internal/sync"
 	"schnorarr/internal/ui"
+	"sync"
 )
 
 type App struct {
 	Config      *config.Config
 	HealthState *health.State
-	WSHub       *websocket.Hub
+	WSHub       *ws.Hub
 	Notifier    *notification.Service
-	SyncEngines []*sync.Engine
+	SyncEngines []*syncpkg.Engine
+	engineMu    sync.RWMutex
 }
 
 func New() (*App, error) {
@@ -35,12 +37,12 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("db init failed: %w", err)
 	}
 	app := &App{
-		Config: cfg, HealthState: health.New(), WSHub: websocket.New(),
+		Config: cfg, HealthState: health.New(), WSHub: ws.New(),
 		Notifier: notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
 	}
 
 	// Setup structured logging
-	wsWriter := websocket.NewLogWriter(app.WSHub)
+	wsWriter := ws.NewLogWriter(app.WSHub)
 	multiWriter := io.MultiWriter(os.Stdout, wsWriter)
 	logger := slog.New(slog.NewJSONHandler(multiWriter, nil))
 	slog.SetDefault(logger)
@@ -53,10 +55,10 @@ func (a *App) Start(port string) error {
 	a.startLogTailer()
 	go a.startHousekeeping()
 	if os.Getenv("MODE") == "sender" {
-		a.startSenderServices()
+		go a.startSenderServices()
 	}
 
-	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.SyncEngines)
+	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.GetSyncEngines)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", h.Index)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(ui.StaticFS))))
@@ -123,4 +125,10 @@ func (a *App) startHousekeeping() {
 	for range ticker.C {
 		_ = database.PruneHistory(30)
 	}
+}
+
+func (a *App) GetSyncEngines() []*syncpkg.Engine {
+	a.engineMu.RLock()
+	defer a.engineMu.RUnlock()
+	return a.SyncEngines
 }

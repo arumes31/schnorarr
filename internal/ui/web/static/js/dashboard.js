@@ -335,8 +335,8 @@ let reconnectDelay = 1000;
 
 function connectWS() {
     socket = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws');
-    
-    socket.onopen = function() {
+
+    socket.onopen = function () {
         console.log("WebSocket Connected");
         reconnectDelay = 1000; // Reset delay on success
     };
@@ -350,20 +350,20 @@ function connectWS() {
             }
             else if (msg.type === 'history') addHistoryItem(msg.data);
             else if (msg.type === 'log') addLogLine(msg.data);
-        } catch (e) { 
+        } catch (e) {
             if (event.data) {
-                console.error("WS Message Error:", e, "Data:", event.data); 
+                console.error("WS Message Error:", e, "Data:", event.data);
             }
         }
     };
 
-    socket.onclose = function(e) {
+    socket.onclose = function (e) {
         console.log(`WebSocket closed: ${e.reason}. Reconnecting in ${reconnectDelay}ms...`);
         setTimeout(connectWS, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 1.5, 30000); // Exponential backoff
     };
 
-    socket.onerror = function(err) {
+    socket.onerror = function (err) {
         console.error("WebSocket Error:", err);
         socket.close();
     };
@@ -654,7 +654,10 @@ function addHistoryItem(data) {
     const li = document.createElement('li');
     li.className = 'activity-item';
     const actionClass = data.action.toLowerCase().trim().replace(/\s+/g, '-');
-    li.innerHTML = `<span class="action-badge badge-${actionClass}">${escapeHtml(data.action)}</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(data.path)}</div>`;
+    li.innerHTML = `<span class="action-badge badge-${actionClass}">${escapeHtml(data.action)}</span>
+        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(data.path)}
+            <span style="color: var(--text-muted); font-size: 11px;">(${escapeHtml(data.size || '0 B')})</span>
+        </div><span style="font-family: monospace; font-size: 11px; color: var(--text-muted);">${escapeHtml(data.time || new Date().toLocaleTimeString())}</span>`;
     list.insertBefore(li, list.firstChild);
     if (list.childNodes.length > 15) list.removeChild(list.lastChild);
 

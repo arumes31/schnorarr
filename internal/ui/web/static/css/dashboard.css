@@ -471,21 +471,37 @@ body {
 }
 
 .badge-added,
+.badge-dry-added,
 .badge-dryadded {
     background: rgba(0, 255, 173, 0.1);
     color: var(--accent-primary);
 }
 
 .badge-deleted,
+.badge-dry-deleted,
 .badge-drydeleted {
     background: rgba(255, 61, 0, 0.1);
     color: var(--accent-error);
 }
 
 .badge-renamed,
+.badge-dry-renamed,
 .badge-dryrenamed {
     background: rgba(255, 179, 0, 0.1);
     color: var(--accent-warning);
+}
+
+.badge-dry-created,
+.badge-dry-added,
+.badge-dryadded {
+    background: rgba(0, 255, 173, 0.1);
+    color: var(--accent-primary);
+}
+
+.badge-dry-deleted,
+.badge-drydeleted {
+    background: rgba(255, 61, 0, 0.1);
+    color: var(--accent-error);
 }
 
 .badge-diff {
@@ -921,6 +937,11 @@ input:checked+.slider:before {
     display: flex;
     flex-direction: column;
     max-height: 500px;
+}
+
+.recent-activity-panel {
+    max-width: 800px;
+    width: 100%;
 }
 
 .activity-list {
