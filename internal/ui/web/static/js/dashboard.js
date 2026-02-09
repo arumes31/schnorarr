@@ -186,6 +186,17 @@ function updateLatencySparkline(val) {
     drawSparkline('latency-sparkline', history, color, 100);
 }
 
+function updateSpeedSparkline(speedStr) {
+    const sl = document.getElementById('speed-sparkline');
+    if (!sl) return;
+    const val = parseBytes(speedStr);
+    let history = sl.getAttribute('data-history') ? sl.getAttribute('data-history').split(',').map(Number) : [];
+    history.push(val); if (history.length > 30) history.shift();
+    sl.setAttribute('data-history', history.join(','));
+    // Use 10MB/s as minMax for speed graph scaling
+    drawSparkline('speed-sparkline', history, '#FF00E5', 10 * 1024 * 1024);
+}
+
 function updateProgress(data) {
     if (data.state) {
         const badge = document.getElementById('main-status-badge');
@@ -225,8 +236,7 @@ function updateProgress(data) {
     }
     if (Object.prototype.hasOwnProperty.call(data, 'speed')) {
         const el = document.getElementById('stat-speed'); if (el) el.innerText = data.speed;
-        const val = parseBytes(data.speed);
-        const bar = document.getElementById('speed-bar'); if (bar) bar.style.width = Math.min((val / (100 * 1024 * 1024)) * 100, 100) + '%';
+        updateSpeedSparkline(data.speed);
     }
     if (Object.prototype.hasOwnProperty.call(data, 'traffic_today')) {
         const todayEl = document.getElementById('stat-today');

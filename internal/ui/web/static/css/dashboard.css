@@ -958,6 +958,7 @@ input:checked+.slider:before {
 
 .recent-activity-panel {
     flex: 1;
+    max-width: 50vw;
 }
 
 .dashboard-split-panels {
