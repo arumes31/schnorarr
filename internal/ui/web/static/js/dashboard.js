@@ -168,12 +168,15 @@ function getSplinePath(points, smoothing = 0.2) {
     return d;
 }
 
-function drawSparkline(canvasId, data, color, minMax = 1024) {
+function drawSparkline(canvasId, rawData, color, minMax = 1024) {
     const sl = document.getElementById(canvasId);
-    if (!sl || data.length < 2) return;
+    if (!sl) return;
+    const data = rawData.filter(v => typeof v === 'number' && !isNaN(v));
+    if (data.length < 2) return;
     const svg = sl.querySelector('svg');
     if (!svg) return;
     const width = sl.offsetWidth; const height = sl.offsetHeight;
+    if (width === 0 || height === 0) return;
 
     // Ensure defs and gradient
     let defs = svg.querySelector('defs');
@@ -233,8 +236,8 @@ function drawSparkline(canvasId, data, color, minMax = 1024) {
     const points = data.map((val, i) => {
         const x = (i / (data.length - 1)) * width;
         let yRatio = val / max;
-        // Ensure non-zero values have a minimum visible height (3%) even during massive spikes
-        if (val > 0 && yRatio < 0.03) yRatio = 0.03;
+        // Ensure non-zero values have a minimum visible height (5%) even during massive spikes
+        if (val > 0 && yRatio < 0.05) yRatio = 0.05;
         const y = (height - 2) - yRatio * (height - 4);
         return [x, y];
     });
@@ -725,7 +728,21 @@ async function confirmSyncFromPreview() {
 }
 // --- 7. UI Helpers ---
 function formatBytes(b) { b = Math.abs(b); if (b === 0) return '0 B'; const k = 1024, s = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(2)) + ' ' + s[i]; }
-function parseBytes(str) { if (!str) return 0; const parts = str.trim().split(' '); if (parts.length < 2) return 0; const val = parseFloat(parts[0]); const unit = parts[1].toUpperCase(); if (unit.includes('KB')) return val * 1024; if (unit.includes('MB')) return val * 1024 * 1024; if (unit.includes('GB')) return val * 1024 * 1024 * 1024; return val; }
+function parseBytes(str) {
+    if (!str) return 0;
+    const parts = str.trim().split(/\s+/);
+    if (parts.length < 2) return 0;
+    const val = parseFloat(parts[0]);
+    if (isNaN(val)) return 0;
+    const unit = parts[1].toUpperCase();
+    if (unit.includes('K')) return val * 1024;
+    if (unit.includes('M')) return val * 1024 * 1024;
+    if (unit.includes('G')) return val * 1024 * 1024 * 1024;
+    if (unit.includes('T')) return val * 1024 * 1024 * 1024 * 1024;
+    if (unit.includes('P')) return val * 1024 * 1024 * 1024 * 1024 * 1024;
+    if (unit.includes('E')) return val * 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
+    return val;
+}
 function toast(msg, type = 'info') { const c = document.getElementById('toast-container'); if (!c) return; const t = document.createElement('div'); t.className = 'toast'; t.style.borderLeftColor = type === 'success' ? 'var(--accent-primary)' : 'var(--accent-warning)'; t.innerText = msg; c.appendChild(t); setTimeout(() => t.remove(), 4000); }
 function toggleLogScroll() { logScrollLocked = !logScrollLocked; const btn = document.getElementById('log-scroll-toggle'); if (btn) btn.innerText = logScrollLocked ? 'Locked' : 'Auto'; }
 function clearLogs() { const logContainer = document.getElementById('log-container'); if (logContainer) logContainer.innerHTML = 'Buffer cleared.'; }
@@ -783,7 +800,17 @@ document.addEventListener('DOMContentLoaded', () => {
     NodeMap.init();
     const savedTheme = localStorage.getItem('schnorarr-theme');
     if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
-    document.querySelectorAll('.sparkline-container').forEach(sl => { const histStr = sl.getAttribute('data-history') || ""; const history = histStr ? histStr.split(',').map(Number) : []; if (history.length >= 2) drawSparkline(sl.id, history, '#00ffad'); });
+    document.querySelectorAll('.sparkline-container').forEach(sl => {
+        const histStr = sl.getAttribute('data-history') || "";
+        const history = histStr ? histStr.split(',').map(Number) : [];
+        if (history.length >= 2) {
+            let color = '#00ffad';
+            let minMax = 1024;
+            if (sl.id === 'speed-sparkline') { color = '#FF00E5'; minMax = 10 * 1024 * 1024; }
+            else if (sl.id === 'latency-sparkline') { color = '#ffb300'; minMax = 100; }
+            drawSparkline(sl.id, history, color, minMax);
+        }
+    });
 
     updateRelativeTimes();
     setInterval(updateRelativeTimes, 30000);
