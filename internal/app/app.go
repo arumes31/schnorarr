@@ -16,7 +16,6 @@ import (
 	"schnorarr/internal/monitor/health"
 	"schnorarr/internal/monitor/notification"
 	"schnorarr/internal/monitor/tailer"
-	"schnorarr/internal/monitor/websocket"
 	ws "schnorarr/internal/monitor/websocket"
 	syncpkg "schnorarr/internal/sync"
 	"schnorarr/internal/ui"
@@ -38,7 +37,7 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("db init failed: %w", err)
 	}
 	app := &App{
-		Config: cfg, HealthState: health.New(), WSHub: websocket.New(),
+		Config: cfg, HealthState: health.New(), WSHub: ws.New(),
 		Notifier: notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
 	}
 
