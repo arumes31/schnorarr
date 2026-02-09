@@ -144,25 +144,104 @@ function updateFavicon(status) {
     document.getElementsByTagName('head')[0].appendChild(link);
 }
 
+// --- Spline Helper ---
+function getSplinePath(points, smoothing = 0.2) {
+    if (!points || points.length === 0) return "";
+    if (points.length === 1) return `M ${points[0][0]} ${points[0][1]}`;
+
+    const getControlPoint = (prev, curr, next, reverse) => {
+        const p0 = prev || curr;
+        const p1 = next || curr;
+        const len = Math.sqrt(Math.pow(p1[0] - p0[0], 2) + Math.pow(p1[1] - p0[1], 2));
+        const angle = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]);
+        const length = len * smoothing;
+        const theta = angle + (reverse ? Math.PI : 0);
+        return [curr[0] + Math.cos(theta) * length, curr[1] + Math.sin(theta) * length];
+    };
+
+    let d = `M ${points[0][0]} ${points[0][1]}`;
+    for (let i = 0; i < points.length - 1; i++) {
+        const cp1 = getControlPoint(points[i - 1], points[i], points[i + 1], false);
+        const cp2 = getControlPoint(points[i], points[i + 1], points[i + 2], true);
+        d += ` C ${cp1[0]} ${cp1[1]} ${cp2[0]} ${cp2[1]} ${points[i + 1][0]} ${points[i + 1][1]}`;
+    }
+    return d;
+}
+
 function drawSparkline(canvasId, data, color, minMax = 1024) {
     const sl = document.getElementById(canvasId);
     if (!sl || data.length < 2) return;
-    const path = sl.querySelector('path');
-    if (!path) return;
+    const svg = sl.querySelector('svg');
+    if (!svg) return;
     const width = sl.offsetWidth; const height = sl.offsetHeight;
 
-    // Scale max relative to data but ensure visibility
+    // Ensure defs and gradient
+    let defs = svg.querySelector('defs');
+    if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs'); svg.prepend(defs); }
+
+    const gradId = 'grad-' + canvasId;
+    let linearGradient = defs.querySelector('#' + gradId);
+    if (!linearGradient) {
+        linearGradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        linearGradient.setAttribute('id', gradId);
+        linearGradient.setAttribute('x1', '0%'); linearGradient.setAttribute('y1', '0%');
+        linearGradient.setAttribute('x2', '0%'); linearGradient.setAttribute('y2', '100%');
+        linearGradient.innerHTML = `<stop offset="0%" class="grad-stop-1" stop-opacity="0.4"/><stop offset="100%" class="grad-stop-2" stop-opacity="0"/>`;
+        defs.appendChild(linearGradient);
+    }
+
+    // Default color
+    if (!color) color = getThemeColor('--accent-primary', '#00ffad');
+
+    // Update gradient colors
+    const stop1 = linearGradient.querySelector('.grad-stop-1');
+    const stop2 = linearGradient.querySelector('.grad-stop-2');
+    if (stop1) stop1.setAttribute('stop-color', color);
+    if (stop2) stop2.setAttribute('stop-color', color);
+
+    // Ensure paths
+    let areaPath = svg.querySelector('.sparkline-area');
+    let linePath = svg.querySelector('.sparkline-line');
+
+    if (!linePath) {
+        const existing = svg.querySelector('path');
+        if (existing && !existing.classList.contains('sparkline-area')) {
+            linePath = existing;
+        } else {
+            linePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            svg.appendChild(linePath);
+        }
+        linePath.classList.add('sparkline-line');
+        linePath.setAttribute('fill', 'none');
+    }
+
+    if (!areaPath) {
+        areaPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        areaPath.classList.add('sparkline-area');
+        svg.insertBefore(areaPath, linePath); // Area behind line
+    }
+
+    areaPath.setAttribute('fill', `url(#${gradId})`);
+    areaPath.setAttribute('stroke', 'none');
+    linePath.setAttribute('stroke', color);
+    linePath.setAttribute('stroke-width', '2');
+    linePath.setAttribute('stroke-linecap', 'round');
+    linePath.setAttribute('stroke-linejoin', 'round');
+
+    // Scale and Points
     const max = Math.max(...data, minMax);
-    let d = `M 0 ${height}`;
-    data.forEach((val, i) => {
+    const points = data.map((val, i) => {
         const x = (i / (data.length - 1)) * width;
         const y = height - (val / max) * height;
-        d += ` L ${x} ${y}`;
+        return [x, y];
     });
-    path.setAttribute('d', d);
-    // If color is not provided, use primary accent
-    if (!color) color = getThemeColor('--accent-primary', '#00ffad');
-    path.setAttribute('stroke', color);
+
+    const lineD = getSplinePath(points);
+    linePath.setAttribute('d', lineD);
+
+    // Close area path
+    const areaD = `${lineD} L ${points[points.length - 1][0]} ${height} L ${points[0][0]} ${height} Z`;
+    areaPath.setAttribute('d', areaD);
 }
 
 function updateLatencySparkline(val) {
@@ -642,7 +721,7 @@ async function confirmSyncFromPreview() {
     }
 }
 // --- 7. UI Helpers ---
-function formatBytes(b) { b = Math.abs(b); if (b === 0) return '0 B'; const k = 1024, s = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + s[i]; }
+function formatBytes(b) { b = Math.abs(b); if (b === 0) return '0 B'; const k = 1024, s = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(2)) + ' ' + s[i]; }
 function parseBytes(str) { if (!str) return 0; const parts = str.trim().split(' '); if (parts.length < 2) return 0; const val = parseFloat(parts[0]); const unit = parts[1].toUpperCase(); if (unit.includes('KB')) return val * 1024; if (unit.includes('MB')) return val * 1024 * 1024; if (unit.includes('GB')) return val * 1024 * 1024 * 1024; return val; }
 function toast(msg, type = 'info') { const c = document.getElementById('toast-container'); if (!c) return; const t = document.createElement('div'); t.className = 'toast'; t.style.borderLeftColor = type === 'success' ? 'var(--accent-primary)' : 'var(--accent-warning)'; t.innerText = msg; c.appendChild(t); setTimeout(() => t.remove(), 4000); }
 function toggleLogScroll() { logScrollLocked = !logScrollLocked; const btn = document.getElementById('log-scroll-toggle'); if (btn) btn.innerText = logScrollLocked ? 'Locked' : 'Auto'; }
