@@ -923,6 +923,11 @@ input:checked+.slider:before {
     max-height: 500px;
 }
 
+.recent-activity-panel {
+    max-width: 800px;
+    width: 100%;
+}
+
 .activity-list {
     flex: 1;
     overflow-y: auto;
