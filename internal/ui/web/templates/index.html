@@ -181,6 +181,12 @@
                     <span>Speed</span>
                 </div>
                 <div id="stat-speed" class="stat-value" style="color: #FF00E5;">{{.CurrentSpeed}}</div>
+                <div class="sparkline-container latency-background" id="speed-sparkline" data-history=""
+                    style="opacity: 0.1;">
+                    <svg width="100%" height="100%" preserveAspectRatio="none">
+                        <path d="" fill="none" stroke="#FF00E5" stroke-width="2"></path>
+                    </svg>
+                </div>
                 <div class="sparkline-container latency-background" id="latency-sparkline" data-history="">
                     <span id="latency-val"
                         style="position: absolute; right: 8px; bottom: 8px; font-size: 14px; font-weight: 900; color: var(--accent-warning); pointer-events: none; z-index: 2;"></span>
