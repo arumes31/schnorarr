@@ -674,7 +674,7 @@ function addHistoryItem(data) {
     li.className = 'activity-item';
     const actionClass = data.action.toLowerCase().trim().replace(/\s+/g, '-');
     li.innerHTML = `<span class="action-badge badge-${actionClass}">${escapeHtml(data.action)}</span>
-        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(data.path)}
+        <div style="flex: 1; white-space: nowrap;">${escapeHtml(data.path)}
             <span style="color: var(--text-muted); font-size: 11px;">(${escapeHtml(data.size || '0 B')})</span>
         </div><span style="font-family: monospace; font-size: 11px; color: var(--text-muted);">${escapeHtml(data.time || new Date().toLocaleTimeString())}</span>`;
     list.insertBefore(li, list.firstChild);

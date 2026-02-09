@@ -352,7 +352,7 @@
                 <ul id="history-list" class="activity-list">
                     {{range .History}}<li class="activity-item"><span
                             class="action-badge badge-{{lower .Action}}">{{.Action}}</span>
-                        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{.Path}}
+                        <div style="flex: 1; white-space: nowrap;">{{.Path}}
                             <span style="color: var(--text-muted); font-size: 11px;">({{.Size}})</span>
                         </div><span
                             style="font-family: monospace; font-size: 11px; color: var(--text-muted);">{{.Time}}</span>
