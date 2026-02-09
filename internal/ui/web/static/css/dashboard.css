@@ -940,7 +940,14 @@ input:checked+.slider:before {
 }
 
 .recent-activity-panel {
-    max-width: 800px;
+    flex: 1;
+}
+
+.dashboard-split-panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    align-items: stretch;
     width: 100%;
 }
 
