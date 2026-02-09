@@ -109,16 +109,18 @@ func NewEngine(config SyncConfig) *Engine {
 			if e.lastUpdate.IsZero() {
 				e.lastUpdate = now
 				e.lastBytes = bytesTransferred
-			} else if now.Sub(e.lastUpdate) >= time.Second {
+			} else if now.Sub(e.lastUpdate) >= 500*time.Millisecond {
+				delta := now.Sub(e.lastUpdate).Seconds()
 				diff = bytesTransferred - e.lastBytes
-				e.currentSpeed = diff
-				speed = diff
+				if delta > 0 {
+					e.currentSpeed = int64(float64(diff) / delta)
+				}
 				e.lastUpdate = now
 				e.lastBytes = bytesTransferred
 				if len(e.speedHistory) < 60 {
 					e.speedHistory = make([]int64, 60)
 				}
-				e.speedHistory = append(e.speedHistory[1:], diff)
+				e.speedHistory = append(e.speedHistory[1:], e.currentSpeed)
 			}
 
 			if now.Sub(e.lastLogTime) >= 5*time.Second {
@@ -631,12 +633,20 @@ func (e *Engine) IsScanning() bool {
 func (e *Engine) GetTransferStats() (file string, progress, total, speed int64) {
 	e.pausedMu.RLock()
 	defer e.pausedMu.RUnlock()
-	return e.currentFile, e.currentProgress, e.totalFileSize, e.currentSpeed
+	speed = e.currentSpeed
+	if !e.lastUpdate.IsZero() && time.Since(e.lastUpdate) > 5*time.Second {
+		speed = 0
+	}
+	return e.currentFile, e.currentProgress, e.totalFileSize, speed
 }
 func (e *Engine) GetTransferStatsExtended() (file string, prog, total, speed, avg int64, start time.Time) {
 	e.pausedMu.RLock()
 	defer e.pausedMu.RUnlock()
-	return e.currentFile, e.currentProgress, e.totalFileSize, e.currentSpeed, e.avgSpeed, e.fileStartTime
+	speed = e.currentSpeed
+	if !e.lastUpdate.IsZero() && time.Since(e.lastUpdate) > 5*time.Second {
+		speed = 0
+	}
+	return e.currentFile, e.currentProgress, e.totalFileSize, speed, e.avgSpeed, e.fileStartTime
 }
 func (e *Engine) GetPlanRemainingBytes() int64 {
 	e.pausedMu.RLock()
