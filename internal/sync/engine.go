@@ -255,12 +255,15 @@ func (e *Engine) IsBusy() bool {
 }
 
 func (e *Engine) PreviewSync() (*SyncPlan, error) {
+	AcquireScanLock()
 	sourceManifest, err := e.scanner.ScanLocal(e.config.SourceDir)
 	if err != nil {
+		ReleaseScanLock()
 		return nil, fmt.Errorf("failed to scan source: %w", err)
 	}
 
 	targetManifest, err := e.scanner.ScanLocal(e.config.TargetDir)
+	ReleaseScanLock()
 	if err != nil {
 		targetManifest = NewManifest(e.config.TargetDir)
 	}
@@ -304,6 +307,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 
 	start := time.Now()
 	if sourceManifest == nil {
+		AcquireScanLock()
 		e.pausedMu.Lock()
 		e.isScanning = true
 		e.pausedMu.Unlock()
@@ -312,12 +316,15 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		e.pausedMu.Lock()
 		e.isScanning = false
 		e.pausedMu.Unlock()
+		ReleaseScanLock()
 		if err != nil {
 			return fmt.Errorf("failed to scan source: %w", err)
 		}
 	}
 
+	AcquireScanLock()
 	targetManifest, err := e.scanner.ScanLocal(e.config.TargetDir)
+	ReleaseScanLock()
 	if err != nil {
 		targetManifest = NewManifest(e.config.TargetDir)
 	}
@@ -456,6 +463,12 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	plan.FilesToSync = finalFilesToSync
 	e.pausedMu.Unlock()
 
+	isDry := e.isDryRun()
+	if !isDry {
+		AcquireTransferLock()
+		defer ReleaseTransferLock()
+	}
+
 	touchedDirs, err := e.executeSyncPhase(plan, targetManifest)
 	if err != nil {
 		database.ReportEngineError(e.config.ID, err.Error())
@@ -545,7 +558,9 @@ func (e *Engine) sourcePollLoop() {
 			if e.IsPaused() {
 				continue
 			}
+			AcquireScanLock()
 			currentSource, err := e.scanner.ScanLocal(e.config.SourceDir)
+			ReleaseScanLock()
 			if err != nil {
 				continue
 			}
