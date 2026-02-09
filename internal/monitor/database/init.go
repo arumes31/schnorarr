@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -24,11 +25,12 @@ func getDBPath() string {
 	if env := os.Getenv("DB_PATH"); env != "" {
 		return env
 	}
-	// On Windows, if /config doesn't exist, fallback to current directory
+	// On Windows, if C:\config exists, use it. Otherwise fallback to current directory.
 	if os.PathSeparator == '\\' {
-		if _, err := os.Stat("C:\\config"); err != nil {
-			return "history.db"
+		if _, err := os.Stat("C:\\config"); err == nil {
+			return filepath.Join("C:\\config", "history.db")
 		}
+		return "history.db"
 	}
 	return defaultDBPath
 }
