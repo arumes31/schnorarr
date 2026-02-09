@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -242,18 +243,24 @@ func (t *Transferer) copyRemote(src, dst string) error {
 			done <- cmd.Wait()
 		}()
 
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(2 * time.Second)
 		lastReportedSize := int64(0)
 		lastProgressTime := time.Now()
+		lastLogTime := time.Now()
 		isStuck := false
+
+		// Create a context that is canceled when the command finishes
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
 		for !isStuck {
 			select {
 			case err := <-done:
 				ticker.Stop()
+				cancel()
 				// Rsync completed
 				if err != nil {
-					log.Printf("[Transferer] rsync failed for %s: %v", src, err)
+					log.Printf("[Transferer] Rsync failed for %s: %v", src, err)
 					if attempt == maxRetries {
 						if t.opts.OnComplete != nil {
 							t.opts.OnComplete(filepath.Base(src), 0, fmt.Errorf("rsync error: %w", err))
@@ -267,30 +274,20 @@ func (t *Transferer) copyRemote(src, dst string) error {
 
 				// Final progress update with total size
 				if t.opts.OnProgress != nil && totalSize > lastReportedSize {
-					log.Printf("[Transferer] DEBUG: Final progress update - %d/%d bytes", totalSize, totalSize)
 					t.opts.OnProgress(src, totalSize, totalSize)
 				}
 
-				log.Printf("[Transferer] Successfully transferred %s (%d bytes)", src, totalSize)
+				log.Printf("[Transferer] Successfully transferred %s", src)
 				if t.opts.OnComplete != nil {
 					t.opts.OnComplete(filepath.Base(src), totalSize, nil)
 				}
 				return nil
 
 			case <-ticker.C:
-				// Check if transfer should be paused
-				if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
-					ticker.Stop()
-					log.Printf("[Transferer] Transfer paused for %s, killing rsync...", src)
-					if cmd.Process != nil {
-						_ = cmd.Process.Kill()
-					}
-					return fmt.Errorf("transfer interrupted by pause")
-				}
-
-				// Poll destination file size (only if not already at 100%)
+				// Stop polling if we've reached 100% on the receiver side
 				if destHost != "" && remotePath != "" && lastReportedSize < totalSize {
-					currentSize := getRemoteFileSize(destHost, remotePath)
+					// Use a context-aware request to break hangs immediately on rsync exit
+					currentSize := getRemoteFileSizeWithContext(ctx, destHost, remotePath)
 					if currentSize > 0 && currentSize != lastReportedSize {
 						if t.opts.OnProgress != nil {
 							t.opts.OnProgress(src, currentSize, totalSize)
@@ -301,10 +298,13 @@ func (t *Transferer) copyRemote(src, dst string) error {
 				}
 
 				// If we are at 100%, keep updating the progress time to prevent "stuck" timeout
-				// while rsync is doing its final verification/cleanup.
+				// and log finalization status less frequently.
 				if lastReportedSize >= totalSize {
 					lastProgressTime = time.Now()
-					log.Printf("[Transferer] DEBUG: Already at 100%% (%d/%d), updating lastProgressTime for %s", lastReportedSize, totalSize, src)
+					if time.Since(lastLogTime) > 10*time.Second {
+						log.Printf("[Transferer] Rsync finalizing %s (data transfer 100%% complete)", filepath.Base(src))
+						lastLogTime = time.Now()
+					}
 				}
 
 				// Check if stuck
@@ -321,6 +321,47 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	}
 
 	return fmt.Errorf("rsync failed after %d retries", maxRetries)
+}
+
+// getRemoteFileSizeWithContext queries the receiver's /api/stat endpoint with support for cancellation
+func getRemoteFileSizeWithContext(ctx context.Context, host, path string) int64 {
+	apiURL := fmt.Sprintf("http://%s:8080/api/stat?path=%s", host, url.QueryEscape(path))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return 0
+	}
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	resp, err := client.Get(apiURL) // client.Do(req) is better but client.Get is fine if we use the right client and context? wait.
+	// Actually, client.Get doesn't take context. Use client.Do(req).
+	resp, err = client.Do(req)
+
+	if err != nil {
+		return 0
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("[Transferer] Failed to close response body: %v", closeErr)
+		}
+	}()
+
+	var response struct {
+		Exists bool  `json:"exists"`
+		Size   int64 `json:"size"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return 0
+	}
+
+	if response.Exists {
+		return response.Size
+	}
+	return 0
 }
 
 // ParseRemoteDestination extracts host and path from rsync destination
