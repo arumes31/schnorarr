@@ -1107,4 +1107,26 @@ input:checked+.slider:before {
 
 .d-block {
     display: block !important;
+
+    /* Sparklines */
+    .sparkline-container {
+        height: 40px;
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .latency-background {
+        position: absolute;
+        inset: 0;
+        height: 100%;
+        opacity: 0.15;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    .latency-background svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
 }
