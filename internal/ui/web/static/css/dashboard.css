@@ -958,7 +958,7 @@ input:checked+.slider:before {
 
 .recent-activity-panel {
     flex: 1;
-    max-width: 50%;
+    max-width: 100%;
     min-width: 0;
 }
 
