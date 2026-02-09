@@ -225,8 +225,6 @@ function updateProgress(data) {
     }
     if (Object.prototype.hasOwnProperty.call(data, 'speed')) {
         const el = document.getElementById('stat-speed'); if (el) el.innerText = data.speed;
-        const val = parseBytes(data.speed);
-        const bar = document.getElementById('speed-bar'); if (bar) bar.style.width = Math.min((val / (100 * 1024 * 1024)) * 100, 100) + '%';
     }
     if (Object.prototype.hasOwnProperty.call(data, 'traffic_today')) {
         const todayEl = document.getElementById('stat-today');
