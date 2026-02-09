@@ -34,18 +34,18 @@ type Session struct {
 
 // Handlers contains all HTTP route handlers
 type Handlers struct {
-	config      *config.Config
-	healthState *health.State
-	wsHub       *ws.Hub
-	db          *sql.DB
-	notifier    *notification.Service
-	engines     []*syncpkg.Engine
-	sessions    map[string]Session
-	sessionMu   sync.RWMutex
+	config         *config.Config
+	healthState    *health.State
+	wsHub          *ws.Hub
+	db             *sql.DB
+	notifier       *notification.Service
+	engineProvider func() []*syncpkg.Engine
+	sessions       map[string]Session
+	sessionMu      sync.RWMutex
 }
 
 // New creates a new handlers instance
-func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.DB, notifier *notification.Service, engines []*syncpkg.Engine) *Handlers {
+func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.DB, notifier *notification.Service, engines func() []*syncpkg.Engine) *Handlers {
 	// Load auth settings from env
 	AuthEnabled = os.Getenv("AUTH_ENABLED") == "true"
 	AdminUser = os.Getenv("ADMIN_USER")
@@ -58,13 +58,13 @@ func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.D
 	}
 
 	return &Handlers{
-		config:      cfg,
-		healthState: healthState,
-		wsHub:       wsHub,
-		db:          db,
-		notifier:    notifier,
-		engines:     engines,
-		sessions:    make(map[string]Session),
+		config:         cfg,
+		healthState:    healthState,
+		wsHub:          wsHub,
+		db:             db,
+		notifier:       notifier,
+		engineProvider: engines,
+		sessions:       make(map[string]Session),
 	}
 }
 

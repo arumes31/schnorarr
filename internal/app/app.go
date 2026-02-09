@@ -17,16 +17,19 @@ import (
 	"schnorarr/internal/monitor/notification"
 	"schnorarr/internal/monitor/tailer"
 	"schnorarr/internal/monitor/websocket"
-	"schnorarr/internal/sync"
+	ws "schnorarr/internal/monitor/websocket"
+	syncpkg "schnorarr/internal/sync"
 	"schnorarr/internal/ui"
+	"sync"
 )
 
 type App struct {
 	Config      *config.Config
 	HealthState *health.State
-	WSHub       *websocket.Hub
+	WSHub       *ws.Hub
 	Notifier    *notification.Service
-	SyncEngines []*sync.Engine
+	SyncEngines []*syncpkg.Engine
+	engineMu    sync.RWMutex
 }
 
 func New() (*App, error) {
@@ -40,7 +43,7 @@ func New() (*App, error) {
 	}
 
 	// Setup structured logging
-	wsWriter := websocket.NewLogWriter(app.WSHub)
+	wsWriter := ws.NewLogWriter(app.WSHub)
 	multiWriter := io.MultiWriter(os.Stdout, wsWriter)
 	logger := slog.New(slog.NewJSONHandler(multiWriter, nil))
 	slog.SetDefault(logger)
@@ -56,7 +59,7 @@ func (a *App) Start(port string) error {
 		go a.startSenderServices()
 	}
 
-	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.SyncEngines)
+	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.GetSyncEngines)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", h.Index)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(ui.StaticFS))))
@@ -123,4 +126,10 @@ func (a *App) startHousekeeping() {
 	for range ticker.C {
 		_ = database.PruneHistory(30)
 	}
+}
+
+func (a *App) GetSyncEngines() []*syncpkg.Engine {
+	a.engineMu.RLock()
+	defer a.engineMu.RUnlock()
+	return a.SyncEngines
 }

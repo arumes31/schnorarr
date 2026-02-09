@@ -22,7 +22,7 @@ func (h *Handlers) GetProgressInfo() (progress, speed, eta string, queued int, s
 	var totalRemaining int64
 	allPaused := true
 	var sb strings.Builder
-	for _, engine := range h.engines {
+	for _, engine := range h.engineProvider() {
 		sb.WriteString(engine.GetStatus() + "\n")
 		if !engine.IsPaused() {
 			allPaused = false
@@ -52,7 +52,7 @@ func (h *Handlers) GetProgressInfo() (progress, speed, eta string, queued int, s
 		eta = "Done"
 	}
 	progress = "Monitoring..."
-	if allPaused && len(h.engines) > 0 {
+	if allPaused && len(h.engineProvider()) > 0 {
 		progress = "Sync Paused"
 	} else if totalSpeed > 0 {
 		progress = "Transferring..."
@@ -62,7 +62,7 @@ func (h *Handlers) GetProgressInfo() (progress, speed, eta string, queued int, s
 
 func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
-		for _, e := range h.engines {
+		for _, e := range h.engineProvider() {
 			e.Resume()
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "false")
 		}
@@ -72,7 +72,7 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GlobalPause(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
-		for _, e := range h.engines {
+		for _, e := range h.engineProvider() {
 			e.Pause()
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "true")
 		}
@@ -88,7 +88,7 @@ func (h *Handlers) GlobalPause(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GlobalResume(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
-		for _, e := range h.engines {
+		for _, e := range h.engineProvider() {
 			e.Resume()
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "false")
 		}
@@ -118,7 +118,7 @@ func (h *Handlers) BulkAction(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, id := range req.IDs {
 			var engine *sync.Engine
-			for _, e := range h.engines {
+			for _, e := range h.engineProvider() {
 				if e.GetConfig().ID == id {
 					engine = e
 					break
@@ -151,7 +151,7 @@ func (h *Handlers) EnginePreview(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/engine/"), "/preview")
 		var engine *sync.Engine
-		for _, e := range h.engines {
+		for _, e := range h.engineProvider() {
 			if e.GetConfig().ID == id {
 				engine = e
 				break
@@ -180,7 +180,7 @@ func (h *Handlers) EngineAction(w http.ResponseWriter, r *http.Request) {
 		}
 		id, action := parts[2], parts[3]
 		var engine *sync.Engine
-		for _, e := range h.engines {
+		for _, e := range h.engineProvider() {
 			if e.GetConfig().ID == id {
 				engine = e
 				break
@@ -230,7 +230,7 @@ func (h *Handlers) EngineAlias(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var engine *sync.Engine
-		for _, e := range h.engines {
+		for _, e := range h.engineProvider() {
 			if e.GetConfig().ID == id {
 				engine = e
 				break
@@ -269,7 +269,7 @@ func (h *Handlers) UpdateAutoApprove(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
 		val := r.FormValue("auto_approve")
 		_ = database.SaveSetting("auto_approve", val)
-		for _, e := range h.engines {
+		for _, e := range h.engineProvider() {
 			e.SetAutoApproveDeletions(val == "on")
 		}
 		_ = database.LogSystemEvent(h.GetUser(r), "Update Auto Approve", "Set to "+val)
