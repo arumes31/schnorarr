@@ -169,12 +169,21 @@ function updateLatencySparkline(val) {
     const sl = document.getElementById('latency-sparkline');
     if (!sl) return;
     const valEl = document.getElementById('latency-val');
-    if (valEl) valEl.innerText = val + 'ms';
+
+    let color = '#ff3d00'; // Default red
+    if (val < 40) color = '#00ffad'; // Green
+    else if (val < 80) color = '#ffb300'; // Orange
+
+    if (valEl) {
+        valEl.innerText = val + 'ms';
+        valEl.style.color = color;
+    }
+
     let history = sl.getAttribute('data-history') ? sl.getAttribute('data-history').split(',').map(Number) : [];
     history.push(val); if (history.length > 30) history.shift();
     sl.setAttribute('data-history', history.join(','));
-    // Use 50ms as minMax for latency to make graphs visible
-    drawSparkline('latency-sparkline', history, getThemeColor('--accent-warning', '#ffb300'), 50);
+    // Use 100ms as minMax for latency to make graphs visible in the background
+    drawSparkline('latency-sparkline', history, color, 100);
 }
 
 function updateProgress(data) {
