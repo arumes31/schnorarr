@@ -336,9 +336,7 @@ func getRemoteFileSizeWithContext(ctx context.Context, host, path string) int64 
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(apiURL) // client.Do(req) is better but client.Get is fine if we use the right client and context? wait.
-	// Actually, client.Get doesn't take context. Use client.Do(req).
-	resp, err = client.Do(req)
+	resp, err := client.Do(req)
 
 	if err != nil {
 		return 0
