@@ -232,7 +232,10 @@ function drawSparkline(canvasId, data, color, minMax = 1024) {
     const max = Math.max(...data, minMax);
     const points = data.map((val, i) => {
         const x = (i / (data.length - 1)) * width;
-        const y = height - (val / max) * height;
+        let yRatio = val / max;
+        // Ensure non-zero values have a minimum visible height (3%) even during massive spikes
+        if (val > 0 && yRatio < 0.03) yRatio = 0.03;
+        const y = (height - 2) - yRatio * (height - 4);
         return [x, y];
     });
 
