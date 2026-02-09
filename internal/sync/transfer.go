@@ -303,6 +303,7 @@ func (t *Transferer) copyRemote(src, dst string) error {
 				// while rsync is doing its final verification/cleanup.
 				if lastReportedSize >= totalSize {
 					lastProgressTime = time.Now()
+					log.Printf("[Transferer] DEBUG: Already at 100%% (%d/%d), updating lastProgressTime for %s", lastReportedSize, totalSize, src)
 				}
 
 				// Check if stuck
@@ -382,7 +383,11 @@ func getRemoteFileSize(host, path string) int64 {
 	apiURL := fmt.Sprintf("http://%s:8080/api/stat?path=%s", host, url.QueryEscape(path))
 	log.Printf("[Transferer] DEBUG: Querying stat API: %s", apiURL)
 
-	resp, err := http.Get(apiURL)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	resp, err := client.Get(apiURL)
 	if err != nil {
 		log.Printf("[Transferer] DEBUG: API request failed: %v", err)
 		return 0
