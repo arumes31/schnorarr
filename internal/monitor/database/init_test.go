@@ -7,8 +7,8 @@ import (
 
 func TestGetDBPath(t *testing.T) {
 	// 1. Test environment override
-	os.Setenv("DB_PATH", "test.db")
-	defer os.Unsetenv("DB_PATH")
+	_ = os.Setenv("DB_PATH", "test.db")
+	defer func() { _ = os.Unsetenv("DB_PATH") }()
 
 	path := getDBPath()
 	if path != "test.db" {
@@ -16,7 +16,7 @@ func TestGetDBPath(t *testing.T) {
 	}
 
 	// 2. Test default (Linux-like)
-	os.Unsetenv("DB_PATH")
+	_ = os.Unsetenv("DB_PATH")
 	// We can't easily mock os.PathSeparator, but we can check the behavior
 	path = getDBPath()
 	// On Windows without /config, it should be history.db
@@ -34,16 +34,16 @@ func TestGetDBPath(t *testing.T) {
 }
 
 func TestDBInit(t *testing.T) {
-	os.Setenv("DB_PATH", "test_init.db")
-	defer os.Remove("test_init.db")
-	defer os.Unsetenv("DB_PATH")
+	_ = os.Setenv("DB_PATH", "test_init.db")
+	defer func() { _ = os.Remove("test_init.db") }()
+	defer func() { _ = os.Unsetenv("DB_PATH") }()
 
 	DBPath = getDBPath()
 	err := Init()
 	if err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
-	defer DB.Close()
+	defer func() { _ = DB.Close() }()
 
 	// Verify table exists
 	var count int
