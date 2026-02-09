@@ -287,8 +287,8 @@ func (t *Transferer) copyRemote(src, dst string) error {
 					return fmt.Errorf("transfer interrupted by pause")
 				}
 
-				// Poll destination file size
-				if destHost != "" && remotePath != "" {
+				// Poll destination file size (only if not already at 100%)
+				if destHost != "" && remotePath != "" && lastReportedSize < totalSize {
 					currentSize := getRemoteFileSize(destHost, remotePath)
 					if currentSize > 0 && currentSize != lastReportedSize {
 						if t.opts.OnProgress != nil {
@@ -297,6 +297,12 @@ func (t *Transferer) copyRemote(src, dst string) error {
 						lastReportedSize = currentSize
 						lastProgressTime = time.Now()
 					}
+				}
+
+				// If we are at 100%, keep updating the progress time to prevent "stuck" timeout
+				// while rsync is doing its final verification/cleanup.
+				if lastReportedSize >= totalSize {
+					lastProgressTime = time.Now()
 				}
 
 				// Check if stuck
