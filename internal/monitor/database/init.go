@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -15,7 +16,22 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
-const DBPath = "/config/history.db"
+const defaultDBPath = "/config/history.db"
+
+var DBPath = getDBPath()
+
+func getDBPath() string {
+	if env := os.Getenv("DB_PATH"); env != "" {
+		return env
+	}
+	// On Windows, if /config doesn't exist, fallback to current directory
+	if os.PathSeparator == '\\' {
+		if _, err := os.Stat("C:\\config"); err != nil {
+			return "history.db"
+		}
+	}
+	return defaultDBPath
+}
 
 // DB is the singleton database instance
 var DB *sql.DB
