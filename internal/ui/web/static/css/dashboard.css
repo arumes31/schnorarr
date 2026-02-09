@@ -972,7 +972,7 @@ input:checked+.slider:before {
 
 .activity-list {
     flex: 1;
-    overflow-y: auto;
+    overflow: auto;
     margin: 0;
     padding: 0;
     list-style: none;
