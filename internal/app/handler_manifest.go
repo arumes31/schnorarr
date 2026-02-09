@@ -94,8 +94,10 @@ func (a *App) ManifestHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Scan!
+	sync.AcquireScanLock()
 	scanner := sync.NewScanner()
 	manifest, err := scanner.ScanLocal(fullPath)
+	sync.ReleaseScanLock()
 	if err != nil {
 		http.Error(w, "Scan failed: "+err.Error(), http.StatusInternalServerError)
 		return
