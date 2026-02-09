@@ -53,7 +53,7 @@ func (a *App) Start(port string) error {
 	a.startLogTailer()
 	go a.startHousekeeping()
 	if os.Getenv("MODE") == "sender" {
-		a.startSenderServices()
+		go a.startSenderServices()
 	}
 
 	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.SyncEngines)
