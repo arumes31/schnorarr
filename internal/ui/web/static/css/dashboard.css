@@ -248,6 +248,23 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card * {
+    z-index: 1;
+}
+
+.latency-background {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    opacity: 0.15;
+    z-index: 0 !important;
+    pointer-events: none;
+    margin: 0 !important;
 }
 
 .stat-card::after {
@@ -940,7 +957,14 @@ input:checked+.slider:before {
 }
 
 .recent-activity-panel {
-    max-width: 800px;
+    flex: 1;
+}
+
+.dashboard-split-panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    align-items: stretch;
     width: 100%;
 }
 

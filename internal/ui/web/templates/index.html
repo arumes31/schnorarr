@@ -176,7 +176,7 @@
                 <div class="stat-label">Total Traffic</div>
                 <div id="stat-total" class="stat-value" style="color: var(--accent-secondary);">{{.TrafficTotal}}</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" id="speed-card">
                 <div class="stat-label">
                     <span>Speed</span>
                 </div>
@@ -186,12 +186,11 @@
                     <div id="speed-bar"
                         style="width: 0%; height: 100%; background: #FF00E5; transition: width 0.5s ease;"></div>
                 </div>
-                <div class="sparkline-container" id="latency-sparkline" data-history=""
-                    style="height: 12px; opacity: 0.6; margin-top: 5px; position: relative;">
+                <div class="sparkline-container latency-background" id="latency-sparkline" data-history="">
                     <span id="latency-val"
-                        style="position: absolute; right: 2px; top: 0; font-size: 8px; font-weight: 900; color: var(--accent-warning); pointer-events: none;"></span>
-                    <svg width="100%" height="12" preserveAspectRatio="none">
-                        <path d="" fill="none" stroke="var(--accent-warning)" stroke-width="1"></path>
+                        style="position: absolute; right: 8px; bottom: 8px; font-size: 10px; font-weight: 900; color: var(--accent-warning); pointer-events: none; z-index: 2;"></span>
+                    <svg width="100%" height="100%" preserveAspectRatio="none">
+                        <path d="" fill="none" stroke="var(--accent-warning)" stroke-width="2"></path>
                     </svg>
                 </div>
             </div>
@@ -342,7 +341,7 @@
         </section>
 
         <!-- Lower Panel -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: stretch;">
+        <div class="dashboard-split-panels">
             <section class="activity-card recent-activity-panel">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2 style="margin: 0; font-size: 18px;">Recent Activity</h2><a href="/history"
