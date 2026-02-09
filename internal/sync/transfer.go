@@ -195,10 +195,11 @@ func (t *Transferer) copyRemote(src, dst string) error {
 
 	// Construct args:
 	// -a: archive mode
-	// --partial: keep partially transferred files
+	// --inplace: update destination files in-place
+	// --append-verify: resume interrupted transfers and verify checksums
 	// --protect-args: handles spaces and special chars in paths correctly with daemon protocol
 	// --mkpath: create missing parent directories on destination (rsync 3.2.3+)
-	args := []string{"-a", "--partial", "--protect-args", "--mkpath"}
+	args := []string{"-a", "--inplace", "--append-verify", "--protect-args", "--mkpath"}
 
 	if t.opts.BandwidthLimit > 0 {
 		kbps := t.opts.BandwidthLimit / 1024
