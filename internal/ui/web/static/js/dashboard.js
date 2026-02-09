@@ -721,7 +721,7 @@ async function confirmSyncFromPreview() {
     }
 }
 // --- 7. UI Helpers ---
-function formatBytes(b) { b = Math.abs(b); if (b === 0) return '0 B'; const k = 1024, s = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + s[i]; }
+function formatBytes(b) { b = Math.abs(b); if (b === 0) return '0 B'; const k = 1024, s = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(2)) + ' ' + s[i]; }
 function parseBytes(str) { if (!str) return 0; const parts = str.trim().split(' '); if (parts.length < 2) return 0; const val = parseFloat(parts[0]); const unit = parts[1].toUpperCase(); if (unit.includes('KB')) return val * 1024; if (unit.includes('MB')) return val * 1024 * 1024; if (unit.includes('GB')) return val * 1024 * 1024 * 1024; return val; }
 function toast(msg, type = 'info') { const c = document.getElementById('toast-container'); if (!c) return; const t = document.createElement('div'); t.className = 'toast'; t.style.borderLeftColor = type === 'success' ? 'var(--accent-primary)' : 'var(--accent-warning)'; t.innerText = msg; c.appendChild(t); setTimeout(() => t.remove(), 4000); }
 function toggleLogScroll() { logScrollLocked = !logScrollLocked; const btn = document.getElementById('log-scroll-toggle'); if (btn) btn.innerText = logScrollLocked ? 'Locked' : 'Auto'; }
