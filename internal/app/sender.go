@@ -86,12 +86,26 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			includePatterns[i] = strings.TrimSpace(includePatterns[i])
 		}
 
+		pollInterval := 60 * time.Second
+		if env := os.Getenv("POLL_INTERVAL"); env != "" {
+			if val, err := strconv.Atoi(env); err == nil && val > 0 {
+				pollInterval = time.Duration(val) * time.Second
+			}
+		}
+
+		watchInterval := 12 * time.Hour
+		if env := os.Getenv("WATCH_INTERVAL"); env != "" {
+			if val, err := strconv.Atoi(env); err == nil && val > 0 {
+				watchInterval = time.Duration(val) * time.Second
+			}
+		}
+
 		engine := sync.NewEngine(sync.SyncConfig{
 			ID: id, SourceDir: src, TargetDir: resolvedTgt, Rule: rule,
 			ExcludePatterns: []string{".git", ".DS_Store", "Thumbs.db"},
 			IncludePatterns: includePatterns,
 			BandwidthLimit:  bwlimitBytes,
-			PollInterval:    60 * time.Second, WatchInterval: 12 * time.Hour, AutoApproveDeletions: database.GetSetting("auto_approve", "off") == "on",
+			PollInterval:    pollInterval, WatchInterval: watchInterval, AutoApproveDeletions: database.GetSetting("auto_approve", "off") == "on",
 			DryRunFunc: func() bool { return database.GetSetting("sync_mode", "dry") == "dry" },
 			OnSyncEvent: func(ts, act, p string, sz int64) {
 				_ = database.LogEvent(ts, act, p, sz, id)

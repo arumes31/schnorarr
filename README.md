@@ -237,12 +237,14 @@ Beyond the basic setup, you can fine-tune Schnorarr using these environment vari
 | `CONFIG_DIR` | Path to store logs and database. | `/config` |
 | `BWLIMIT_MBPS` | Global bandwidth limit for all transfers in Mbps. | `0` (Unlimited) |
 | `RSYNC_PASSWORD` | Optional: Password for authenticated rsync transfers. | - |
+| `POLL_INTERVAL` | (Sender) Frequency in seconds to check for file changes. | `60` |
+| `WATCH_INTERVAL` | (Sender) Frequency in seconds for a full safety reconciliation scan. | `43200` (12h) |
 
-### Sync Engine Tuning (Code Level)
+### Sync Engine Tuning
 Schnorarr is optimized for low CPU usage:
-- **Scan Concurrency**: 8 parallel workers (reduced from 32).
-- **Polling Interval**: Full "safety" scan runs every 60 seconds.
-- **Full Refresh**: Massive reconciliation scan runs every 12 hours.
+- **Scan Concurrency**: 8 parallel workers.
+- **Polling Interval**: Full "safety" scan runs every `POLL_INTERVAL` seconds (default: 60s).
+- **Full Refresh**: Massive reconciliation scan runs every `WATCH_INTERVAL` seconds (default: 12h).
 
 ## 🔌 API Reference
 
