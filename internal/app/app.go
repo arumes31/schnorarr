@@ -41,6 +41,10 @@ func New() (*App, error) {
 		Notifier: notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
 	}
 
+	// Load persisted settings
+	override := database.GetSetting("sender_override", "false")
+	app.HealthState.SetSenderOverride(override == "true")
+
 	// Setup structured logging
 	wsWriter := ws.NewLogWriter(app.WSHub)
 	multiWriter := io.MultiWriter(os.Stdout, wsWriter)
