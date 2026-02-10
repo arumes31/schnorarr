@@ -290,6 +290,14 @@ func (h *Handlers) UpdateSenderOverride(w http.ResponseWriter, r *http.Request) 
 		}
 		val := r.FormValue("enabled") == "true"
 		h.healthState.SetSenderOverride(val)
+
+		// Persist the setting
+		valStr := "false"
+		if val {
+			valStr = "true"
+		}
+		_ = database.SaveSetting("sender_override", valStr)
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 	})(w, r)
