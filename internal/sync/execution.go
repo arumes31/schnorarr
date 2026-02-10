@@ -68,6 +68,23 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 			e.reportEvent(timestamp, "DRY-Added", file.Path, file.Size)
 		} else {
 			srcPath, dstPath := filepath.Join(e.config.SourceDir, file.Path), filepath.Join(e.config.TargetDir, file.Path)
+
+			// Check if this is a conflict (needs update) and delete target first for clean override
+			isConflict := false
+			for _, c := range plan.Conflicts {
+				if c.Path == file.Path {
+					isConflict = true
+					break
+				}
+			}
+
+			if isConflict {
+				log.Printf("[%s] Conflict detected for %s, deleting target first to ensure override", e.config.ID, file.Path)
+				if err := e.transferer.DeleteFile(dstPath); err != nil {
+					log.Printf("[%s] Warning: Failed to delete conflict target %s: %v", e.config.ID, file.Path, err)
+				}
+			}
+
 			if err := e.transferer.CopyFile(srcPath, dstPath); err != nil {
 				if err.Error() == "transfer interrupted by pause" {
 					return touchedDirs, err

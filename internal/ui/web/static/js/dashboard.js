@@ -658,31 +658,31 @@ async function showPreview(id, mode = 'preview') {
 
         plan.conflicts.forEach(c => {
             const isSourceNewer = new Date(c.sourceTime) > new Date(c.receiverTime);
-            html += renderRow("DIFF", c.path, `<div style="font-size:10px; color:var(--accent-warning);">${isSourceNewer ? 'Sender is NEWER' : 'Sender is OLDER'}</div><div style="font-size:9px; opacity:0.6;">Size diff: ${formatBytes(Math.abs(c.sourceSize - c.receiverSize))}</div>`, "badge-renamed", false);
+            html += renderRow("DIFF", c.path, `<div style="font-size:10px; color:var(--accent-warning);">${isSourceNewer ? 'Sender is NEWER' : 'Sender is OLDER'}</div><div style="font-size:9px; opacity:0.6;">Size diff: ${formatBytes(Math.abs(c.sourceSize - c.receiverSize))}</div>`, "badge-renamed", true);
         });
 
         plan.filesToSync.forEach(f => {
             if (!plan.conflicts.some(c => c.path === f.path)) {
-                html += renderRow("ADD", f.path, formatBytes(f.size), "badge-added");
+                html += renderRow("ADD", f.path, formatBytes(f.size), "badge-added", true);
             }
         });
 
         plan.renames = plan.renames || {};
         for (const [oldPath, newPath] of Object.entries(plan.renames)) {
-            html += renderRow("MOVE", oldPath, `-> ${escapeHtml(newPath)}`, "badge-renamed");
+            html += renderRow("MOVE", oldPath, `-> ${escapeHtml(newPath)}`, "badge-renamed", true);
         }
 
         plan.filesToDelete.forEach(p => {
-            html += renderRow("DEL", p, "-", "badge-deleted");
+            html += renderRow("DEL", p, "-", "badge-deleted", true);
         });
 
         plan.dirsToDelete.forEach(p => {
-            html += renderRow("DEL-DIR", p, "-", "badge-deleted");
+            html += renderRow("DEL-DIR", p, "-", "badge-deleted", true);
         });
 
         if (plan.dirsToCreate) {
             plan.dirsToCreate.forEach(p => {
-                html += renderRow("ADD-DIR", p, "-", "badge-added");
+                html += renderRow("ADD-DIR", p, "-", "badge-added", true);
             });
         }
 
