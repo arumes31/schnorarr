@@ -631,16 +631,19 @@ func (t *Transferer) DeleteDir(path string) error {
 }
 
 func (t *Transferer) deleteRemote(uri string, isDir bool) error {
-	destHost := os.Getenv("DEST_HOST")
+	destHost, remotePath := ParseRemoteDestination(uri)
 	if destHost == "" {
-		return fmt.Errorf("remote delete failed: DEST_HOST not set")
+		// Fallback to Env if URI parsing fails to get host
+		destHost = os.Getenv("DEST_HOST")
 	}
 
-	parts := strings.Split(uri, "::")
-	if len(parts) < 2 {
-		return fmt.Errorf("invalid rsync URI format: %s", uri)
+	if destHost == "" {
+		return fmt.Errorf("remote delete failed: could not determine destination host from URI %q or DEST_HOST", uri)
 	}
-	remotePath := parts[1]
+
+	if remotePath == "" {
+		return fmt.Errorf("remote delete failed: could not determine remote path from URI %q", uri)
+	}
 
 	apiURL := fmt.Sprintf("http://%s:8080/api/delete?path=%s&dir=%v",
 		destHost, url.QueryEscape(remotePath), isDir)
