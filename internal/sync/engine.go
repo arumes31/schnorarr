@@ -341,6 +341,18 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		return nil
 	}
 
+	// SAFETY CHECK: If source is completely empty but target is not, abort to prevent catastrophic deletion.
+	// This protects against mounted drives falling off or accidental source deletion.
+	if len(sourceManifest.Files) == 0 && len(sourceManifest.Dirs) == 0 {
+		if len(targetManifest.Files) > 0 || len(targetManifest.Dirs) > 0 {
+			msg := "Safety Check Failed: Source directory appears empty but target is not. Aborting sync to prevent total data loss."
+			log.Printf("[Engine:%s] %s", e.config.ID, msg)
+			database.ReportEngineError(e.config.ID, msg)
+			// We return an error so the engine logs it and retries later, effectively pausing destructive actions.
+			return fmt.Errorf("safety check failed: source is empty but target is not")
+		}
+	}
+
 	var totalPlanSize int64
 	for _, f := range plan.FilesToSync {
 		totalPlanSize += f.Size

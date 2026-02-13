@@ -57,6 +57,25 @@ func identifyDeletions(sender, receiver *Manifest, rule string) (filesToDelete, 
 			}
 		} else {
 			if _, exists := sender.GetFile(path); !exists {
+				// Safety Check for Subdirectories:
+				// If the file is in a subdirectory (not root), check if that subdirectory exists and is empty on the sender.
+				// If the sender has the directory but zero files in it, we assume it's a "protected empty folder" (e.g. season folder)
+				// and do NOT delete the receiver's files within it.
+				parent := filepath.Dir(path)
+				parent = filepath.ToSlash(parent)
+
+				// Only apply protection if we are not at root
+				if parent != "." && parent != "/" {
+					// Check if parent dir exists in sender (it should, based on isManaged, but let's be double sure)
+					if _, dirExists := sender.GetDir(parent); dirExists {
+						// Check if sender has any files in this directory
+						if sender.GetFileCountInDir(parent) == 0 {
+							// Sender has the folder but no files -> Prevent deletion of receiver contents
+							continue
+						}
+					}
+				}
+
 				filesToDelete = append(filesToDelete, path)
 			}
 		}
@@ -68,4 +87,3 @@ func identifyDeletions(sender, receiver *Manifest, rule string) (filesToDelete, 
 
 	return filesToDelete, dirsToDelete
 }
-

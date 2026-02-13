@@ -171,3 +171,33 @@ func (fi *FileInfo) NeedsUpdate(other *FileInfo) bool {
 	// Truncate to seconds for comparison to avoid precision mismatches
 	return fi.ModTime.Unix() > other.ModTime.Unix()
 }
+
+// GetFileCountInDir counts how many files (not directories) are directly inside the given directory path.
+// It performs a linear scan which is O(N) where N is total files in manifest.
+// For frequent usage, an index would be better, but for deletion checks it's acceptable.
+func (m *Manifest) GetFileCountInDir(dirPath string) int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	count := 0
+	cleanDir := strings.TrimSuffix(dirPath, "/")
+
+	for path, info := range m.Files {
+		if info.IsDir {
+			continue
+		}
+		// check if file's parent is the target directory
+		parent := strings.TrimSuffix(path, "/")
+		idx := strings.LastIndex(parent, "/")
+		if idx != -1 {
+			parent = parent[:idx]
+		} else {
+			parent = ""
+		}
+
+		if parent == cleanDir {
+			count++
+		}
+	}
+	return count
+}
