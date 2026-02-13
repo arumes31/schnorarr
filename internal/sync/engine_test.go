@@ -18,6 +18,16 @@ func TestEngine_SafetyLock(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Create a file in source (and target) to prevent "Empty Source" safety check
+	keepPath := filepath.Join(sourceDir, "keep.txt")
+	if err := os.WriteFile(keepPath, []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Copy to target so it doesn't try to sync it
+	if err := os.WriteFile(filepath.Join(targetDir, "keep.txt"), []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	// Configure engine
 	cfg := SyncConfig{
 		ID:           "test-safety",
@@ -92,6 +102,16 @@ func TestEngine_AutoApproveDeletions(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Create a file in source (and target) to prevent "Empty Source" safety check
+	keepPath := filepath.Join(sourceDir, "keep.txt")
+	if err := os.WriteFile(keepPath, []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Copy to target so it doesn't try to sync it
+	if err := os.WriteFile(filepath.Join(targetDir, "keep.txt"), []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	// Configure engine with AutoApproveDeletions: true
 	cfg := SyncConfig{
 		ID:                   "test-auto-approve",
@@ -118,5 +138,103 @@ func TestEngine_AutoApproveDeletions(t *testing.T) {
 	// Verify file was deleted
 	if _, err := os.Stat(deletePath); !os.IsNotExist(err) {
 		t.Fatal("File should have been deleted automatically")
+	}
+}
+
+func TestEngine_Safety_EmptySource(t *testing.T) {
+	// Setup temp directories
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Target has content, Source is empty
+	targetFile := filepath.Join(targetDir, "keep_me.txt")
+	if err := os.WriteFile(targetFile, []byte("important data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := SyncConfig{
+		ID:           "test-empty-source",
+		SourceDir:    sourceDir,
+		TargetDir:    targetDir,
+		Rule:         "flat",
+		PollInterval: 100 * time.Millisecond,
+		DryRun:       false,
+	}
+
+	engine := NewEngine(cfg)
+
+	// Trigger Sync
+	err := engine.RunSync(nil)
+
+	// Expect Error
+	if err == nil {
+		t.Fatal("RunSync should have failed due to safety check")
+	}
+
+	if err.Error() != "safety check failed: source is empty but target is not" {
+		t.Errorf("Unexpected error message: %v", err)
+	}
+
+	// Verify target file still exists
+	if _, err := os.Stat(targetFile); os.IsNotExist(err) {
+		t.Fatal("Target file was deleted despite safety check!")
+	}
+}
+
+func TestEngine_SubdirectorySafety(t *testing.T) {
+	// Setup temp directories
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Source:
+	// - Season 1/ (empty)
+	// - Season 2/file2.mkv
+	if err := os.Mkdir(filepath.Join(sourceDir, "Season 1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(sourceDir, "Season 2"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "Season 2", "file2.mkv"), []byte("s2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Target:
+	// - Season 1/file1.mkv (Should be protected!)
+	// - Season 2/file2.mkv (Same)
+	if err := os.Mkdir(filepath.Join(targetDir, "Season 1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(targetDir, "Season 2"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	protectedFile := filepath.Join(targetDir, "Season 1", "file1.mkv")
+	if err := os.WriteFile(protectedFile, []byte("s1"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, "Season 2", "file2.mkv"), []byte("s2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := SyncConfig{
+		ID:           "test-subdir-safety",
+		SourceDir:    sourceDir,
+		TargetDir:    targetDir,
+		Rule:         "flat",
+		PollInterval: 100 * time.Millisecond,
+		DryRun:       false,
+	}
+
+	engine := NewEngine(cfg)
+
+	// Trigger Sync
+	err := engine.RunSync(nil)
+	if err != nil {
+		t.Fatalf("RunSync failed: %v", err)
+	}
+
+	// Verify protected file still exists
+	if _, err := os.Stat(protectedFile); os.IsNotExist(err) {
+		t.Fatal("Protected file in empty source subdirectory was deleted!")
 	}
 }
