@@ -12,17 +12,30 @@ if [ -n "$TAILSCALE_AUTHKEY" ]; then
     
     mkdir -p /config/tailscale
     tailscaled --state=/config/tailscale/tailscaled.state &
-    sleep 2
     
-        HOSTNAME=${TS_HOSTNAME:-"schnorarr-${MODE}"}
+    echo "Waiting for Tailscale daemon to start..."
+    for i in {1..15}; do
+        # If it doesn't say "failed to connect", the daemon is up (even if logged out)
+        if ! tailscale status 2>&1 | grep -q "failed to connect to local tailscaled"; then
+            break
+        fi
+        sleep 1
+    done
+    
+    HOSTNAME=${TS_HOSTNAME:-"schnorarr-${MODE}"}
     UP_ARGS=${TAILSCALE_UP_ARGS:-""}
     
-    echo "Checking Tailscale status..."
-    if tailscale status | grep -q "Logged out"; then
-        echo "Node not authenticated. Running tailscale up with authkey: $HOSTNAME and args: $UP_ARGS"
+    echo "Checking Tailscale authentication status..."
+    STATUS=$(tailscale status 2>&1 || true)
+    
+    # Check if the node is logged out
+    if echo "$STATUS" | grep -q "Logged out"; then
+        echo "Node not authenticated. Running tailscale up with authkey: $HOSTNAME"
         tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="$HOSTNAME" $UP_ARGS
     else
-        echo "Node already authenticated. Running tailscale up without authkey: $HOSTNAME and args: $UP_ARGS"
+        echo "Node appears authenticated. Running tailscale up without authkey: $HOSTNAME"
+        # Only run tailscale up if we need to apply new UP_ARGS, or we just let the daemon run.
+        # But we run it to ensure the hostname and routes are applied.
         tailscale up --hostname="$HOSTNAME" $UP_ARGS
     fi
 fi
