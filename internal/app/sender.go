@@ -8,14 +8,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync" // Standard library sync package
 	"sync/atomic"
 	"time"
 
 	"schnorarr/internal/monitor/database"
 	"schnorarr/internal/monitor/health"
 	"schnorarr/internal/monitor/notification"
-	"schnorarr/internal/monitor/websocket"
-	"schnorarr/internal/sync"
+	websocket "schnorarr/internal/monitor/websocket"
+	syncpkg "schnorarr/internal/sync"
 )
 
 func (a *App) startSenderServices() {
@@ -31,8 +32,8 @@ func (a *App) startSenderServices() {
 	go checkReceiverHealth(a.HealthState, engines, &latency)
 }
 
-func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier *notification.Service) []*sync.Engine {
-	var engines []*sync.Engine
+func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier *notification.Service) []*syncpkg.Engine {
+	var engines []*syncpkg.Engine
 
 	// Clear any orphaned locks/queues from previous crashed runs to ensure a clean start
 	if err := database.ClearAllEngineStates(); err != nil {
@@ -56,7 +57,7 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 		if destHost != "" {
 			// Check if target is already a full rsync URI
 			if strings.Contains(tgt, "::") || strings.HasPrefix(tgt, "rsync://") {
-				resolvedTgt = sync.UpdateTargetHost(tgt, destHost)
+				resolvedTgt = syncpkg.UpdateTargetHost(tgt, destHost)
 			} else if destModule != "" {
 				// Construct Rsync URI: user@host::module/path
 				// e.g. syncuser@192.168.1.50::video-sync/movies
@@ -69,7 +70,7 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			}
 		} else {
 			// Local fallback (for testing or local-only mode)
-			resolvedTgt = sync.ResolveTargetPath(tgt, "", "")
+			resolvedTgt = syncpkg.ResolveTargetPath(tgt, "", "")
 		}
 
 		bwlimitBytes := int64(0)
@@ -109,7 +110,7 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			}
 		}
 
-		engine := sync.NewEngine(sync.SyncConfig{
+		engine := syncpkg.NewEngine(syncpkg.SyncConfig{
 			ID: id, SourceDir: src, TargetDir: resolvedTgt, Rule: rule,
 			ExcludePatterns: []string{".git", ".DS_Store", "Thumbs.db"},
 			IncludePatterns: includePatterns,
@@ -127,21 +128,33 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			OnError: func(msg string) { healthState.ReportError(msg, notifier.Send) },
 		})
 
-		if err := engine.Start(); err == nil {
-			engine.SetHealthState(healthState)
-			engines = append(engines, engine)
-			// Only pause if successfully started
-			if database.GetSetting("engine_paused_"+id, "false") == "true" {
-				engine.Pause()
-			}
-		} else {
-			fmt.Printf("Failed to start engine %s: %v\n", id, err)
-		}
+		engines = append(engines, engine) // Add to list BEFORE starting so we don't lose the reference if it blocks
 	}
+
+	var wg sync.WaitGroup
+
+	for _, eng := range engines {
+		wg.Add(1)
+		go func(e *syncpkg.Engine, eID string) {
+			defer wg.Done()
+			if err := e.Start(); err == nil {
+				e.SetHealthState(healthState)
+				if database.GetSetting("engine_paused_"+eID, "false") == "true" {
+					e.Pause()
+				}
+			} else {
+				fmt.Printf("Failed to start engine %s: %v\n", eID, err)
+			}
+		}(eng, eng.GetConfig().ID)
+	}
+
+	// We wait for all engines to finish Start() initialization
+	wg.Wait()
+
 	return engines
 }
 
-func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine, healthState *health.State, latency *int64) {
+func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*syncpkg.Engine, healthState *health.State, latency *int64) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -257,7 +270,7 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 	}
 }
 
-func checkReceiverHealth(healthState *health.State, engines []*sync.Engine, latency *int64) {
+func checkReceiverHealth(healthState *health.State, engines []*syncpkg.Engine, latency *int64) {
 	destHost := os.Getenv("DEST_HOST")
 	if destHost == "" {
 		return

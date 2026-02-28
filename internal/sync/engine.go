@@ -665,6 +665,10 @@ func (e *Engine) Resume() {
 	e.pausedMu.Unlock()
 	go func() { _ = e.RunSync(nil) }()
 }
+
+// GetConfig returns the engine's configuration
+// func (e *Engine) GetConfig() SyncConfig { ... } already in config.go
+
 func (e *Engine) IsPaused() bool { e.pausedMu.RLock(); defer e.pausedMu.RUnlock(); return e.paused }
 func (e *Engine) IsScanning() bool {
 	e.pausedMu.RLock()
