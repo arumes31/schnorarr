@@ -33,6 +33,12 @@ func (a *App) startSenderServices() {
 
 func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier *notification.Service) []*sync.Engine {
 	var engines []*sync.Engine
+
+	// Clear any orphaned locks/queues from previous crashed runs to ensure a clean start
+	if err := database.ClearAllEngineStates(); err != nil {
+		fmt.Printf("Warning: failed to clear existing engine states on startup: %v\n", err)
+	}
+
 	for i := 1; i <= 10; i++ {
 		id := strconv.Itoa(i) // Capture loop variable
 		prefix := "SYNC_" + id

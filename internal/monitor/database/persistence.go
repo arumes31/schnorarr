@@ -147,3 +147,32 @@ func LoadEngineQueue(engineID string) (string, error) {
 	}
 	return jsonStr, err
 }
+
+// ClearAllEngineStates removes all queued syncs and locks for all engines
+func ClearAllEngineStates() error {
+	if DB == nil {
+		return nil
+	}
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(`DELETE FROM engine_queue`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM engine_state WHERE waiting_for_approval = ?`, true); err != nil {
+		return err
+	}
+	// We might also want to clear pending actions/conflicts if they are tied to a paused state,
+	// but those are usually cleared when a sync succeeds. To be fully clean on startup:
+	if _, err := tx.Exec(`DELETE FROM engine_pending_actions`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM engine_conflicts`); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
