@@ -14,11 +14,17 @@ if [ -n "$TAILSCALE_AUTHKEY" ]; then
     tailscaled --state=/config/tailscale/tailscaled.state &
     sleep 2
     
-    HOSTNAME=${TS_HOSTNAME:-"schnorarr-${MODE}"}
+        HOSTNAME=${TS_HOSTNAME:-"schnorarr-${MODE}"}
     UP_ARGS=${TAILSCALE_UP_ARGS:-""}
     
-    echo "Tailscale up with hostname: $HOSTNAME and args: $UP_ARGS"
-    tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="$HOSTNAME" $UP_ARGS
+    echo "Checking Tailscale status..."
+    if tailscale status | grep -q "Logged out"; then
+        echo "Node not authenticated. Running tailscale up with authkey: $HOSTNAME and args: $UP_ARGS"
+        tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="$HOSTNAME" $UP_ARGS
+    else
+        echo "Node already authenticated. Running tailscale up without authkey: $HOSTNAME and args: $UP_ARGS"
+        tailscale up --hostname="$HOSTNAME" $UP_ARGS
+    fi
 fi
 
 if [ "$MODE" = "receiver" ]; then
