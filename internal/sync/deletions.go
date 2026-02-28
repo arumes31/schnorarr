@@ -27,11 +27,13 @@ func identifyDeletions(sender, receiver *Manifest, rule string) (filesToDelete, 
 		}
 
 		// All parent directory components must also exist on the sender.
+		prev := ""
 		for {
 			curr = filepath.Dir(curr)
-			if curr == "." || curr == "/" || curr == "" {
+			if curr == "." || curr == "/" || curr == "" || curr == prev {
 				break
 			}
+			prev = curr
 			// Normalize for lookup
 			lookup := filepath.ToSlash(curr)
 			if _, exists := sender.GetDir(lookup); !exists {
