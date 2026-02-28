@@ -627,9 +627,18 @@ func (e *Engine) periodicSyncLoop() {
 }
 
 func (e *Engine) addWatchRecursive(path string) error {
-	return filepath.Walk(path, func(walkPath string, info os.FileInfo, err error) error {
+	// If the root path doesn't exist yet, we can't walk it or watch it.
+	// But we shouldn't kill the engine startup. We'll just return nil and
+	// let the periodic scanner/polling recreate the watch later when it appears.
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		log.Printf("[%s] Warning: Source directory %s does not exist yet. Skipping initial file watcher setup.", e.config.ID, path)
+		return nil
+	}
+
+	err := filepath.Walk(path, func(walkPath string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			log.Printf("[%s] Warning: Error walking path %s: %v", e.config.ID, walkPath, err)
+			return nil // Try to continue walking other paths
 		}
 		if info.IsDir() {
 			relPath, _ := filepath.Rel(e.config.SourceDir, walkPath)
@@ -637,11 +646,16 @@ func (e *Engine) addWatchRecursive(path string) error {
 				return filepath.SkipDir
 			}
 			if err := e.watcher.Add(walkPath); err != nil {
-				return err
+				log.Printf("[%s] Warning: Failed to add watch for directory %s: %v", e.config.ID, walkPath, err)
 			}
 		}
 		return nil
 	})
+
+	if err != nil {
+		log.Printf("[%s] Warning: addWatchRecursive completed with error: %v", e.config.ID, err)
+	}
+	return nil
 }
 
 func (e *Engine) Pause() { e.pausedMu.Lock(); e.paused = true; e.pausedMu.Unlock() }

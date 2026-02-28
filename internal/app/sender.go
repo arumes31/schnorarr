@@ -40,6 +40,9 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 		if src == "" || tgt == "" {
 			continue
 		}
+		if rule == "" {
+			rule = "flat" // Default rule if not specified
+		}
 		var resolvedTgt string
 		destHost := os.Getenv("DEST_HOST")
 		destModule := os.Getenv("DEST_MODULE")
