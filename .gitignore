@@ -55,3 +55,9 @@ test_data
 *.exe
 run_test.ps1
 implementation_plan.md
+graphify-out/
+
+.claudeignore
+
+# Local design docs - never committed
+docs/

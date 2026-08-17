@@ -21,17 +21,17 @@ import (
 func (a *App) startSenderServices() {
 	// Shared latency variable
 	var latency int64
-	engines := startSyncEngines(a.WSHub, a.HealthState, a.Notifier)
+	engines := startSyncEngines(a.WSHub, a.HealthState, a.Notifier, a.BWManager)
 
 	a.engineMu.Lock()
 	a.SyncEngines = engines
 	a.engineMu.Unlock()
 
-	go startSyncStatusBroadcaster(a.WSHub, engines, a.HealthState, &latency)
+	go startSyncStatusBroadcaster(a.WSHub, engines, a.HealthState, &latency, a.BWManager)
 	go checkReceiverHealth(a.HealthState, engines, &latency)
 }
 
-func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier *notification.Service) []*sync.Engine {
+func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier *notification.Service, bwManager *sync.BandwidthManager) []*sync.Engine {
 	var engines []*sync.Engine
 	for i := 1; i <= 10; i++ {
 		id := strconv.Itoa(i) // Capture loop variable
@@ -61,13 +61,6 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 		} else {
 			// Local fallback (for testing or local-only mode)
 			resolvedTgt = sync.ResolveTargetPath(tgt, "", "")
-		}
-
-		bwlimitBytes := int64(0)
-		if bwStr := os.Getenv("BWLIMIT_MBPS"); bwStr != "" {
-			if bw, err := strconv.ParseInt(bwStr, 10, 64); err == nil {
-				bwlimitBytes = bw * 125000
-			}
 		}
 
 		// Determine include patterns
@@ -104,7 +97,7 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			ID: id, SourceDir: src, TargetDir: resolvedTgt, Rule: rule,
 			ExcludePatterns: []string{".git", ".DS_Store", "Thumbs.db"},
 			IncludePatterns: includePatterns,
-			BandwidthLimit:  bwlimitBytes,
+			BWManager:       bwManager,
 			PollInterval:    pollInterval, WatchInterval: watchInterval, AutoApproveDeletions: database.GetSetting("auto_approve", "off") == "on",
 			DryRunFunc: func() bool { return database.GetSetting("sync_mode", "dry") == "dry" },
 			OnSyncEvent: func(ts, act, p string, sz int64) {
@@ -132,7 +125,7 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 	return engines
 }
 
-func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine, healthState *health.State, latency *int64) {
+func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine, healthState *health.State, latency *int64, bwManager *sync.BandwidthManager) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -234,6 +227,14 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 
 		receiverHealthy, receiverMsg, receiverVersion, receiverUptime := healthState.GetReceiverStatus()
 		traffic := database.GetTrafficStats()
+		bwLimitMbps := int64(0)
+		bwActive := 0
+		bwSource := sync.LimitSourceManual
+		if bwManager != nil {
+			bwLimitMbps = bwManager.CurrentLimit() / 125000
+			bwActive = bwManager.ActiveCount()
+			bwSource = bwManager.Source()
+		}
 		wsHub.Broadcast("progress", map[string]interface{}{
 			"speed": database.FormatBytes(totalSpeed) + "/s", "state": state, "engines": engineStats, "eta": globalEta, "latency": latency,
 			"top_files":        database.GetTopFiles(),
@@ -243,6 +244,9 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 			"receiver_uptime":  receiverUptime,
 			"traffic_today":    database.FormatBytes(traffic.Today),
 			"traffic_total":    database.FormatBytes(traffic.Total),
+			"bw_limit_mbps":    bwLimitMbps,
+			"bw_active":        bwActive,
+			"bw_source":        bwSource,
 		})
 		wsHub.Broadcast("sync_status", map[string]interface{}{"status": progress, "engines": len(syncEngines)})
 	}

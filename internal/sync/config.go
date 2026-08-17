@@ -22,6 +22,10 @@ type SyncConfig struct {
 	IncludePatterns []string
 	// BandwidthLimit in bytes per second (0 = unlimited)
 	BandwidthLimit int64
+	// BWManager, when set, coordinates the bandwidth limit as a shared pool
+	// across engines; the manager pushes per-engine shares at runtime and
+	// overrides the static BandwidthLimit above.
+	BWManager *BandwidthManager
 	// WatchInterval is how often to perform full scans (0 = only on file changes)
 	WatchInterval time.Duration
 	// PollInterval is how often to poll the source directory for changes (for Docker/Windows compatibility)

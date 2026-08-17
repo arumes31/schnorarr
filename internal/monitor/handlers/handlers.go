@@ -40,12 +40,13 @@ type Handlers struct {
 	db             *sql.DB
 	notifier       *notification.Service
 	engineProvider func() []*syncpkg.Engine
+	bwManager      *syncpkg.BandwidthManager
 	sessions       map[string]Session
 	sessionMu      sync.RWMutex
 }
 
 // New creates a new handlers instance
-func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.DB, notifier *notification.Service, engines func() []*syncpkg.Engine) *Handlers {
+func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.DB, notifier *notification.Service, engines func() []*syncpkg.Engine, bwManager *syncpkg.BandwidthManager) *Handlers {
 	// Load auth settings from env
 	AuthEnabled = os.Getenv("AUTH_ENABLED") == "true"
 	AdminUser = os.Getenv("ADMIN_USER")
@@ -64,6 +65,7 @@ func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.D
 		db:             db,
 		notifier:       notifier,
 		engineProvider: engines,
+		bwManager:      bwManager,
 		sessions:       make(map[string]Session),
 	}
 }

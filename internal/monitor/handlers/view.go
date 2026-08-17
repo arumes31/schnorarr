@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -98,6 +99,11 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 
 		h_rec, _, rVer, rUp := h.healthState.GetReceiverStatus()
 
+		bwlimitMbps := 0
+		if h.config.BwlimitMbps != nil {
+			bwlimitMbps = *h.config.BwlimitMbps
+		}
+
 		data := struct {
 			Time, LastErrorMsg, Progress, LsyncdStatus string
 			Healthy, ReceiverHealthy                   bool
@@ -116,6 +122,11 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			ReceiverVersion, ReceiverUptime            string
 			SenderOverride                             bool
 			Timestamp                                  int64
+			IsSender                                   bool
+			BwlimitMbps                                int
+			SchedulerEnabled                           bool
+			QuietStart, QuietEnd                       string
+			QuietLimit, NormalLimit                    int
 		}{
 			Time: time.Now().Format("2006-01-02 15:04:05"), Healthy: healthy, State: state, LastErrorMsg: lastErr, Progress: progress, LsyncdStatus: status, Queued: queued, History: history,
 			TrafficToday: database.FormatBytes(traffic.Today), TrafficTotal: database.FormatBytes(traffic.Total), TrafficYesterday: database.FormatBytes(yesterday),
@@ -124,6 +135,10 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			Engines: engineViews, ReceiverHealthy: h_rec,
 			ReceiverVersion: rVer, ReceiverUptime: rUp, SenderOverride: h.healthState.IsOverrideEnabled(),
 			Timestamp: time.Now().Unix(),
+			IsSender:  os.Getenv("MODE") == "sender",
+			BwlimitMbps: bwlimitMbps, SchedulerEnabled: h.config.SchedulerEnabled,
+			QuietStart: h.config.QuietStart, QuietEnd: h.config.QuietEnd,
+			QuietLimit: h.config.QuietLimit, NormalLimit: h.config.NormalLimit,
 		}
 
 		funcMap := template.FuncMap{"lower": strings.ToLower}

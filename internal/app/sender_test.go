@@ -46,8 +46,8 @@ func TestStartSyncEngines_LoopCapture(t *testing.T) {
 	// Mock health state
 	healthState := &health.State{}
 
-	// We pass nil for wsHub and notifier as they are only used in callbacks
-	engines := startSyncEngines(nil, healthState, nil)
+	// We pass nil for wsHub, notifier and bwManager as they are only used in callbacks
+	engines := startSyncEngines(nil, healthState, nil, nil)
 
 	// Cleanup engines (stop watchers)
 	defer func() {
