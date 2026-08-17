@@ -40,7 +40,11 @@ func New() (*App, error) {
 	}
 	initialBps := int64(0)
 	if cfg.BwlimitMbps != nil {
-		initialBps = int64(*cfg.BwlimitMbps) * 125000
+		if bps, err := config.MbpsToBps(*cfg.BwlimitMbps); err == nil {
+			initialBps = bps
+		} else {
+			log.Printf("Ignoring persisted bwlimit_mbps: %v", err)
+		}
 	}
 	app := &App{
 		Config: cfg, HealthState: health.New(), WSHub: ws.New(),

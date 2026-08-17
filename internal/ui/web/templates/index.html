@@ -450,7 +450,7 @@
                 <div
                     style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-glass); border-radius: 8px; font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
                     <span>Effective: <span id="bw-current"
-                            style="color: var(--accent-primary); font-weight: bold;">{{.BwlimitMbps}} Mbps</span>
+                            style="color: var(--accent-primary); font-weight: bold;">{{if .BwlimitMbps}}{{.BwlimitMbps}} Mbps{{else}}Unlimited{{end}}</span>
                         · Sharing: <span id="bw-active" style="color: var(--accent-secondary); font-weight: bold;">0</span>
                         transfer(s)</span>
                     <span class="status-pill pill-rule" id="bw-source" title="Source of the current limit">manual</span>

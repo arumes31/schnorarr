@@ -66,8 +66,17 @@ func (s *Scheduler) evaluate() {
 		return
 	}
 
+	bps, err := config.MbpsToBps(targetLimit)
+	if err != nil {
+		log.Printf("Scheduler: invalid configured limit: %v", err)
+		// Remember the state anyway so we don't re-log every minute; a config
+		// change re-triggers evaluation.
+		s.lastWindow = &inQuietWindow
+		s.lastTarget = targetLimit
+		return
+	}
 	if s.manager != nil {
-		s.manager.SetGlobalLimit(int64(targetLimit)*125000, syncpkg.LimitSourceSchedule)
+		s.manager.SetGlobalLimit(bps, syncpkg.LimitSourceSchedule)
 		log.Printf("Scheduler: Set global bwlimit to %d Mbps (Quiet: %v)", targetLimit, inQuietWindow)
 	}
 	s.lastWindow = &inQuietWindow

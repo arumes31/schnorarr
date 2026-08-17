@@ -473,13 +473,14 @@ func (t *Transferer) copyParallel(filename string, srcFile, dstFile *os.File, to
 	numStreams := DefaultNumStreams
 	chunkSize := (totalSize + int64(numStreams) - 1) / int64(numStreams)
 
-	// When a bandwidth limit is set, each stream throttles to its divided share.
+	// When a bandwidth limit is set, each stream throttles to its divided
+	// share. No per-stream floor here: a minimum would let
+	// numStreams x floor exceed the engine's assigned share. (The engine-level
+	// floor MinShareBps exists only because rsync treats --bwlimit=0 as
+	// unlimited; Go-side throttling has no such constraint.)
 	perStreamRate := int64(0)
 	if bw := t.BandwidthLimit(); bw > 0 {
 		perStreamRate = bw / int64(numStreams)
-		if perStreamRate < MinShareBps {
-			perStreamRate = MinShareBps
-		}
 	}
 
 	var wg sync.WaitGroup

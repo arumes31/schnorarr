@@ -2,12 +2,28 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"math"
 	"os"
 	"strconv"
 )
 
-const ConfigPath = "/config/config.json"
+// ConfigPath is a var (not const) so tests can point it at an isolated file.
+var ConfigPath = "/config/config.json"
+
+// MaxMbps is the largest limit in Mbps whose bytes/sec value still fits an
+// int64 (MbpsToBps multiplies by 125000).
+const MaxMbps = math.MaxInt64 / 125000
+
+// MbpsToBps converts megabits/sec to bytes/sec, rejecting negative values
+// and values that would overflow int64.
+func MbpsToBps(mbps int) (int64, error) {
+	if mbps < 0 || mbps > MaxMbps {
+		return 0, fmt.Errorf("bandwidth limit %d Mbps out of range (0-%d)", mbps, MaxMbps)
+	}
+	return int64(mbps) * 125000, nil
+}
 
 // Config represents the application configuration
 type Config struct {
@@ -53,8 +69,12 @@ func Load() *Config {
 	}
 	if cfg.BwlimitMbps == nil {
 		if bwStr := os.Getenv("BWLIMIT_MBPS"); bwStr != "" {
-			if bw, err := strconv.Atoi(bwStr); err == nil && bw >= 0 {
-				cfg.BwlimitMbps = &bw
+			if bw, err := strconv.Atoi(bwStr); err == nil {
+				if _, err := MbpsToBps(bw); err == nil {
+					cfg.BwlimitMbps = &bw
+				} else {
+					log.Printf("Ignoring BWLIMIT_MBPS: %v", err)
+				}
 			}
 		}
 	}

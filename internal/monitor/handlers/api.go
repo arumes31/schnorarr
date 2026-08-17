@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"schnorarr/internal/monitor/config"
 	"schnorarr/internal/monitor/database"
 	"schnorarr/internal/sync"
 )
@@ -319,15 +320,25 @@ func (h *Handlers) UpdateBwlimit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		mbps, err := strconv.Atoi(strings.TrimSpace(r.FormValue("mbps")))
-		if err != nil || mbps < 0 {
+		if err != nil {
 			http.Error(w, "Invalid Mbps value: must be an integer >= 0", http.StatusBadRequest)
 			return
 		}
-		if h.bwManager != nil {
-			h.bwManager.SetGlobalLimit(int64(mbps)*125000, sync.LimitSourceManual)
+		bps, err := config.MbpsToBps(mbps)
+		if err != nil {
+			http.Error(w, "Invalid Mbps value: "+err.Error(), http.StatusBadRequest)
+			return
 		}
+		oldMbps := h.config.BwlimitMbps
 		h.config.BwlimitMbps = &mbps
-		_ = h.config.Save()
+		if err := h.config.Save(); err != nil {
+			h.config.BwlimitMbps = oldMbps
+			http.Error(w, "Failed to save configuration", http.StatusInternalServerError)
+			return
+		}
+		if h.bwManager != nil {
+			h.bwManager.SetGlobalLimit(bps, sync.LimitSourceManual)
+		}
 		_ = database.LogSystemEvent(h.GetUser(r), "Update Bandwidth Limit", fmt.Sprintf("Global limit set to %d Mbps", mbps))
 		if r.Header.Get("Accept") == "application/json" {
 			w.Header().Set("Content-Type", "application/json")
@@ -353,22 +364,35 @@ func (h *Handlers) SetScheduler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		quietLimit, err := strconv.Atoi(strings.TrimSpace(r.FormValue("quiet_limit")))
-		if err != nil || quietLimit < 0 {
+		if err != nil {
 			http.Error(w, "Invalid quiet_limit: must be an integer >= 0", http.StatusBadRequest)
 			return
 		}
+		if _, err := config.MbpsToBps(quietLimit); err != nil {
+			http.Error(w, "Invalid quiet_limit: "+err.Error(), http.StatusBadRequest)
+			return
+		}
 		normalLimit, err := strconv.Atoi(strings.TrimSpace(r.FormValue("normal_limit")))
-		if err != nil || normalLimit < 0 {
+		if err != nil {
 			http.Error(w, "Invalid normal_limit: must be an integer >= 0", http.StatusBadRequest)
 			return
 		}
+		if _, err := config.MbpsToBps(normalLimit); err != nil {
+			http.Error(w, "Invalid normal_limit: "+err.Error(), http.StatusBadRequest)
+			return
+		}
 		enabledRaw := r.FormValue("scheduler_enabled")
+		oldCfg := *h.config
 		h.config.SchedulerEnabled = enabledRaw == "on" || enabledRaw == "true"
 		h.config.QuietStart = quietStart
 		h.config.QuietEnd = quietEnd
 		h.config.QuietLimit = quietLimit
 		h.config.NormalLimit = normalLimit
-		_ = h.config.Save()
+		if err := h.config.Save(); err != nil {
+			*h.config = oldCfg
+			http.Error(w, "Failed to save configuration", http.StatusInternalServerError)
+			return
+		}
 		_ = database.LogSystemEvent(h.GetUser(r), "Update Scheduler", fmt.Sprintf("Enabled: %v, Quiet: %s-%s @ %d Mbps, Normal: %d Mbps",
 			h.config.SchedulerEnabled, quietStart, quietEnd, quietLimit, normalLimit))
 		if r.Header.Get("Accept") == "application/json" {

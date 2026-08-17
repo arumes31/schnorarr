@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -25,7 +28,25 @@ func postForm(t *testing.T, handler http.HandlerFunc, path string, form url.Valu
 	return w
 }
 
+// useTempConfigPath points config.Save at a writable temp file.
+func useTempConfigPath(t *testing.T) {
+	t.Helper()
+	old := config.ConfigPath
+	config.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+	t.Cleanup(func() { config.ConfigPath = old })
+}
+
+// useBrokenConfigPath points config.Save at a path inside a nonexistent
+// directory so it always fails.
+func useBrokenConfigPath(t *testing.T) {
+	t.Helper()
+	old := config.ConfigPath
+	config.ConfigPath = filepath.Join(t.TempDir(), "missing", "config.json")
+	t.Cleanup(func() { config.ConfigPath = old })
+}
+
 func TestHandlers_UpdateBwlimit(t *testing.T) {
+	useTempConfigPath(t)
 	m := syncpkg.NewBandwidthManager(0)
 	cfg := &config.Config{}
 	h := New(cfg, nil, nil, nil, nil, nil, m)
@@ -61,9 +82,40 @@ func TestHandlers_UpdateBwlimit(t *testing.T) {
 			t.Errorf("Expected 400 for mbps=%q, got %d", bad, w.Result().StatusCode)
 		}
 	}
+
+	// Boundary: largest int64-safe value is accepted
+	w = postForm(t, h.UpdateBwlimit, "/api/settings/bwlimit", url.Values{"mbps": {strconv.Itoa(math.MaxInt64 / 125000)}})
+	if w.Result().StatusCode != http.StatusOK {
+		t.Errorf("Expected 200 for boundary Mbps, got %d", w.Result().StatusCode)
+	}
+
+	// Overflow: parses as int but its bytes/sec value would overflow int64
+	w = postForm(t, h.UpdateBwlimit, "/api/settings/bwlimit", url.Values{"mbps": {strconv.Itoa(math.MaxInt64/125000 + 1)}})
+	if w.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Expected 400 for overflowing Mbps, got %d", w.Result().StatusCode)
+	}
+}
+
+func TestHandlers_UpdateBwlimit_SaveFailure(t *testing.T) {
+	useBrokenConfigPath(t)
+	m := syncpkg.NewBandwidthManager(0)
+	cfg := &config.Config{}
+	h := New(cfg, nil, nil, nil, nil, nil, m)
+
+	w := postForm(t, h.UpdateBwlimit, "/api/settings/bwlimit", url.Values{"mbps": {"50"}})
+	if w.Result().StatusCode != http.StatusInternalServerError {
+		t.Errorf("Expected 500 when Save fails, got %d", w.Result().StatusCode)
+	}
+	if got := m.CurrentLimit(); got != 0 {
+		t.Errorf("Manager limit changed despite Save failure: %d", got)
+	}
+	if cfg.BwlimitMbps != nil {
+		t.Errorf("Config BwlimitMbps changed despite Save failure: %d", *cfg.BwlimitMbps)
+	}
 }
 
 func TestHandlers_SetScheduler(t *testing.T) {
+	useTempConfigPath(t)
 	cfg := &config.Config{}
 	h := New(cfg, nil, nil, nil, nil, nil, nil)
 
@@ -120,5 +172,46 @@ func TestHandlers_SetScheduler(t *testing.T) {
 	// Last-known-good config must be untouched by the rejected requests
 	if cfg.QuietStart != "23:00" || cfg.QuietLimit != 10 {
 		t.Error("Config was modified by an invalid request")
+	}
+
+	// Overflowing limits are rejected even though they parse as int
+	for field, form := range map[string]url.Values{
+		"quiet_limit": {
+			"quiet_start": {"23:00"}, "quiet_end": {"07:00"},
+			"quiet_limit": {strconv.Itoa(math.MaxInt64/125000 + 1)}, "normal_limit": {"100"},
+		},
+		"normal_limit": {
+			"quiet_start": {"23:00"}, "quiet_end": {"07:00"},
+			"quiet_limit": {"10"}, "normal_limit": {strconv.Itoa(math.MaxInt64/125000 + 1)},
+		},
+	} {
+		w = postForm(t, h.SetScheduler, "/settings/scheduler", form)
+		if w.Result().StatusCode != http.StatusBadRequest {
+			t.Errorf("Expected 400 for overflowing %s, got %d", field, w.Result().StatusCode)
+		}
+	}
+}
+
+func TestHandlers_SetScheduler_SaveFailure(t *testing.T) {
+	useBrokenConfigPath(t)
+	cfg := &config.Config{
+		QuietStart: "01:00", QuietEnd: "02:00", QuietLimit: 5, NormalLimit: 50,
+	}
+	h := New(cfg, nil, nil, nil, nil, nil, nil)
+
+	w := postForm(t, h.SetScheduler, "/settings/scheduler", url.Values{
+		"scheduler_enabled": {"on"},
+		"quiet_start":       {"23:00"},
+		"quiet_end":         {"07:00"},
+		"quiet_limit":       {"10"},
+		"normal_limit":      {"100"},
+	})
+	if w.Result().StatusCode != http.StatusInternalServerError {
+		t.Errorf("Expected 500 when Save fails, got %d", w.Result().StatusCode)
+	}
+	// Effective config must be restored to the pre-request state
+	if cfg.SchedulerEnabled || cfg.QuietStart != "01:00" || cfg.QuietEnd != "02:00" ||
+		cfg.QuietLimit != 5 || cfg.NormalLimit != 50 {
+		t.Error("Config was not restored after Save failure")
 	}
 }
