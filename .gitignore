@@ -58,3 +58,6 @@ implementation_plan.md
 graphify-out/
 
 .claudeignore
+
+# Local design docs - never committed
+docs/
