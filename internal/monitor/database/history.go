@@ -25,6 +25,9 @@ func LogEvent(timestamp, action, path string, size int64, engineID string) error
 func LogSystemEvent(user, action, details string) error {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	log.Printf("[SYSTEM] %s: %s (%s)", user, action, details)
+	if DB == nil {
+		return nil
+	}
 	_, err := DB.Exec("INSERT INTO history (timestamp, action, file_path, size_bytes, engine_id) VALUES (?, ?, ?, ?, ?)",
 		timestamp, action, details, 0, "SYSTEM")
 	return err

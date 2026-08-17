@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"strconv"
 )
 
 const ConfigPath = "/config/config.json"
@@ -22,6 +23,10 @@ type Config struct {
 	NormalLimit      int    `json:"normal_limit"` // Mbps (Restore to this)
 
 	// Sync
+	// BwlimitMbps is the global bandwidth limit in Mbps. nil = unset
+	// (fall back to BWLIMIT_MBPS env); a explicit 0 means unlimited and
+	// wins over the env var.
+	BwlimitMbps *int `json:"bwlimit_mbps,omitempty"`
 }
 
 // Load reads configuration from file and falls back to environment variables
@@ -45,6 +50,13 @@ func Load() *Config {
 	}
 	if cfg.TelegramChatID == "" {
 		cfg.TelegramChatID = os.Getenv("TELEGRAM_CHAT_ID")
+	}
+	if cfg.BwlimitMbps == nil {
+		if bwStr := os.Getenv("BWLIMIT_MBPS"); bwStr != "" {
+			if bw, err := strconv.Atoi(bwStr); err == nil && bw >= 0 {
+				cfg.BwlimitMbps = &bw
+			}
+		}
 	}
 
 	return cfg

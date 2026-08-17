@@ -433,18 +433,67 @@
                     </div>
                 </form>
             </div>
+            {{if .IsSender}}
             <div class="activity-card">
-                <h3 style="margin-top: 0; font-size: 16px;">📅 Sync Scheduler</h3>
-                <form action="/settings/scheduler" method="POST"
+                <h3 style="margin-top: 0; font-size: 16px;">🚦 Traffic Shaping</h3>
+                <form onsubmit="applyBwlimit(event)"
                     style="display: flex; flex-direction: column; gap: 15px;">
-                    <div><label style="font-size: 12px; color: var(--text-muted);">Quiet Hours (e.g.
-                            08:00-18:00)</label><input type="text" name="quiet_hours" placeholder="HH:MM-HH:MM"
+                    <div>
+                        <label style="font-size: 12px; color: var(--text-muted);">Global Bandwidth Limit (Mbps, 0 =
+                            unlimited)</label>
+                        <input type="number" id="bwlimit-input" min="0" step="1" value="{{.BwlimitMbps}}"
                             style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
+                    </div>
+                    <button type="submit" class="btn-premium btn-outline"
+                        style="width: 100%; justify-content: center;">Apply Limit</button>
+                </form>
+                <div
+                    style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-glass); border-radius: 8px; font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
+                    <span>Effective: <span id="bw-current"
+                            style="color: var(--accent-primary); font-weight: bold;">{{.BwlimitMbps}} Mbps</span>
+                        · Sharing: <span id="bw-active" style="color: var(--accent-secondary); font-weight: bold;">0</span>
+                        transfer(s)</span>
+                    <span class="status-pill pill-rule" id="bw-source" title="Source of the current limit">manual</span>
+                </div>
+                <div style="border-top: 1px solid var(--border-glass); margin: 20px 0 15px 0;"></div>
+                <form onsubmit="saveSchedule(event)"
+                    style="display: flex; flex-direction: column; gap: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label style="font-size: 12px; color: var(--text-muted);">Quiet Hours Schedule</label>
+                        <label class="switch">
+                            <input type="checkbox" id="sched-enabled" {{if .SchedulerEnabled}}checked{{end}}>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 11px; color: var(--text-muted);">Start (HH:MM)</label>
+                            <input type="time" id="sched-quiet-start" value="{{.QuietStart}}" required
+                                style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 11px; color: var(--text-muted);">End (HH:MM)</label>
+                            <input type="time" id="sched-quiet-end" value="{{.QuietEnd}}" required
+                                style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 11px; color: var(--text-muted);">Quiet Limit (Mbps)</label>
+                            <input type="number" id="sched-quiet-limit" min="0" step="1" value="{{.QuietLimit}}"
+                                style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 11px; color: var(--text-muted);">Normal Limit (Mbps)</label>
+                            <input type="number" id="sched-normal-limit" min="0" step="1" value="{{.NormalLimit}}"
+                                style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
+                        </div>
                     </div>
                     <button type="submit" class="btn-premium btn-outline"
                         style="width: 100%; justify-content: center;">Save Schedule</button>
                 </form>
             </div>
+            {{end}}
         </div>
     </main>
 

@@ -21,7 +21,7 @@ func TestHandlers_Login(t *testing.T) {
 		_ = os.Unsetenv("ADMIN_PASS")
 	}()
 
-	h := New(nil, nil, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, nil)
 
 	// Case 1: Success
 	form := url.Values{}
@@ -88,7 +88,7 @@ func TestHandlers_AuthMiddleware(t *testing.T) {
 	_ = os.Setenv("AUTH_ENABLED", "true")
 	defer func() { _ = os.Unsetenv("AUTH_ENABLED") }()
 
-	h := New(nil, nil, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, nil)
 
 	// Create a valid session
 	token := "valid_token"
@@ -130,7 +130,7 @@ func TestHandlers_AuthMiddleware(t *testing.T) {
 }
 
 func TestHandlers_GetUser(t *testing.T) {
-	h := New(nil, nil, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, nil)
 	token := "user_token"
 	h.sessionMu.Lock()
 	h.sessions[token] = Session{User: "testuser", Expires: time.Now().Add(time.Hour)}

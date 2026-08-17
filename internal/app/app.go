@@ -15,6 +15,7 @@ import (
 	"schnorarr/internal/monitor/handlers"
 	"schnorarr/internal/monitor/health"
 	"schnorarr/internal/monitor/notification"
+	"schnorarr/internal/monitor/scheduler"
 	"schnorarr/internal/monitor/tailer"
 	ws "schnorarr/internal/monitor/websocket"
 	syncpkg "schnorarr/internal/sync"
@@ -28,6 +29,7 @@ type App struct {
 	WSHub       *ws.Hub
 	Notifier    *notification.Service
 	SyncEngines []*syncpkg.Engine
+	BWManager   *syncpkg.BandwidthManager
 	engineMu    sync.RWMutex
 }
 
@@ -36,9 +38,14 @@ func New() (*App, error) {
 	if err := database.Init(); err != nil {
 		return nil, fmt.Errorf("db init failed: %w", err)
 	}
+	initialBps := int64(0)
+	if cfg.BwlimitMbps != nil {
+		initialBps = int64(*cfg.BwlimitMbps) * 125000
+	}
 	app := &App{
 		Config: cfg, HealthState: health.New(), WSHub: ws.New(),
-		Notifier: notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
+		Notifier:  notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
+		BWManager: syncpkg.NewBandwidthManager(initialBps),
 	}
 
 	// Load persisted settings
@@ -60,9 +67,11 @@ func (a *App) Start(port string) error {
 	go a.startHousekeeping()
 	if os.Getenv("MODE") == "sender" {
 		go a.startSenderServices()
+		sched := scheduler.New(a.Config, a.BWManager)
+		go sched.Start()
 	}
 
-	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.GetSyncEngines)
+	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.GetSyncEngines, a.BWManager)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", h.Index)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(ui.StaticFS))))
@@ -79,6 +88,7 @@ func (a *App) Start(port string) error {
 	mux.HandleFunc("/settings/sync-mode", h.UpdateSyncMode)
 	mux.HandleFunc("/settings/auto-approve", h.UpdateAutoApprove)
 	mux.HandleFunc("/settings/sender-override", h.UpdateSenderOverride)
+	mux.HandleFunc("/api/settings/bwlimit", h.UpdateBwlimit)
 
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {

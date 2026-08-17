@@ -119,7 +119,7 @@ Regardless of the configured rule name (`series`, `flat`, etc.), the engine curr
 | :--- | :--- | :--- |
 | `DEST_HOST` | Hostname or IP of the Receiver | `192.168.1.50` |
 | `DEST_MODULE` | Rsync module name on Receiver | `media` |
-| `BWLIMIT_MBPS` | Global bandwidth limit in Mbps | `50` |
+| `BWLIMIT_MBPS` | Initial global bandwidth limit in Mbps (fallback; the value saved from the dashboard's Traffic Shaping card takes precedence) | `50` |
 | `SYNC_N_SOURCE` | Source path for engine `N` (1-10) | `/source/movies` |
 | `SYNC_N_TARGET` | Target path for engine `N` (1-10) | `media/movies` |
 | `SYNC_N_RULE` | Sync rule (`standard`, `series`, `flat`) | `series` |
@@ -235,7 +235,7 @@ Beyond the basic setup, you can fine-tune Schnorarr using these environment vari
 | `MIN_DISK_SPACE_GB` | (Sender) Stop syncing if source disk space falls below this. | `0` (Disabled) |
 | `MAX_RETRIES` | (Sender) Number of attempts to connect to receiver before failing. | `30` |
 | `CONFIG_DIR` | Path to store logs and database. | `/config` |
-| `BWLIMIT_MBPS` | Global bandwidth limit for all transfers in Mbps. | `0` (Unlimited) |
+| `BWLIMIT_MBPS` | Initial global bandwidth limit for all transfers in Mbps. Shared across active engines and adjustable at runtime from the dashboard (Traffic Shaping card); the saved dashboard value wins over this env var. | `0` (Unlimited) |
 | `RSYNC_PASSWORD` | Optional: Password for authenticated rsync transfers. | - |
 | `POLL_INTERVAL` | (Sender) Frequency in seconds to check for file changes. | `60` |
 | `WATCH_INTERVAL` | (Sender) Frequency in seconds for a full safety reconciliation scan. | `43200` (12h) |

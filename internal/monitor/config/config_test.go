@@ -29,6 +29,29 @@ func TestLoad(t *testing.T) {
 	_ = os.Unsetenv("TELEGRAM_CHAT_ID")
 }
 
+func TestLoadBwlimitEnvFallback(t *testing.T) {
+	_ = os.Setenv("BWLIMIT_MBPS", "50")
+	defer func() { _ = os.Unsetenv("BWLIMIT_MBPS") }()
+
+	cfg := Load()
+	if cfg.BwlimitMbps == nil {
+		t.Fatal("Expected BwlimitMbps to be set from env")
+	}
+	if *cfg.BwlimitMbps != 50 {
+		t.Errorf("Expected BwlimitMbps 50 from env, got %d", *cfg.BwlimitMbps)
+	}
+}
+
+func TestLoadBwlimitUnset(t *testing.T) {
+	_ = os.Unsetenv("BWLIMIT_MBPS")
+	cfg := Load()
+	// Without a config file or env var, the field stays unset (nil) so that
+	// an explicit 0 in the file remains distinguishable from "not configured".
+	if cfg.BwlimitMbps != nil {
+		t.Errorf("Expected BwlimitMbps to be nil when unset, got %d", *cfg.BwlimitMbps)
+	}
+}
+
 func TestSave(t *testing.T) {
 	originalPath := ConfigPath
 

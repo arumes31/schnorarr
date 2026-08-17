@@ -157,6 +157,9 @@ func NewEngine(config SyncConfig) *Engine {
 	})
 
 	e.transferer = transferer
+	if config.BWManager != nil {
+		config.BWManager.RegisterEngine(config.ID, e)
+	}
 	e.LoadState()
 	return e
 }
@@ -479,6 +482,13 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	if !isDry {
 		AcquireTransferLock()
 		defer ReleaseTransferLock()
+		// Mark this engine as actively transferring so the bandwidth manager
+		// can divide the global limit among active engines. Deferred Release
+		// guarantees the slot is not leaked on crash/error.
+		if e.config.BWManager != nil {
+			e.config.BWManager.Acquire(e.config.ID)
+			defer e.config.BWManager.Release(e.config.ID)
+		}
 	}
 
 	touchedDirs, err := e.executeSyncPhase(plan, targetManifest)
@@ -707,6 +717,12 @@ func (e *Engine) SetAutoApproveDeletions(enabled bool) {
 	e.pausedMu.Lock()
 	defer e.pausedMu.Unlock()
 	e.config.AutoApproveDeletions = enabled
+}
+
+// SetBandwidthLimit sets the transfer bandwidth limit in bytes/sec
+// (0 = unlimited). Called by the BandwidthManager with this engine's share.
+func (e *Engine) SetBandwidthLimit(bps int64) {
+	e.transferer.SetBandwidthLimit(bps)
 }
 func (e *Engine) GetStatus() string {
 	e.pausedMu.RLock()

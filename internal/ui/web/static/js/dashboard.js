@@ -332,6 +332,14 @@ function updateProgress(data) {
         if (totalEl) totalEl.innerText = data.traffic_total;
     }
     if (data.latency) { updateLatencySparkline(data.latency); }
+    if (Object.prototype.hasOwnProperty.call(data, 'bw_limit_mbps')) {
+        const cur = document.getElementById('bw-current');
+        if (cur) cur.innerText = data.bw_limit_mbps > 0 ? `${data.bw_limit_mbps} Mbps` : 'Unlimited';
+        const active = document.getElementById('bw-active');
+        if (active) active.innerText = data.bw_active;
+        const src = document.getElementById('bw-source');
+        if (src && data.bw_source) src.innerText = data.bw_source;
+    }
     if (data.hasOwnProperty('receiver_healthy')) {
         const receiverBadge = document.getElementById('receiver-badge');
         if (receiverBadge) {
@@ -552,6 +560,45 @@ async function cycleOverrideMode() {
         if (resp.ok) {
             el.setAttribute('data-val', next);
             toast(`Conflicts: ${next.toUpperCase()}`, 'info');
+        } else {
+            const txt = await resp.text();
+            toast(`Error: ${txt}`, 'error');
+        }
+    } catch (e) {
+        toast(`Request failed: ${e.message}`, 'error');
+    }
+}
+
+async function applyBwlimit(event) {
+    event.preventDefault();
+    const input = document.getElementById('bwlimit-input'); if (!input) return;
+    const formData = new FormData(); formData.append('mbps', input.value);
+    try {
+        const resp = await fetch('/api/settings/bwlimit', { method: 'POST', body: formData });
+        if (resp.ok) {
+            toast(`Bandwidth Limit: ${input.value} Mbps`, 'success');
+        } else {
+            const txt = await resp.text();
+            toast(`Error: ${txt}`, 'error');
+        }
+    } catch (e) {
+        toast(`Request failed: ${e.message}`, 'error');
+    }
+}
+
+async function saveSchedule(event) {
+    event.preventDefault();
+    const formData = new FormData();
+    const enabled = document.getElementById('sched-enabled');
+    if (enabled && enabled.checked) formData.append('scheduler_enabled', 'on');
+    formData.append('quiet_start', document.getElementById('sched-quiet-start')?.value || '');
+    formData.append('quiet_end', document.getElementById('sched-quiet-end')?.value || '');
+    formData.append('quiet_limit', document.getElementById('sched-quiet-limit')?.value || '0');
+    formData.append('normal_limit', document.getElementById('sched-normal-limit')?.value || '0');
+    try {
+        const resp = await fetch('/settings/scheduler', { method: 'POST', body: formData });
+        if (resp.ok) {
+            toast('Schedule Saved', 'success');
         } else {
             const txt = await resp.text();
             toast(`Error: ${txt}`, 'error');
