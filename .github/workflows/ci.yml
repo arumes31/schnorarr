@@ -37,7 +37,7 @@ jobs:
         run: go vet ./...
 
       - name: Lint
-        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 run
 
       - name: Test with race detector
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
