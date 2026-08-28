@@ -1,0 +1,10 @@
+*.sh text eol=lf
+*.filter text eol=lf
+*.conf text eol=lf
+*.go text eol=lf
+*.md text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

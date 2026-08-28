@@ -23,10 +23,10 @@ const (
 // and pushes it down; engines pick up the new share at the next file boundary.
 type BandwidthManager struct {
 	mu       sync.Mutex
-	limitBps int64              // global limit, bytes/sec; 0 = unlimited
-	source   string             // who set the current limit ("manual" / "schedule")
+	limitBps int64               // global limit, bytes/sec; 0 = unlimited
+	source   string              // who set the current limit ("manual" / "schedule")
 	active   map[string]struct{} // engine IDs currently transferring
-	engines  map[string]*Engine // registry for pushing shares down
+	engines  map[string]*Engine  // registry for pushing shares down
 }
 
 // NewBandwidthManager creates a manager with the given initial global limit

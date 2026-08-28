@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
+	"time"
 )
 
 // Notifier defines the interface for sending notifications
@@ -17,6 +20,8 @@ type Notifier interface {
 type Service struct {
 	notifiers []Notifier
 }
+
+var notificationClient = &http.Client{Timeout: 15 * time.Second}
 
 // New creates a new notification service
 func New(discordWebhook, telegramToken, telegramChatID string) *Service {
@@ -63,9 +68,17 @@ type Discord struct {
 
 func (d *Discord) Send(msg, msgType string) error {
 	payload := map[string]string{"content": msg}
-	jsonBody, _ := json.Marshal(payload)
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encoding Discord notification: %w", err)
+	}
 
-	resp, err := http.Post(d.WebhookURL, "application/json", bytes.NewBuffer(jsonBody))
+	request, err := http.NewRequest(http.MethodPost, d.WebhookURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return fmt.Errorf("creating Discord request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	resp, err := notificationClient.Do(request)
 	if err != nil {
 		return fmt.Errorf("discord request failed: %w", err)
 	}
@@ -85,11 +98,17 @@ type Telegram struct {
 }
 
 func (t *Telegram) Send(msg, msgType string) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.BotToken)
-	resp, err := http.PostForm(url, map[string][]string{
+	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.BotToken)
+	form := url.Values{
 		"chat_id": {t.ChatID},
 		"text":    {msg},
-	})
+	}
+	request, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("creating Telegram request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := notificationClient.Do(request)
 	if err != nil {
 		return fmt.Errorf("telegram request failed: %w", err)
 	}

@@ -1,45 +1,49 @@
 services:
   sender:
-    build: .
+    image: ghcr.io/arumes31/schnorarr@${SCHNORARR_IMAGE_DIGEST:?Set SCHNORARR_IMAGE_DIGEST to sha256 digest}
     environment:
-      - MODE=sender
-      - DEST_HOST=${DEST_HOST:-receiver}
-      - DEST_MODULE=video-sync
-      - SYNC_INCLUDE=*.mkv,*.mp4,*.avi
-      - RSYNC_USER=${RSYNC_USER:-syncuser}
-      - RSYNC_PASSWORD=${RSYNC_PASSWORD:-secretpassword}
-      - BWLIMIT_MBPS=${BWLIMIT_MBPS:-50}
-      - MIN_DISK_SPACE_GB=${MIN_DISK_SPACE_GB:-0}
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
-      - POLL_INTERVAL=${POLL_INTERVAL:-60}
-      - AUTH_ENABLED=${AUTH_ENABLED:-true}
-      - ADMIN_USER=${ADMIN_USER:-admin}
-      - ADMIN_PASS=${ADMIN_PASS:-schnorarr}
-      - SYNC_1_SOURCE=/data/movies
-      - SYNC_1_TARGET=movies
-      - SYNC_1_RULE=flat
-      - SYNC_2_SOURCE=/data/tv
-      - SYNC_2_TARGET=tv
-      - SYNC_3_SOURCE=/data/music
-      - SYNC_3_TARGET=music
-      - SYNC_4_SOURCE=/data/books
-      - SYNC_4_TARGET=books
-      - SYNC_5_SOURCE=/data/photos
-      - SYNC_5_TARGET=photos
-      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
-      # - TS_HOSTNAME=schnorarr-sender
-      # - TAILSCALE_UP_ARGS=--accept-routes
+      MODE: sender
+      SOURCE_DIR: /data
+      DEST_HOST: ${DEST_HOST:?Set DEST_HOST}
+      DEST_MODULE: ${DEST_MODULE:-video-sync}
+      RECEIVER_API_URL: ${RECEIVER_API_URL:?Set RECEIVER_API_URL to an HTTPS origin}
+      INTERNAL_API_CA_FILE: /run/tls/ca.crt
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
+      RSYNC_USER: ${RSYNC_USER:?Set RSYNC_USER}
+      RSYNC_PASSWORD: ${RSYNC_PASSWORD:?Set RSYNC_PASSWORD}
+      BWLIMIT_MBPS: ${BWLIMIT_MBPS:-50}
+      MIN_DISK_SPACE_GB: ${MIN_DISK_SPACE_GB:-0}
+      POLL_INTERVAL: ${POLL_INTERVAL:-60}
+      AUTH_ENABLED: "true"
+      ADMIN_USER: ${ADMIN_USER:?Set ADMIN_USER}
+      ADMIN_PASS: ${ADMIN_PASS:?Set ADMIN_PASS}
+      TLS_CERT_FILE: /run/tls/tls.crt
+      TLS_KEY_FILE: /run/tls/tls.key
+      SYNC_1_SOURCE: /data/movies
+      SYNC_1_TARGET: movies
+      SYNC_1_RULE: flat
+      SYNC_2_SOURCE: /data/tv
+      SYNC_2_TARGET: tv
+      SYNC_3_SOURCE: /data/music
+      SYNC_3_TARGET: music
+      SYNC_4_SOURCE: /data/books
+      SYNC_4_TARGET: books
+      SYNC_5_SOURCE: /data/photos
+      SYNC_5_TARGET: photos
     ports:
-      - "8080:8080"
+      - ${DASHBOARD_BIND_ADDRESS:-127.0.0.1}:8443:8080
     volumes:
-      - ./sender:/data
+      - ${SENDER_DATA_PATH:-./sender}:/data:ro
       - sender_config:/config
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun:/dev/net/tun
+      - ${TLS_CERT_PATH:?Set TLS_CERT_PATH}:/run/tls/tls.crt:ro
+      - ${TLS_KEY_PATH:?Set TLS_KEY_PATH}:/run/tls/tls.key:ro
+      - ${TLS_CA_PATH:?Set TLS_CA_PATH}:/run/tls/ca.crt:ro
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
     restart: unless-stopped
 
 volumes:

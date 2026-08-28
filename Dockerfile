@@ -1,72 +1,40 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.18@sha256:dabfc0969b935b2080555ace70ee69a5261af8a8f1b4df97b9e7fbcf6722eddf
 
-# Build Stage
-FROM golang:alpine AS builder
-WORKDIR /app
+FROM golang:1.26.7-alpine3.24@sha256:28d89ee9cc0ff9fec75c82ca201e6bf7fdf9a679d4b7b24dfa04f2bb766bb468 AS builder
 
-# Copy dependency files first for better layer caching
-COPY go.mod .
-COPY go.sum .
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
-
-# Copy source code
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
-
-# Build with CGO disabled for faster compilation and static binary
-ENV CGO_ENABLED=0
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -ldflags="-w -s" -o monitor ./cmd/monitor
+    CGO_ENABLED=0 go build -trimpath -buildvcs=true -ldflags="-s -w" -o /out/monitor ./cmd/monitor
 
-# Final Stage
-FROM alpine:latest
+FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
-# Install necessary packages
-RUN apk add --no-cache \
-    rsync \
-    inotify-tools \
-    tailscale \
-    bash \
-    ca-certificates \
-    iptables \
-    ip6tables \
-    shadow \
-    coreutils
+RUN apk upgrade --no-cache \
+    && apk add --no-cache bash ca-certificates coreutils inotify-tools rsync \
+    && addgroup -S -g 65532 schnorarr \
+    && adduser -S -D -H -u 65532 -G schnorarr schnorarr \
+    && install -d -o 65532 -g 65532 -m 0700 /config \
+    && install -d -o 65532 -g 65532 -m 0750 /data /scripts
 
-# Create data and config directories
-RUN mkdir -p /data /config /scripts
+COPY --from=builder --chown=65532:65532 --chmod=0555 /out/monitor /usr/local/bin/monitor
+COPY --chown=65532:65532 --chmod=0755 scripts/entrypoint.sh scripts/rsync-wrapper.sh /scripts/
+COPY --chown=65532:65532 --chmod=0644 scripts/rsyncd.conf scripts/*.filter /scripts/
 
-# Copy Monitor Binary
-COPY --from=builder /app/monitor /usr/local/bin/monitor
+RUN mv /usr/bin/rsync /usr/bin/rsync.real \
+    && cp /scripts/rsync-wrapper.sh /usr/bin/rsync \
+    && chmod 0555 /usr/bin/rsync /usr/bin/rsync.real
 
-# Set up scripts
-# Set up scripts
-COPY scripts/ /scripts/
-RUN apk add --no-cache dos2unix && \
-    dos2unix /scripts/*.sh /scripts/*.filter && \
-    chmod +x /scripts/*.sh
-
-# Intercept rsync for dashboard logging
-RUN mv /usr/bin/rsync /usr/bin/rsync.real && \
-    cp /scripts/rsync-wrapper.sh /usr/bin/rsync && \
-    chmod +x /usr/bin/rsync
-
-# Environment variables
-ENV MODE=sender
-ENV SOURCE_DIR=/data
-ENV DEST_HOST=receiver
-ENV DEST_MODULE=video-sync
-ENV TAILSCALE_AUTHKEY=""
-ENV TS_HOSTNAME=""
-ENV TAILSCALE_UP_ARGS=""
-ENV RSYNC_USER=""
-ENV RSYNC_PASSWORD=""
-ENV BWLIMIT_MBPS=""
 ENV MODE=sender \
-    AUTH_ENABLED=false
-ENV ADMIN_USER="admin"
-ENV ADMIN_PASS="schnorarr"
+    SOURCE_DIR=/data \
+    DEST_MODULE=video-sync
+
+USER 65532:65532
+EXPOSE 8080 873
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- --no-check-certificate https://127.0.0.1:8080/healthz >/dev/null || exit 1
 
 ENTRYPOINT ["/scripts/entrypoint.sh"]

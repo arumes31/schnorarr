@@ -1,8 +1,10 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"schnorarr/internal/internalapi"
 	"schnorarr/internal/monitor/database"
 	"schnorarr/internal/monitor/health"
 	"schnorarr/internal/monitor/notification"
@@ -257,34 +260,47 @@ func checkReceiverHealth(healthState *health.State, engines []*sync.Engine, late
 	if destHost == "" {
 		return
 	}
-	targetURL := fmt.Sprintf("http://%s:8080/health", destHost)
-	client := http.Client{Timeout: 5 * time.Second}
+	client, err := internalapi.NewClient(os.Getenv, 5*time.Second)
+	if err != nil {
+		healthState.ReportReceiverStatus(false, "Receiver TLS configuration invalid", "", "")
+		return
+	}
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
 		start := time.Now()
-		resp, err := client.Get(targetURL)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		request, requestErr := internalapi.NewRequest(ctx, os.Getenv, http.MethodGet, "/health", nil)
+		var resp *http.Response
+		if requestErr == nil {
+			resp, err = client.Do(request)
+		} else {
+			err = requestErr
+		}
 		if err == nil {
 			atomic.StoreInt64(latency, time.Since(start).Milliseconds())
 		}
 		var version, uptime string
 		healthy := false
 		msg := ""
-		if err == nil {
+		if err == nil && resp != nil && resp.StatusCode == http.StatusOK {
 			var data struct {
 				Status  string `json:"status"`
 				Version string `json:"version"`
 				Uptime  string `json:"uptime"`
 			}
-			if err := json.NewDecoder(resp.Body).Decode(&data); err == nil {
+			if decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&data); decodeErr == nil {
 				healthy = true
 				version = data.Version
 				uptime = data.Uptime
 			}
-			if err := resp.Body.Close(); err != nil {
-				fmt.Printf("Error closing receiver health body: %v\n", err)
+		}
+		if resp != nil {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				fmt.Printf("Error closing receiver health body: %v\n", closeErr)
 			}
 		}
+		cancel()
 		if !healthy && len(engines) > 0 {
 			if _, err := os.Stat(engines[0].GetConfig().TargetDir); err == nil {
 				healthy = true

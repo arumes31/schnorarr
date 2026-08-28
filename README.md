@@ -1,276 +1,112 @@
-<div align="center">
+# Schnorarr
 
-# ⚡ Schnorarr
+Schnorarr synchronizes media trees from a sender to an rsync receiver and provides an HTTPS operations dashboard. The sender compares manifests, plans transfers and deletions, and exposes transfer health and history.
 
-**The Ultra-Fast, Cyberpunk-Styled Sync Monitor**
+## Security model
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/arumes31/schnorarr)](https://goreportcard.com/report/github.com/arumes31/schnorarr)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker Image](https://github.com/arumes31/schnorarr/actions/workflows/docker.yml/badge.svg)](https://github.com/arumes31/schnorarr/pkgs/container/schnorarr)
+- The dashboard always requires `ADMIN_USER` and a non-default `ADMIN_PASS` of at least 16 characters.
+- Every HTTP listener uses the configured TLS certificate and key.
+- Receiver machine endpoints use a separate `INTERNAL_API_TOKEN` of at least 32 characters. The token is sent only as a Bearer header.
+- Manifest, stat, health, and delete requests are confined to `/data`. Absolute paths, traversal, root deletion, and every symbolic-link component are rejected.
+- Containers run as UID/GID `65532`, drop all Linux capabilities, use a read-only root filesystem, and do not mount `/dev/net/tun`.
+- Rsync daemon traffic is authenticated but is not encrypted. Keep port 873 on a private network or route it through a host/sidecar VPN.
 
-</div>
+The unauthenticated liveness endpoint `GET /healthz` returns only `{"status":"ok"}`. `GET /health` and `/api/*` require the machine token.
 
-**Schnorarr** is a high-performance, real-time file synchronization monitor and orchestrator designed for media servers. It visualizes file transfers, manages conflicts, and ensures your media libraries stay in perfect sync across multiple servers.
+## Secure Docker Compose setup
 
-## 🚀 Features
+Requirements:
 
-*   **Real-Time Dashboard:** Live WebSocket-powered updates for transfer speeds, ETA, and file progress.
-*   **Visual Transfer Graphs:** Beautiful Sparkline charts and "Node Map" visualizations.
-*   **Multi-Engine Support:** Monitor and control multiple sync pairs (Sender -> Receiver) simultaneously.
-*   **Smart Conflict Resolution:** Auto-detects and handles file conflicts with "Dry Run" previews.
-*   **Cyberpunk Aesthetics:** Fully themed UI with 5 distinct color palettes (Cyber Green, Plasma Purple, Nuclear Orange, Crimson Red, Midnight Blue).
-*   **Log Terminal:** Integrated web-based terminal for viewing real-time system logs with filtering.
-*   **Discord Notifications:** Get alerted on sync completion or critical errors.
-*   **Built-in Mesh VPN:** Optional Tailscale integration for secure, zero-config cross-network synchronization.
+- Docker Compose v2
+- a certificate trusted by the sender and browser; its SANs must include the Compose names (`sender` and `receiver`) plus the hostname used in a browser
+- host data directories that UID 65532 can read, and for receiver data can write
 
-## 🛠️ Tech Stack
+Copy the environment template and fill every blank value:
 
-*   **Backend:** Go (Golang) 1.21+
-*   **Database:** SQLite (embedded, zero-conf)
-*   **Frontend:** HTML5, CSS3 (Variables), Vanilla JS (No heavy frameworks)
-*   **Communication:** WebSockets (Gorilla)
-*   **Deployment:** Docker / Docker Compose
-
-## 📦 Installation
-
-### Docker Compose (Recommended)
-
-Schnorarr can run in two modes: **Sender** (the orchestrator that monitors files and pushes them) and **Receiver** (the destination agent).
-
-#### Sender Configuration
-The Sender monitors local directories and orchestrates the sync process to a Receiver.
-
-```yaml
-version: '3.8'
-services:
-  schnorarr-sender:
-    image: ghcr.io/arumes31/schnorarr:latest
-    container_name: schnorarr-sender
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./config:/config
-      - ./tailscale-state:/var/lib/tailscale
-      - /mnt/media/movies:/source/movies
-    environment:
-      - MODE=sender
-      - DEST_HOST=receiver-ip-or-hostname
-      - DEST_MODULE=media
-      - SYNC_1_SOURCE=/source/movies
-      - SYNC_1_TARGET=media/movies
-      - SYNC_1_RULE=series
-      - BWLIMIT_MBPS=100
-      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
-      # - TAILSCALE_UP_ARGS=--accept-routes
-    restart: unless-stopped
+```sh
+cp .env.example .env
+chmod 600 .env
+openssl rand -hex 32       # INTERNAL_API_TOKEN
+openssl rand -base64 32    # RSYNC_PASSWORD and ADMIN_PASS
 ```
 
-#### Receiver Configuration
-The Receiver acts as a passive target for the Sender.
+Use a private CA or an organization-managed certificate. Put the leaf certificate, private key, and CA bundle at the paths configured by `TLS_CERT_PATH`, `TLS_KEY_PATH`, and `TLS_CA_PATH`. The key must be readable by UID 65532 but not by other users.
 
-```yaml
-version: '3.8'
-services:
-  schnorarr-receiver:
-    image: ghcr.io/arumes31/schnorarr:latest
-    container_name: schnorarr-receiver
-    ports:
-      - "8080:8080"
-    environment:
-      - MODE=receiver
-      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
-      # - TAILSCALE_UP_ARGS=--accept-routes
-    volumes:
-      - /mnt/storage/media:/media
-      - ./tailscale-state:/var/lib/tailscale
-    restart: unless-stopped
+Prepare bind mounts and start a local sender/receiver pair:
+
+```sh
+mkdir -p sender receiver
+sudo chown -R 65532:65532 sender receiver
+docker compose -f docker-compose.dev.yml config
+docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-## 🔄 Sync Capabilities & Rules
+The dashboard is available at `https://localhost:8443` by default. The dev Compose network does not publish the receiver's rsync or machine-API ports.
 
-Schnorarr uses a **Smart Sync** strategy designed specifically for media libraries, minimizing the risk of accidental data loss.
+For separate hosts, use `docker-compose.receiver.yml` and `docker-compose.sender.yml`. Both standalone files bind ports to `127.0.0.1` by default. Set `RSYNC_BIND_ADDRESS`, `RECEIVER_API_BIND_ADDRESS`, or `DASHBOARD_BIND_ADDRESS` to an explicit private interface only after network filtering is in place.
 
-### The "Smart Deletion" Logic
-Regardless of the configured rule name (`series`, `flat`, etc.), the engine currently applies a unified safety logic:
+Set `SCHNORARR_IMAGE_DIGEST` to the published `sha256:...` digest shown by the release workflow or GHCR. The standalone files reject mutable `latest` deployment.
 
-1.  **Updates & Additions**: Files are transferred if they are new or if the source version is newer/different in size.
-2.  **Protected Archives**: if a **top-level directory** exists on the Receiver but *not* on the Sender, it is treated as an "Archive" and **ignored**.
-    *   *Example*: You delete `/source/movies/Matrix_Trilogy` locally to save space. Schnorarr sees `Matrix_Trilogy` on the receiver is unique and **will not delete it**.
-3.  **Standard Deletions**: If a directory exists on *both* sides, but a file inside it is deleted from source, it **will be deleted** from the receiver.
-    *   *Example*: You delete `movie.nfo` inside `/source/movies/Avatar/`. Since `/source/movies/Avatar/` still exists, `movie.nfo` is deleted from the receiver.
-4.  **Directory Safety**: The sync engine currently **never deletes directories**, only files. This prevents recursive deletion accidents. Empty directories may remain on the receiver.
+## Required configuration
 
-## ⚙️ Configuration (Environment Variables)
+| Variable | Purpose |
+| --- | --- |
+| `MODE` | `sender` or `receiver` |
+| `RSYNC_USER` | rsync daemon username; letters, digits, `.`, `_`, and `-` only |
+| `RSYNC_PASSWORD` | dedicated rsync password, at least 16 characters |
+| `INTERNAL_API_TOKEN` | sender-to-receiver Bearer token, at least 32 characters |
+| `ADMIN_USER` | dashboard administrator username |
+| `ADMIN_PASS` | dashboard password, at least 16 characters and not a source-known default |
+| `TLS_CERT_FILE` | certificate path inside the container; Compose sets `/run/tls/tls.crt` |
+| `TLS_KEY_FILE` | private-key path inside the container; Compose sets `/run/tls/tls.key` |
+| `DEST_HOST` | sender-only rsync receiver hostname |
+| `RECEIVER_API_URL` | sender-only HTTPS origin such as `https://receiver:8080` |
+| `INTERNAL_API_CA_FILE` | sender-only private CA bundle used to verify the receiver |
 
-### General
+Optional sender settings include `BWLIMIT_MBPS`, `MIN_DISK_SPACE_GB`, `POLL_INTERVAL`, notification endpoints, and numbered `SYNC_n_SOURCE`, `SYNC_n_TARGET`, and `SYNC_n_RULE` profiles. Do not put secrets in committed Compose files.
 
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `MODE` | `sender` or `receiver` | `sender` |
-| `PORT` | Web UI / API Port | `8080` |
-| `PUID` / `PGID` | User/Group ID for file permissions | `1000` |
-| `TAILSCALE_AUTHKEY` | Optional: Tailscale Auth Key for built-in mesh VPN | - |
-| `TAILSCALE_UP_ARGS` | Optional: Extra arguments for `tailscale up` | - |
+## Receiver API
 
-### Sender Specific
+All filesystem paths are relative to the configured data root. Clients must verify TLS and include the machine token:
 
-| Variable | Description | Example |
-| :--- | :--- | :--- |
-| `DEST_HOST` | Hostname or IP of the Receiver | `192.168.1.50` |
-| `DEST_MODULE` | Rsync module name on Receiver | `media` |
-| `BWLIMIT_MBPS` | Initial global bandwidth limit in Mbps (fallback; the value saved from the dashboard's Traffic Shaping card takes precedence) | `50` |
-| `SYNC_N_SOURCE` | Source path for engine `N` (1-10) | `/source/movies` |
-| `SYNC_N_TARGET` | Target path for engine `N` (1-10) | `media/movies` |
-| `SYNC_N_RULE` | Sync rule (`standard`, `series`, `flat`) | `series` |
-| `SYNC_INCLUDE` | Global file filter (default: `*.mkv,*.mp4,*.avi`) | `*.mkv,*.mp4` |
-| `SYNC_N_INCLUDE` | Per-engine file filter override (N=1-10) | `*.txt` |
-| `DISCORD_WEBHOOK_URL` | Discord webhook for notifications | `https://...` |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token | `123456:ABC...` |
-| `TELEGRAM_CHAT_ID` | Telegram chat ID | `987654321` |
-
-### Receiver Specific
-
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `RSYNC_CONFIG` | Custom path to rsyncd.conf | `/etc/rsyncd.conf` |
-
-### Manual Build
-
-```bash
-git clone https://github.com/arumes31/schnorarr.git
-cd schnorarr
-go build -o schnorarr ./cmd/monitor
-./schnorarr
+```http
+Authorization: Bearer <INTERNAL_API_TOKEN>
 ```
 
-## 🛣️ Path Mapping Guide
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/health` | `GET` | authenticated receiver status |
+| `/api/manifest?path=.` | `GET` | manifest beneath the data root |
+| `/api/stat?path=relative/path` | `GET` | inspect a rooted path |
+| `/api/delete?path=relative/path&dir=true` | `DELETE` | delete a rooted file or directory |
 
-It is important to understand how Schnorarr constructs the final rsync destination path. The formula is:
-`RECIEVER_IP / DEST_MODULE / SYNC_N_TARGET`
+The delete endpoint never accepts `.` as a target. Symlinks are neither followed nor scanned.
 
-| Variable | Scope | Example Value | Resulting Path |
-| :--- | :--- | :--- | :--- |
-| `DEST_HOST` | Global | `192.168.1.50` | `192.168.1.50::...` |
-| `DEST_MODULE` | Global | `media` | `192.168.1.50::media/...` |
-| `SYNC_1_TARGET` | Engine 1 | `movies` | `192.168.1.50::media/movies` |
-| `SYNC_2_TARGET` | Engine 2 | `series/anime` | `192.168.1.50::media/series/anime` |
+## Upgrade from older deployments
 
-> [!TIP]
-> Ensure the `DEST_MODULE` exists in the Receiver's `rsyncd.conf` (usually mapped to a physical path like `/data`).
+This security release intentionally removes insecure compatibility defaults:
 
-## 🔔 Notification Setup (Pro)
+1. Stop both old containers and back up `/config` and receiver data.
+2. Create unique admin, rsync, and internal-API credentials; rotate any values previously stored in Compose.
+3. Provision TLS certificates and the receiver CA bundle.
+4. Make bind mounts accessible to UID/GID 65532. The receiver needs write access; sender media can be read-only.
+5. Remove `NET_ADMIN`, `/dev/net/tun`, `TAILSCALE_AUTHKEY`, and related Tailscale variables. Run Tailscale or another VPN on the host or in a separately constrained sidecar.
+6. Update integrations to use HTTPS, certificate validation, and the Bearer header. URL tokens and plaintext HTTP are rejected.
+7. Start the receiver first, verify `/healthz`, then start the sender and review logs before enabling deletion approval.
 
-Schnorarr can send real-time alerts to Discord and Telegram. Here is how to get your credentials:
+The application rewrites its JSON configuration atomically with mode `0600`. Existing configuration is tightened to `0600` when loaded. Rsync credential files exist only on the container's temporary filesystem and are recreated at startup.
 
-### Discord
-1.  Open **Server Settings** -> **Integrations** -> **Webhooks**.
-2.  Click **New Webhook**, select the target channel.
-3.  Click **Copy Webhook URL** and paste it into `DISCORD_WEBHOOK_URL`.
+## Development
 
-### Telegram
-1.  **Bot Token**: Message [@BotFather](https://t.me/botfather) and use `/newbot` to get your API Token.
-2.  **Chat ID**: 
-    - Message [@getIDbot](https://t.me/getidbot) to get your personal `Chat ID`.
-    - Or, add your bot to a group and message [@myidbot](https://t.me/myidbot) inside the group.
+Use Go 1.26.7 or a newer Go 1.26 patch release:
 
-## 🏗️ Architecture
-
-Schnorarr operates as a distributed system with two specialized roles:
-
-### 📤 Sender (Orchestrator)
-- **Responsibility**: Monitors local directories, calculates diffs, and pushes data.
-- **Components**: Go Sync Engine, SQLite Database, WebSocket Hub, Dashboard UI.
-- **Port**: `8080` (Web UI/API).
-
-### 📥 Receiver (Agent)
-- **Responsibility**: Passive data target.
-- **Components**: Rsync Daemon, Health Reporter.
-- **Ports**: `873` (Rsync), `8080` (Health Check).
-
-```mermaid
-graph LR
-    subgraph "Local Site (Sender)"
-        A[Media Source] --> B[Sync Engine]
-        B --> C[Dashboard UI]
-    end
-    subgraph "Remote Site (Receiver)"
-        D[Rsync Daemon] --> E[Media Storage]
-        F[Health Agent]
-    end
-    B -- "Data (Port 873)" --> D
-    B -- "Status (Port 8080)" --> F
+```sh
+go mod tidy
+go test ./...
+go test -race ./...
+go vet ./...
 ```
 
-## 🔒 Security & Privacy
+CI additionally runs golangci-lint, gosec, govulncheck, CodeQL, an immutable container build, and a Trivy image scan. Release and third-party workflow actions are pinned to full commit SHAs.
 
-*   **Zero-Exposure**: Schnorarr does *not* require port forwarding. When used with the built-in **Tailscale** integration, your data stays within your private WireGuard® mesh.
-*   **Encrypted Data**: All synchronization traffic over Tailscale is end-to-end encrypted.
-*   **Authentication**: Supports `RSYNC_PASSWORD` for an extra layer of security between the sender and receiver.
-*   **Minimal Footprint**: The binary is statically compiled with no external dependencies (except rsync).
-
-## 💡 Best Practices
-
-- **Read-Only Mounting**: Mount your source volumes as `:ro` on the **Sender** for peace of mind. Schnorarr never needs to write to the source.
-- **Log Management**: Map `/config` to a persistent volume to preserve sync history and database across updates.
-- **Memory Optimization**: For massive libraries (100k+ files), ensure your container has at least 512MB RAM for manifest hashing.
-
-## 📊 Dashboard Guide
-
-The Schnorarr dashboard is designed for high-density information display:
-
-*   **Real-Time Status**: View total accumulated traffic and "Traffic Today" at a glance.
-*   **Active Engines**: Each sync engine shows its current speed, percentage progress, ETA, and a 60-second speed sparkline.
-*   **Node Map**: A real-time visualization of file transfer activity across all engines.
-*   **Daily Traffic**: A 7-day bar chart showing data transfer volume trends.
-*   **Top Files**: Rankings of the most frequently synced or largest files.
-*   **Log Terminal**: A live-streaming terminal with ANSI color support and level filtering (INFO, WARN, ERROR).
-
-## 🎛️ Advanced Configuration
-
-Beyond the basic setup, you can fine-tune Schnorarr using these environment variables:
-
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `MIN_DISK_SPACE_GB` | (Sender) Stop syncing if source disk space falls below this. | `0` (Disabled) |
-| `MAX_RETRIES` | (Sender) Number of attempts to connect to receiver before failing. | `30` |
-| `CONFIG_DIR` | Path to store logs and database. | `/config` |
-| `BWLIMIT_MBPS` | Initial global bandwidth limit for all transfers in Mbps. Shared across active engines and adjustable at runtime from the dashboard (Traffic Shaping card); the saved dashboard value wins over this env var. | `0` (Unlimited) |
-| `RSYNC_PASSWORD` | Optional: Password for authenticated rsync transfers. | - |
-| `POLL_INTERVAL` | (Sender) Frequency in seconds to check for file changes. | `60` |
-| `WATCH_INTERVAL` | (Sender) Frequency in seconds for a full safety reconciliation scan. | `43200` (12h) |
-
-### Sync Engine Tuning
-Schnorarr is optimized for low CPU usage:
-- **Scan Concurrency**: 8 parallel workers.
-- **Polling Interval**: Full "safety" scan runs every `POLL_INTERVAL` seconds (default: 60s).
-- **Full Refresh**: Massive reconciliation scan runs every `WATCH_INTERVAL` seconds (default: 12h).
-
-## 🔌 API Reference
-
-Power users can interact with Schnorarr via its REST API:
-
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/health` | `GET` | Returns JSON status of sender and receiver. |
-| `/history` | `GET` | Returns the last 50 sync events. |
-| `/api/engines/bulk` | `POST` | `{"action": "pause"\|"resume"}` - Controls all engines. |
-| `/api/engine/:id/sync` | `POST` | Triggers immediate manual sync for engine `id`. |
-| `/api/engine/:id/pause` | `POST` | Pauses a specific engine. |
-| `/api/engine/:id/preview` | `GET` | Returns JSON list of files that *would* be synced (Dry Run). |
-
-## 🛠️ Troubleshooting
-
-*   **Receiver Offline**: Ensure `DEST_HOST` is reachable from the sender container and port `873` (rsync) and `8080` (health) are open.
-*   **Permission Denied**: Check `PUID`/`PGID` settings. Ensure the container has write access to the mounted volumes.
-*   **Stuck Sync**: Use the **"Reset Engine"** button in the dashboard to force a full re-scan.
-
-## 🖼️ Screenshots
-
-<div align="center">
-  <img src="https://via.placeholder.com/800x450/0a0b10/00ffad?text=Dashboard+Preview" alt="Dashboard" width="800"/>
-</div>
-
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Report security issues privately as described in [SECURITY.md](SECURITY.md).

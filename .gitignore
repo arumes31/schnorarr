@@ -32,7 +32,11 @@ go.work
 Thumbs.db
 
 # Docker
+.env
 .env.local
+certs/
+receiver/
+sender/
 
 # Build artifacts
 dist/

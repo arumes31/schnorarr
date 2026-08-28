@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,9 @@ const (
 
 // TransferOptions configures file transfer behavior
 type TransferOptions struct {
+	// SourceRoot and TargetRoot confine local filesystem operations.
+	SourceRoot string
+	TargetRoot string
 	// BandwidthLimit in bytes per second (0 = unlimited)
 	BandwidthLimit int64
 	// OnProgress callback for transfer progress updates
@@ -59,6 +63,37 @@ func (t *Transferer) BandwidthLimit() int64 {
 	return t.opts.BandwidthLimit
 }
 
+func relativeUnderRoot(configuredRoot, path string) (string, string, error) {
+	rootName := configuredRoot
+	if rootName == "" {
+		rootName = filepath.Dir(path)
+	}
+	rootAbs, err := filepath.Abs(rootName)
+	if err != nil {
+		return "", "", fmt.Errorf("resolving root: %w", err)
+	}
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", fmt.Errorf("resolving path: %w", err)
+	}
+	relative, err := filepath.Rel(rootAbs, pathAbs)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", "", fmt.Errorf("path %q is outside configured root", path)
+	}
+	return rootAbs, relative, nil
+}
+
+func (t *Transferer) sourcePath(path string) (string, string, error) {
+	rootName, relative, err := relativeUnderRoot(t.opts.SourceRoot, path)
+	if err == nil {
+		return rootName, relative, nil
+	}
+	if t.opts.TargetRoot != "" {
+		return relativeUnderRoot(t.opts.TargetRoot, path)
+	}
+	return "", "", err
+}
+
 // CopyFile copies a file from src to dst with bandwidth limiting and progress reporting
 func (t *Transferer) CopyFile(src, dst string) error {
 	if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
@@ -74,7 +109,16 @@ func (t *Transferer) CopyFile(src, dst string) error {
 		return t.copyRemote(src, dst)
 	}
 
-	srcFile, err := os.Open(src)
+	sourceRootName, sourceRelative, err := t.sourcePath(src)
+	if err != nil {
+		return err
+	}
+	sourceRoot, err := os.OpenRoot(sourceRootName)
+	if err != nil {
+		return fmt.Errorf("opening source root: %w", err)
+	}
+	defer func() { _ = sourceRoot.Close() }()
+	srcFile, err := sourceRoot.Open(sourceRelative)
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
 	}
@@ -90,12 +134,23 @@ func (t *Transferer) CopyFile(src, dst string) error {
 	}
 
 	totalSize := srcInfo.Size()
-	dstDir := filepath.Dir(dst)
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	targetRootName, targetRelative, err := relativeUnderRoot(t.opts.TargetRoot, dst)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(targetRootName, 0o750); err != nil {
+		return fmt.Errorf("creating target root: %w", err)
+	}
+	targetRoot, err := os.OpenRoot(targetRootName)
+	if err != nil {
+		return fmt.Errorf("opening target root: %w", err)
+	}
+	defer func() { _ = targetRoot.Close() }()
+	targetDirectory := filepath.Dir(targetRelative)
+	if err := targetRoot.MkdirAll(targetDirectory, 0o750); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
-
-	tmpDst := dst + ".tmp"
+	temporaryRelative := targetRelative + ".tmp"
 
 	// We only support parallel transfers for new files > threshold
 	// Resumption currently falls back to sequential for simplicity.
@@ -122,7 +177,7 @@ func (t *Transferer) CopyFile(src, dst string) error {
 			bytesTransferred = 0
 		}
 
-		dstFile, err := os.Create(tmpDst)
+		dstFile, err := targetRoot.OpenFile(temporaryRelative, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0o600)
 		if err != nil {
 			copyErr = err
 			continue
@@ -160,14 +215,14 @@ func (t *Transferer) CopyFile(src, dst string) error {
 		if t.opts.OnComplete != nil {
 			t.opts.OnComplete(filepath.Base(src), bytesTransferred, copyErr)
 		}
-		_ = os.Remove(tmpDst) // Cleanup temp file
+		_ = targetRoot.Remove(temporaryRelative)
 		return copyErr
 	}
 
-	if err := os.Chtimes(tmpDst, srcInfo.ModTime(), srcInfo.ModTime()); err != nil {
+	if err := targetRoot.Chtimes(temporaryRelative, srcInfo.ModTime(), srcInfo.ModTime()); err != nil {
 		log.Printf("[Transferer] Warning: failed to set file times: %v", err)
 	}
-	if err := os.Rename(tmpDst, dst); err != nil {
+	if err := targetRoot.Rename(temporaryRelative, targetRelative); err != nil {
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
@@ -337,18 +392,7 @@ func (t *Transferer) copyRemote(src, dst string) error {
 
 // getRemoteFileSizeWithContext queries the receiver's /api/stat endpoint with support for cancellation
 func getRemoteFileSizeWithContext(ctx context.Context, host, path string) int64 {
-	apiURL := fmt.Sprintf("http://%s:8080/api/stat?path=%s", host, url.QueryEscape(path))
-
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
-	if err != nil {
-		return 0
-	}
-
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	resp, err := client.Do(req)
+	resp, err := receiverAPIRequest(ctx, http.MethodGet, "/api/stat", url.Values{"path": {path}}, 5*time.Second)
 
 	if err != nil {
 		return 0
@@ -432,41 +476,7 @@ func ParseRemoteDestination(dst string) (host, remotePath string) {
 
 // getRemoteFileSize queries the receiver's /api/stat endpoint for file size
 func getRemoteFileSize(host, path string) int64 {
-	apiURL := fmt.Sprintf("http://%s:8080/api/stat?path=%s", host, url.QueryEscape(path))
-	log.Printf("[Transferer] DEBUG: Querying stat API: %s", apiURL)
-
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	resp, err := client.Get(apiURL)
-	if err != nil {
-		log.Printf("[Transferer] DEBUG: API request failed: %v", err)
-		return 0
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("[Transferer] Failed to close response body: %v", closeErr)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("[Transferer] DEBUG: API returned status %d", resp.StatusCode)
-		return 0
-	}
-
-	var statResp struct {
-		Size   int64 `json:"size"`
-		Exists bool  `json:"exists"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&statResp); err != nil {
-		log.Printf("[Transferer] DEBUG: Failed to decode response: %v", err)
-		return 0
-	}
-
-	log.Printf("[Transferer] DEBUG: API response - exists: %v, size: %d", statResp.Exists, statResp.Size)
-	return statResp.Size
+	return getRemoteFileSizeWithContext(context.Background(), host, path)
 }
 
 func (t *Transferer) copyParallel(filename string, srcFile, dstFile *os.File, totalSize int64) (int64, error) {
@@ -637,13 +647,34 @@ func (t *Transferer) CreateDir(path string) error {
 		// Usually we can skip mkdir for rsync targets as rsync -r handles it.
 		return nil
 	}
-	return os.MkdirAll(path, 0755)
+	rootName, relative, err := relativeUnderRoot(t.opts.TargetRoot, path)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(rootName, 0o750); err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(rootName)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	return root.MkdirAll(relative, 0o750)
 }
 func (t *Transferer) DeleteFile(path string) error {
 	if strings.Contains(path, "::") || strings.HasPrefix(path, "rsync://") {
 		return t.deleteRemote(path, false)
 	}
-	err := os.Remove(path)
+	rootName, relative, err := relativeUnderRoot(t.opts.TargetRoot, path)
+	if err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(rootName)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	err = root.Remove(relative)
 	if err != nil && os.IsNotExist(err) {
 		return nil
 	}
@@ -654,7 +685,16 @@ func (t *Transferer) DeleteDir(path string) error {
 	if strings.Contains(path, "::") || strings.HasPrefix(path, "rsync://") {
 		return t.deleteRemote(path, true)
 	}
-	err := os.RemoveAll(path)
+	rootName, relative, err := relativeUnderRoot(t.opts.TargetRoot, path)
+	if err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(rootName)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	err = root.RemoveAll(relative)
 	if err != nil && os.IsNotExist(err) {
 		return nil
 	}
@@ -662,26 +702,17 @@ func (t *Transferer) DeleteDir(path string) error {
 }
 
 func (t *Transferer) deleteRemote(uri string, isDir bool) error {
-	destHost, remotePath := ParseRemoteDestination(uri)
-	if destHost == "" {
-		// Fallback to Env if URI parsing fails to get host
-		destHost = os.Getenv("DEST_HOST")
-	}
-
-	if destHost == "" {
-		return fmt.Errorf("remote delete failed: could not determine destination host from URI %q or DEST_HOST", uri)
-	}
-
+	_, remotePath := ParseRemoteDestination(uri)
 	if remotePath == "" {
 		return fmt.Errorf("remote delete failed: could not determine remote path from URI %q", uri)
 	}
-
-	apiURL := fmt.Sprintf("http://%s:8080/api/delete?path=%s&dir=%v",
-		destHost, url.QueryEscape(remotePath), isDir)
-
-	log.Printf("[Transferer] Requesting remote delete: %s", apiURL)
-
-	resp, err := http.Post(apiURL, "application/json", nil)
+	log.Printf("[Transferer] Requesting remote delete of relative path %q", remotePath)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	resp, err := receiverAPIRequest(ctx, http.MethodPost, "/api/delete", url.Values{
+		"path": {remotePath},
+		"dir":  {strconv.FormatBool(isDir)},
+	}, 30*time.Second)
 	if err != nil {
 		return fmt.Errorf("failed to contact receiver API: %w", err)
 	}
@@ -691,7 +722,7 @@ func (t *Transferer) deleteRemote(uri string, isDir bool) error {
 		return fmt.Errorf("receiver API returned status %s", resp.Status)
 	}
 
-	log.Printf("[Transferer] Remote delete successful: %s", remotePath)
+	log.Printf("[Transferer] Remote delete successful: %q", remotePath)
 	return nil
 }
 
@@ -701,12 +732,27 @@ func (t *Transferer) RenameFile(oldPath, newPath string) error {
 		return fmt.Errorf("rename not supported for remote targets")
 	}
 
-	dstDir := filepath.Dir(newPath)
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	rootName, oldRelative, err := relativeUnderRoot(t.opts.TargetRoot, oldPath)
+	if err != nil {
+		return err
+	}
+	newRootName, newRelative, err := relativeUnderRoot(t.opts.TargetRoot, newPath)
+	if err != nil {
+		return err
+	}
+	if rootName != newRootName {
+		return fmt.Errorf("rename paths use different roots")
+	}
+	root, err := os.OpenRoot(rootName)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	if err := root.MkdirAll(filepath.Dir(newRelative), 0o750); err != nil {
 		return err
 	}
 
-	err := os.Rename(oldPath, newPath)
+	err = root.Rename(oldRelative, newRelative)
 	if err == nil {
 		return nil
 	}
@@ -717,7 +763,7 @@ func (t *Transferer) RenameFile(oldPath, newPath string) error {
 		return fmt.Errorf("fallback copy failed: %w", err)
 	}
 
-	return os.Remove(oldPath)
+	return root.Remove(oldRelative)
 }
 
 // SetBandwidthLimit updates the bandwidth limit in bytes/sec (0 = unlimited).

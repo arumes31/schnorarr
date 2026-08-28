@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"schnorarr/internal/internalapi"
 	"schnorarr/internal/monitor/config"
 	"schnorarr/internal/monitor/database"
 	"schnorarr/internal/monitor/handlers"
@@ -18,6 +19,7 @@ import (
 	"schnorarr/internal/monitor/scheduler"
 	"schnorarr/internal/monitor/tailer"
 	ws "schnorarr/internal/monitor/websocket"
+	"schnorarr/internal/security"
 	syncpkg "schnorarr/internal/sync"
 	"schnorarr/internal/ui"
 	"sync"
@@ -31,11 +33,20 @@ type App struct {
 	SyncEngines []*syncpkg.Engine
 	BWManager   *syncpkg.BandwidthManager
 	engineMu    sync.RWMutex
+	dataRoot    *os.Root
 }
 
 func New() (*App, error) {
+	if err := security.ValidateEnvironment(os.Getenv); err != nil {
+		return nil, fmt.Errorf("invalid security configuration: %w", err)
+	}
+	dataRoot, err := os.OpenRoot(configuredDataRoot(os.Getenv))
+	if err != nil {
+		return nil, fmt.Errorf("opening data root: %w", err)
+	}
 	cfg := config.Load()
 	if err := database.Init(); err != nil {
+		_ = dataRoot.Close()
 		return nil, fmt.Errorf("db init failed: %w", err)
 	}
 	initialBps := int64(0)
@@ -50,6 +61,7 @@ func New() (*App, error) {
 		Config: cfg, HealthState: health.New(), WSHub: ws.New(),
 		Notifier:  notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
 		BWManager: syncpkg.NewBandwidthManager(initialBps),
+		dataRoot:  dataRoot,
 	}
 
 	// Load persisted settings
@@ -76,10 +88,19 @@ func (a *App) Start(port string) error {
 	}
 
 	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.GetSyncEngines, a.BWManager)
+	apiToken, _ := internalapi.Token(os.Getenv) // validated in New
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", h.Index)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(ui.StaticFS))))
-	mux.HandleFunc("/health", h.Health)
+	mux.Handle("/health", internalapi.RequireToken(apiToken, http.HandlerFunc(h.Health)))
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
 	mux.HandleFunc("/history", h.History)
 	mux.HandleFunc("/history/export", h.ExportHistory)
 	mux.HandleFunc("/sync", h.ManualSync)
@@ -103,10 +124,10 @@ func (a *App) Start(port string) error {
 	})
 	mux.HandleFunc("/logout", h.Logout)
 
-	// Engine API
-	mux.HandleFunc("/api/manifest", a.ManifestHandler)
-	mux.HandleFunc("/api/delete", a.DeleteHandler)
-	mux.HandleFunc("/api/stat", a.StatHandler)
+	// Receiver machine API uses a credential distinct from browser sessions.
+	mux.Handle("/api/manifest", internalapi.RequireToken(apiToken, http.HandlerFunc(a.ManifestHandler)))
+	mux.Handle("/api/delete", internalapi.RequireToken(apiToken, http.HandlerFunc(a.DeleteHandler)))
+	mux.Handle("/api/stat", internalapi.RequireToken(apiToken, http.HandlerFunc(a.StatHandler)))
 	mux.HandleFunc("/api/engines/bulk", h.BulkAction)
 	mux.HandleFunc("/api/engine/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/preview") {
@@ -118,8 +139,17 @@ func (a *App) Start(port string) error {
 		}
 	})
 
-	log.Printf("Monitor starting on port %s", port)
-	return http.ListenAndServe(":"+port, mux)
+	server := &http.Server{
+		Addr:              ":" + port,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    64 << 10,
+	}
+	log.Printf("Monitor starting with TLS on port %s", port)
+	return server.ListenAndServeTLS(os.Getenv("TLS_CERT_FILE"), os.Getenv("TLS_KEY_FILE"))
 }
 
 func (a *App) startLogTailer() {

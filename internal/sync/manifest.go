@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -132,20 +131,14 @@ func (m *Manifest) ensureIndexes() {
 	}
 }
 
-// ComputeHash calculates the SHA256 hash of a file
-func (fi *FileInfo) ComputeHash(fullPath string) error {
+// ComputeHash calculates the SHA256 hash from an already root-confined file.
+func (fi *FileInfo) ComputeHash(reader io.Reader) error {
 	if fi.IsDir {
 		return nil // Directories don't have hashes
 	}
 
-	file, err := os.Open(fullPath)
-	if err != nil {
-		return fmt.Errorf("failed to open file for hashing: %w", err)
-	}
-	defer func() { _ = file.Close() }()
-
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
+	if _, err := io.Copy(hash, reader); err != nil {
 		return fmt.Errorf("failed to compute hash: %w", err)
 	}
 

@@ -17,7 +17,7 @@ func AddTraffic(engineID string, bytes int64) error {
 	if bytes <= 0 {
 		return nil
 	}
-	
+
 	trafficMu.Lock()
 	unflushedBytes[engineID] += bytes
 	trafficMu.Unlock()
@@ -43,7 +43,7 @@ func FlushTraffic() error {
 		trafficMu.Unlock()
 		return nil
 	}
-	
+
 	// Copy and clear the buffer
 	toFlush := make(map[string]int64)
 	for id, b := range unflushedBytes {
@@ -53,7 +53,7 @@ func FlushTraffic() error {
 	trafficMu.Unlock()
 
 	today := time.Now().Format("2006/01/02")
-	
+
 	tx, err := DB.Begin()
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func FlushTraffic() error {
 	for id, bytes := range toFlush {
 		_, err := tx.Exec(`INSERT INTO traffic (date, engine_id, bytes_sent) 
 			VALUES (?, ?, ?) 
-			ON CONFLICT(date, engine_id) DO UPDATE SET bytes_sent = bytes_sent + ?`, 
+			ON CONFLICT(date, engine_id) DO UPDATE SET bytes_sent = bytes_sent + ?`,
 			today, id, bytes, bytes)
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
@@ -75,7 +75,7 @@ func FlushTraffic() error {
 			return err
 		}
 	}
-	
+
 	if err := tx.Commit(); err != nil {
 		return err
 	}

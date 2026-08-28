@@ -12,11 +12,11 @@ type ReceiverStatus struct {
 }
 
 type State struct {
-	mu              sync.RWMutex
-	healthy         bool
-	lastError       string
-	receiver        ReceiverStatus
-	senderOverride  bool
+	mu             sync.RWMutex
+	healthy        bool
+	lastError      string
+	receiver       ReceiverStatus
+	senderOverride bool
 }
 
 func New() *State {
