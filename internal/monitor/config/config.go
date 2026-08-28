@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"path/filepath"
 	"strconv"
 )
 
@@ -52,6 +53,9 @@ func Load() *Config {
 	// Try to load from file
 	file, err := os.ReadFile(ConfigPath)
 	if err == nil {
+		if chmodErr := os.Chmod(ConfigPath, 0o600); chmodErr != nil {
+			log.Printf("Failed to restrict config permissions: %v", chmodErr)
+		}
 		if err := json.Unmarshal(file, cfg); err != nil {
 			log.Printf("Failed to unmarshal config: %v", err)
 		}
@@ -88,5 +92,40 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(ConfigPath, data, 0644)
+	directory := filepath.Dir(ConfigPath)
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+	// #nosec G302 -- 0700 is the intentionally owner-only directory mode.
+	if err := os.Chmod(directory, 0o700); err != nil {
+		return fmt.Errorf("restricting config directory: %w", err)
+	}
+	temporary, err := os.CreateTemp(directory, ".config-*.tmp")
+	if err != nil {
+		return fmt.Errorf("creating temporary config: %w", err)
+	}
+	temporaryName := temporary.Name()
+	defer func() { _ = os.Remove(temporaryName) }()
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("restricting temporary config: %w", err)
+	}
+	if _, err := temporary.Write(data); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("writing temporary config: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("syncing temporary config: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("closing temporary config: %w", err)
+	}
+	if err := os.Rename(temporaryName, ConfigPath); err != nil {
+		return fmt.Errorf("replacing config: %w", err)
+	}
+	if err := os.Chmod(ConfigPath, 0o600); err != nil {
+		return fmt.Errorf("restricting config: %w", err)
+	}
+	return nil
 }

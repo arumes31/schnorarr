@@ -5,54 +5,32 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
-// StatResponse contains file size information
 type StatResponse struct {
 	Size   int64 `json:"size"`
 	Exists bool  `json:"exists"`
 }
 
-// StatHandler returns the size of a file on the receiver
+// StatHandler returns file metadata from beneath the opened data root.
 func (a *App) StatHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	queryPath := r.URL.Query().Get("path")
-	if queryPath == "" {
-		http.Error(w, "path parameter required", http.StatusBadRequest)
-		return
-	}
-
-	// Sanitize the path
-	cleanPath := filepath.Clean(queryPath)
-	if strings.HasPrefix(cleanPath, "..") {
+	relative, err := rootedPath(a.dataRoot, r.URL.Query().Get("path"), true, true)
+	if err != nil {
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
 
-	// Get the root directory from environment
-	rootDir := os.Getenv("RSYNC_MODULE_PATH")
-	if rootDir == "" {
-		rootDir = "/data"
-	}
-
-	fullPath := filepath.Join(rootDir, cleanPath)
-
-	// Get file info
-	info, err := os.Stat(fullPath)
+	info, err := a.dataRoot.Stat(relative)
 	response := StatResponse{}
-
 	if err != nil {
-		if os.IsNotExist(err) {
-			response.Exists = false
-			response.Size = 0
-		} else {
-			log.Printf("[StatHandler] Error stating file %s: %v", fullPath, err)
+		if !os.IsNotExist(err) {
+			// #nosec G706 -- %q escapes control characters in both request-derived values.
+			log.Printf("[StatHandler] Error stating relative path %q: %q", relative, err.Error())
 			http.Error(w, "failed to stat file", http.StatusInternalServerError)
 			return
 		}

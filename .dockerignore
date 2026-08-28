@@ -1,0 +1,9 @@
+.git
+.github
+.tool-cache
+build
+receiver
+sender
+testfiles
+*.db
+*.log

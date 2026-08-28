@@ -59,6 +59,14 @@ type Engine struct {
 
 	// Retry Delay
 	failedFiles map[string]time.Time
+
+	// Lifecycle ownership
+	lifecycleMu  stdsync.Mutex
+	workerWG     stdsync.WaitGroup
+	syncRequests chan *Manifest
+	stopOnce     stdsync.Once
+	started      bool
+	stopped      bool
 }
 
 // NewEngine creates a new sync engine
@@ -71,12 +79,15 @@ func NewEngine(config SyncConfig) *Engine {
 		config:       config,
 		scanner:      scanner,
 		stopCh:       make(chan struct{}),
+		syncRequests: make(chan *Manifest, 1),
 		alias:        database.GetSetting("alias_"+config.ID, "Engine #"+config.ID),
 		speedHistory: make([]int64, 60),
 		failedFiles:  make(map[string]time.Time),
 	}
 
 	transferer := NewTransferer(TransferOptions{
+		SourceRoot:     config.SourceDir,
+		TargetRoot:     config.TargetDir,
 		BandwidthLimit: config.BandwidthLimit,
 		CheckPaused: func() bool {
 			return e.IsPaused()
@@ -114,6 +125,7 @@ func NewEngine(config SyncConfig) *Engine {
 				diff = bytesTransferred - e.lastBytes
 				if delta > 0 {
 					e.currentSpeed = int64(float64(diff) / delta)
+					speed = e.currentSpeed
 				}
 				e.lastUpdate = now
 				e.lastBytes = bytesTransferred
@@ -215,31 +227,89 @@ func (e *Engine) SetHealthState(s *health.State) {
 }
 
 func (e *Engine) Start() error {
+	e.lifecycleMu.Lock()
+	defer e.lifecycleMu.Unlock()
+	if e.started {
+		return fmt.Errorf("sync engine already started")
+	}
+	if e.stopped {
+		return fmt.Errorf("sync engine already stopped")
+	}
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to create watcher: %w", err)
 	}
 	e.watcher = watcher
 	if err := e.addWatchRecursive(e.config.SourceDir); err != nil {
+		e.watcher = nil
+		_ = watcher.Close()
 		return fmt.Errorf("failed to add watches: %w", err)
 	}
-	go func() { _ = e.RunSync(nil) }()
-	go e.watchLoop()
+	e.started = true
+	e.startWorker(e.syncRequestLoop)
+	e.startWorker(e.watchLoop)
 	if e.config.WatchInterval > 0 {
-		go e.periodicSyncLoop()
+		e.startWorker(e.periodicSyncLoop)
 	}
 	if e.config.PollInterval > 0 {
-		go e.sourcePollLoop()
+		e.startWorker(e.sourcePollLoop)
 	}
-	go e.failedRetryLoop()
+	e.startWorker(e.failedRetryLoop)
+	e.queueSync(nil)
 	log.Printf("Sync engine started: %s -> %s", e.config.SourceDir, e.config.TargetDir)
 	return nil
 }
 
 func (e *Engine) Stop() {
-	close(e.stopCh)
-	if e.watcher != nil {
-		_ = e.watcher.Close()
+	e.lifecycleMu.Lock()
+	e.stopped = true
+	e.lifecycleMu.Unlock()
+
+	e.stopOnce.Do(func() {
+		close(e.stopCh)
+		e.lifecycleMu.Lock()
+		watcher := e.watcher
+		e.lifecycleMu.Unlock()
+		if watcher != nil {
+			_ = watcher.Close()
+		}
+	})
+	e.workerWG.Wait()
+	e.lifecycleMu.Lock()
+	e.watcher = nil
+	e.lifecycleMu.Unlock()
+}
+
+func (e *Engine) startWorker(worker func()) {
+	e.workerWG.Add(1)
+	go func() {
+		defer e.workerWG.Done()
+		worker()
+	}()
+}
+
+func (e *Engine) queueSync(manifest *Manifest) {
+	select {
+	case <-e.stopCh:
+		return
+	default:
+	}
+	select {
+	case e.syncRequests <- manifest:
+	case <-e.stopCh:
+	default:
+		// One pending request is enough: it rescans current state when run.
+	}
+}
+
+func (e *Engine) syncRequestLoop() {
+	for {
+		select {
+		case <-e.stopCh:
+			return
+		case manifest := <-e.syncRequests:
+			_ = e.RunSync(manifest)
+		}
 	}
 }
 
@@ -303,8 +373,13 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 		_ = database.ClearEngineQueue(e.config.ID)
 		e.pausedMu.Unlock()
 		if wasQueued {
-			time.Sleep(1 * time.Second)
-			go func() { _ = e.RunSync(nextManifest) }()
+			timer := time.NewTimer(time.Second)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				e.queueSync(nextManifest)
+			case <-e.stopCh:
+			}
 		}
 	}()
 
@@ -563,7 +638,7 @@ func (e *Engine) watchLoop() {
 		case <-timer.C:
 			if needsSync {
 				needsSync = false
-				_ = e.RunSync(nil)
+				e.queueSync(nil)
 			}
 		}
 	}
@@ -597,7 +672,7 @@ func (e *Engine) sourcePollLoop() {
 
 			plan := CompareManifests(currentSource, lastSource, e.config.Rule, false)
 			if len(plan.FilesToSync) > 0 || len(plan.FilesToDelete) > 0 || len(plan.DirsToCreate) > 0 || len(plan.DirsToDelete) > 0 || len(plan.Renames) > 0 {
-				go func() { _ = e.RunSync(currentSource) }()
+				e.queueSync(nil)
 			}
 		}
 	}
@@ -617,7 +692,7 @@ func (e *Engine) failedRetryLoop() {
 
 			if hasFailures {
 				log.Printf("[%s] Periodic retry of failed files...", e.config.ID)
-				go func() { _ = e.RunSync(nil) }()
+				e.queueSync(nil)
 			}
 		}
 	}
@@ -631,7 +706,7 @@ func (e *Engine) periodicSyncLoop() {
 		case <-e.stopCh:
 			return
 		case <-ticker.C:
-			go func() { _ = e.RunSync(nil) }()
+			e.queueSync(nil)
 		}
 	}
 }
@@ -659,7 +734,7 @@ func (e *Engine) Resume() {
 	e.pausedMu.Lock()
 	e.paused = false
 	e.pausedMu.Unlock()
-	go func() { _ = e.RunSync(nil) }()
+	e.queueSync(nil)
 }
 func (e *Engine) IsPaused() bool { e.pausedMu.RLock(); defer e.pausedMu.RUnlock(); return e.paused }
 func (e *Engine) IsScanning() bool {
@@ -738,7 +813,7 @@ func (e *Engine) ApproveDeletions() {
 	e.deletionAllowed = true
 	e.waitingForApproval = false
 	e.pausedMu.Unlock()
-	go func() { _ = e.RunSync(nil) }()
+	e.queueSync(nil)
 }
 func (e *Engine) ApproveSpecificChanges(files []string) {
 	e.pausedMu.Lock()
@@ -746,7 +821,7 @@ func (e *Engine) ApproveSpecificChanges(files []string) {
 	e.waitingForApproval = false
 	e.pendingDeletions = files
 	e.pausedMu.Unlock()
-	go func() { _ = e.RunSync(nil) }()
+	e.queueSync(nil)
 }
 func (e *Engine) IsWaitingForApproval() bool {
 	e.pausedMu.RLock()

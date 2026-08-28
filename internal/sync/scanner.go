@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -41,44 +42,53 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 	if strings.Contains(root, "::") || strings.HasPrefix(root, "rsync://") {
 		return s.ScanRemote(root)
 	}
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, fmt.Errorf("opening scan root: %w", err)
+	}
+	defer func() { _ = rootFS.Close() }()
+
 	manifest := NewManifest(root)
 	log.Printf("[Scanner] Starting parallel scan of %s", root)
-
-	// Mutex for manifest map writes
 	var mu sync.Mutex
-
-	// Worker pool for directory processing
-	numWorkers := 8
+	const numWorkers = 8
 	jobs := make(chan string, 10000)
-	var wg sync.WaitGroup
-
-	// Error handling with cancellation
+	var jobsWG sync.WaitGroup
+	var workersWG sync.WaitGroup
 	errCh := make(chan error, 1)
 	done := make(chan struct{})
 	var errOnce sync.Once
 
 	worker := func() {
+		defer workersWG.Done()
 		for dir := range jobs {
 			func() {
-				defer wg.Done()
-
-				// Check for cancellation
+				defer jobsWG.Done()
 				select {
 				case <-done:
 					return
 				default:
 				}
 
-				entries, err := os.ReadDir(dir)
+				directory, err := rootFS.Open(dir)
 				if err != nil {
 					errOnce.Do(func() {
-						select {
-						case errCh <- fmt.Errorf("failed to read dir %s: %w", dir, err):
-						default:
-						}
-						close(done) // Signal cancellation
+						errCh <- fmt.Errorf("opening directory %q: %w", dir, err)
+						close(done)
 					})
 					return
+				}
+				entries, err := directory.ReadDir(-1)
+				closeErr := directory.Close()
+				if err != nil {
+					errOnce.Do(func() {
+						errCh <- fmt.Errorf("reading directory %q: %w", dir, err)
+						close(done)
+					})
+					return
+				}
+				if closeErr != nil {
+					log.Printf("[Scanner] Directory close error: %v", closeErr)
 				}
 
 				for _, d := range entries {
@@ -87,36 +97,37 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 						return
 					default:
 					}
-
-					fullPath := filepath.Join(dir, d.Name())
-					relPath, err := filepath.Rel(root, fullPath)
-					if err != nil {
+					relPath := filepath.Join(dir, d.Name())
+					info, err := rootFS.Lstat(relPath)
+					if err != nil || info.Mode()&os.ModeSymlink != 0 {
 						continue
 					}
-
 					if s.shouldExclude(relPath) {
 						continue
 					}
-
-					if !d.IsDir() && !s.shouldInclude(relPath) {
+					if !info.IsDir() && !s.shouldInclude(relPath) {
 						continue
 					}
-
-					info, err := d.Info()
-					if err != nil {
-						continue
-					}
-
 					fileInfo := &FileInfo{
 						Path:    filepath.ToSlash(relPath),
 						Size:    info.Size(),
 						ModTime: info.ModTime(),
-						IsDir:   d.IsDir(),
+						IsDir:   info.IsDir(),
 					}
 
-					if s.ComputeHashes && !d.IsDir() {
-						if err := fileInfo.ComputeHash(fullPath); err != nil {
-							log.Printf("[Scanner] Hash error for %s: %v", fullPath, err)
+					if s.ComputeHashes && !info.IsDir() {
+						file, openErr := rootFS.Open(relPath)
+						if openErr != nil {
+							log.Printf("[Scanner] Hash open error for %q: %v", relPath, openErr)
+						} else {
+							hashErr := fileInfo.ComputeHash(file)
+							closeErr := file.Close()
+							if hashErr != nil {
+								log.Printf("[Scanner] Hash error for %q: %v", relPath, hashErr)
+							}
+							if closeErr != nil {
+								log.Printf("[Scanner] Hash file close error: %v", closeErr)
+							}
 						}
 					}
 
@@ -124,13 +135,12 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 					manifest.Add(fileInfo)
 					mu.Unlock()
 
-					if d.IsDir() {
-						wg.Add(1)
-						// Ensure we don't block on jobs channel if cancelled
+					if info.IsDir() {
+						jobsWG.Add(1)
 						select {
-						case jobs <- fullPath:
+						case jobs <- relPath:
 						case <-done:
-							wg.Done()
+							jobsWG.Done()
 						}
 					}
 				}
@@ -138,35 +148,26 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 		}
 	}
 
-	// Start workers
 	for i := 0; i < numWorkers; i++ {
+		workersWG.Add(1)
 		go worker()
 	}
 
-	// Initial job
-	wg.Add(1)
-	jobs <- root
-
-	// Wait for completion in background
+	jobsWG.Add(1)
+	jobs <- "."
+	scanDone := make(chan struct{})
 	go func() {
-		wg.Wait()
+		jobsWG.Wait()
 		close(jobs)
-		// Only close errCh if not already cancelled/closed via error
-		select {
-		case <-done:
-		default:
-			close(errCh)
-		}
+		workersWG.Wait()
+		close(scanDone)
 	}()
 
-	// Wait for first error or completion
 	select {
 	case err := <-errCh:
-		if err != nil {
-			return nil, err
-		}
-	case <-done:
-		return nil, <-errCh
+		<-scanDone
+		return nil, err
+	case <-scanDone:
 	}
 
 	log.Printf("[Scanner] Finished scan of %s: found %d items", root, len(manifest.Files)+len(manifest.Dirs))
@@ -204,19 +205,9 @@ func (s *Scanner) shouldInclude(path string) bool {
 	return false
 }
 
-// ScanRemote scans a remote target via the Agent API
-// It strictly requires DEST_HOST to be set and the receiver to be reachable via HTTP.
+// ScanRemote scans a remote target through the authenticated HTTPS receiver API.
 func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
-	uriHost, remotePath := ParseRemoteDestination(uri)
-
-	destHost := uriHost
-	if destHost == "" {
-		destHost = os.Getenv("DEST_HOST")
-	}
-
-	if destHost == "" {
-		return nil, fmt.Errorf("remote scan failed: could not determine destination host from URI %q or DEST_HOST environment variable", uri)
-	}
+	_, remotePath := ParseRemoteDestination(uri)
 
 	if remotePath == "" {
 		// If ParseRemoteDestination couldn't find a path, it might be just a module name without path
@@ -234,23 +225,17 @@ func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
 			}
 		}
 	}
-
-	apiURL := fmt.Sprintf("http://%s:8080/api/manifest?path=%s", destHost, url.QueryEscape(remotePath))
-
-	log.Printf("[Scanner] Requesting remote manifest from API: %s", apiURL)
+	if remotePath == "" {
+		remotePath = "."
+	}
+	log.Printf("[Scanner] Requesting remote manifest")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	resp, err := receiverAPIRequest(ctx, http.MethodGet, "/api/manifest", url.Values{"path": {remotePath}}, 2*time.Minute)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to contact receiver API at %s: %w", destHost, err)
+		return nil, fmt.Errorf("failed to contact receiver API: %w", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -263,11 +248,11 @@ func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
 	}
 
 	manifest := &Manifest{}
-	if err := json.NewDecoder(resp.Body).Decode(manifest); err != nil {
-		log.Printf("[Scanner] Failed to decode manifest from %s: %v", apiURL, err)
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<20)).Decode(manifest); err != nil {
+		log.Printf("[Scanner] Failed to decode manifest: %v", err)
 		return nil, fmt.Errorf("failed to decode manifest JSON: %w", err)
 	}
 
-	log.Printf("[Scanner] Successfully received %d items from %s", len(manifest.Files)+len(manifest.Dirs), apiURL)
+	log.Printf("[Scanner] Successfully received %d items", len(manifest.Files)+len(manifest.Dirs))
 	return manifest, nil
 }

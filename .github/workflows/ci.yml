@@ -2,39 +2,50 @@ name: Go CI
 
 on:
   push:
-    branches: [ "main", "test", "v2_test" ]
+    branches: [main]
   pull_request:
-    branches: [ "main", "test", "v2_test" ]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.24'
-          cache: false
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.8.0
-          args: --timeout=5m
-
   test:
-    name: Test & Build
+    name: Test and security
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-    - uses: actions/checkout@v6
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-    - name: Set up Go
-      uses: actions/setup-go@v6
-      with:
-        go-version: '1.24'
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.7'
+          cache: true
 
-    - name: Build
-      run: go build -v ./...
+      - name: Verify module files
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
 
-    - name: Test
-      run: go test -v ./...
+      - name: Vet
+        run: go vet ./...
+
+      - name: Lint
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run
+
+      - name: Test with race detector
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Scan Go dependencies
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+
+      - name: Run gosec
+        uses: securego/gosec@deb54465fea23d19a77f037e11e6589021f8501d # v2.29.0
+        with:
+          args: ./...

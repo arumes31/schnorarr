@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"net/url"
 	"os"
 
 	"sync"
@@ -24,7 +25,21 @@ var (
 )
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		parsed, err := url.Parse(origin)
+		if err != nil || parsed.Host != r.Host {
+			return false
+		}
+		expectedScheme := "http"
+		if r.TLS != nil {
+			expectedScheme = "https"
+		}
+		return parsed.Scheme == expectedScheme
+	},
 }
 
 type Session struct {
@@ -50,13 +65,7 @@ func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.D
 	// Load auth settings from env
 	AuthEnabled = os.Getenv("AUTH_ENABLED") == "true"
 	AdminUser = os.Getenv("ADMIN_USER")
-	if AdminUser == "" {
-		AdminUser = "admin"
-	}
 	AdminPass = os.Getenv("ADMIN_PASS")
-	if AdminPass == "" {
-		AdminPass = "schnorarr"
-	}
 
 	return &Handlers{
 		config:         cfg,

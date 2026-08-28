@@ -1,82 +1,82 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-# Handle Tailscale if AUTHKEY is provided
-if [ -n "$TAILSCALE_AUTHKEY" ]; then
-    echo "Starting Tailscale..."
-    # Ensure /dev/net/tun exists
-    if [ ! -c /dev/net/tun ]; then
-        mkdir -p /dev/net/
-        mknod /dev/net/tun c 10 200
-    fi
-    
-    mkdir -p /config/tailscale
-    tailscaled --state=/config/tailscale/tailscaled.state &
-    sleep 2
-    
-        HOSTNAME=${TS_HOSTNAME:-"schnorarr-${MODE}"}
-    UP_ARGS=${TAILSCALE_UP_ARGS:-""}
-    
-    echo "Checking Tailscale status..."
-    if tailscale status | grep -q "Logged out"; then
-        echo "Node not authenticated. Running tailscale up with authkey: $HOSTNAME and args: $UP_ARGS"
-        tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="$HOSTNAME" $UP_ARGS
-    else
-        echo "Node already authenticated. Running tailscale up without authkey: $HOSTNAME and args: $UP_ARGS"
-        tailscale up --hostname="$HOSTNAME" $UP_ARGS
-    fi
-fi
+umask 077
 
-if [ "$MODE" = "receiver" ]; then
-    echo "Starting rsync daemon (Receiver MODE)..."
-    
-    # Handle authentication
-    if [ -n "$RSYNC_USER" ] && [ -n "$RSYNC_PASSWORD" ]; then
-        echo "Configuring authentication for user: $RSYNC_USER"
-        echo "$RSYNC_USER:$RSYNC_PASSWORD" > /config/rsyncd.secrets
-        chmod 600 /config/rsyncd.secrets
-        sed -i "s/auth users = .*/auth users = $RSYNC_USER/" /scripts/rsyncd.conf
-        sed -i "/auth users/a \    secrets file = /config/rsyncd.secrets" /scripts/rsyncd.conf
-    fi
-
-    # Start monitor in background for health checks and status reporting
-    /usr/local/bin/monitor &
-
-    exec rsync --no-detach --daemon --config=/scripts/rsyncd.conf
-elif [ "$MODE" = "sender" ]; then
-    echo "Starting custom sync engine (Sender MODE)..."
-    
-    # Handle authentication for sender
-    if [ -n "$RSYNC_PASSWORD" ]; then
-        echo "$RSYNC_PASSWORD" > /config/rsync.pass
-        chmod 600 /config/rsync.pass
-    fi
-
-    # Monitor will be started at the end with exec
-
-    # Disk space check
-    MIN_DISK_SPACE_GB=${MIN_DISK_SPACE_GB:-0}
-    # BusyBox df doesn't support -BG, use -k and convert
-    AVAILABLE_SPACE_KB=$(df -k /data | awk 'NR==2 {print $4}')
-    AVAILABLE_SPACE_GB=$((AVAILABLE_SPACE_KB / 1024 / 1024))
-    
-    if [ "$AVAILABLE_SPACE_GB" -lt "$MIN_DISK_SPACE_GB" ]; then
-        echo "Error: Not enough disk space. Available: ${AVAILABLE_SPACE_GB}GB, Required: ${MIN_DISK_SPACE_GB}GB"
+required=(MODE RSYNC_USER RSYNC_PASSWORD INTERNAL_API_TOKEN ADMIN_USER ADMIN_PASS TLS_CERT_FILE TLS_KEY_FILE)
+for name in "${required[@]}"; do
+    if [[ -z "${!name:-}" ]]; then
+        echo "Error: $name is required" >&2
         exit 1
     fi
+done
 
-    # Wait for receiver to be ready
-    echo "Waiting for receiver $DEST_HOST:873..."
-    while ! nc -z "$DEST_HOST" 873; do
-        echo "Receiver not ready, sleeping 5s..."
-        sleep 5
-    done
-
-    # Start Monitor with embedded sync engine
-    # The monitor binary now includes the custom sync engine
-    # It will run the sync logic internally based on SYNC_X environment variables
-    exec /usr/local/bin/monitor
-else
-    echo "Unknown MODE: $MODE. Use 'sender' or 'receiver'."
+if [[ "$MODE" != "sender" && "$MODE" != "receiver" ]]; then
+    echo "Error: MODE must be sender or receiver" >&2
     exit 1
 fi
+if [[ ! "$RSYNC_USER" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    echo "Error: RSYNC_USER contains unsupported characters" >&2
+    exit 1
+fi
+if (( ${#RSYNC_PASSWORD} < 16 )) || [[ "$RSYNC_PASSWORD" == *$'\n'* || "$RSYNC_PASSWORD" == *$'\r'* ]]; then
+    echo "Error: RSYNC_PASSWORD must be at least 16 characters without line breaks" >&2
+    exit 1
+fi
+if (( ${#INTERNAL_API_TOKEN} < 32 )); then
+    echo "Error: INTERNAL_API_TOKEN must be at least 32 characters" >&2
+    exit 1
+fi
+if [[ ! -r "$TLS_CERT_FILE" || ! -r "$TLS_KEY_FILE" ]]; then
+    echo "Error: TLS certificate and key must be readable" >&2
+    exit 1
+fi
+
+if [[ "$MODE" == "receiver" ]]; then
+	printf '%s:%s\n' "$RSYNC_USER" "$RSYNC_PASSWORD" > /tmp/rsyncd.secrets
+	chmod 0600 /tmp/rsyncd.secrets
+	cp /scripts/rsyncd.conf /tmp/rsyncd.conf
+	sed -i "s/^    auth users = .*/    auth users = $RSYNC_USER/" /tmp/rsyncd.conf
+
+	echo "Starting receiver monitor and rsync daemon"
+	/usr/local/bin/monitor &
+	monitor_pid=$!
+	/usr/bin/rsync.real --no-detach --daemon --config=/tmp/rsyncd.conf &
+	rsync_pid=$!
+	shutdown_receiver() {
+		trap - INT TERM
+		kill "$monitor_pid" "$rsync_pid" 2>/dev/null || true
+		wait "$monitor_pid" "$rsync_pid" 2>/dev/null || true
+	}
+	trap shutdown_receiver INT TERM
+	set +e
+	wait -n "$monitor_pid" "$rsync_pid"
+	status=$?
+	set -e
+	shutdown_receiver
+	exit "$status"
+fi
+
+if [[ -z "${DEST_HOST:-}" ]]; then
+    echo "Error: DEST_HOST is required in sender mode" >&2
+    exit 1
+fi
+
+minimum_gb=${MIN_DISK_SPACE_GB:-0}
+if [[ ! "$minimum_gb" =~ ^[0-9]+$ ]]; then
+	echo "Error: MIN_DISK_SPACE_GB must be a non-negative integer" >&2
+	exit 1
+fi
+available_kb=$(df -k /data | awk 'NR==2 {print $4}')
+available_gb=$((available_kb / 1024 / 1024))
+if (( available_gb < minimum_gb )); then
+    echo "Error: not enough disk space; available ${available_gb}GB, required ${minimum_gb}GB" >&2
+    exit 1
+fi
+
+echo "Waiting for receiver ${DEST_HOST}:873"
+until nc -z "$DEST_HOST" 873; do
+    sleep 5
+done
+
+exec /usr/local/bin/monitor

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -41,7 +42,11 @@ func useTempConfigPath(t *testing.T) {
 func useBrokenConfigPath(t *testing.T) {
 	t.Helper()
 	old := config.ConfigPath
-	config.ConfigPath = filepath.Join(t.TempDir(), "missing", "config.json")
+	notDirectory := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(notDirectory, []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config.ConfigPath = filepath.Join(notDirectory, "config.json")
 	t.Cleanup(func() { config.ConfigPath = old })
 }
 

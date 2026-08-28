@@ -2,56 +2,75 @@ services:
   receiver:
     build: .
     environment:
-      - MODE=receiver
-      - RSYNC_USER=syncuser
-      - RSYNC_PASSWORD=secretpassword
+      MODE: receiver
+      SOURCE_DIR: /data
+      RSYNC_USER: ${RSYNC_USER:?Set RSYNC_USER}
+      RSYNC_PASSWORD: ${RSYNC_PASSWORD:?Set RSYNC_PASSWORD}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
+      AUTH_ENABLED: "true"
+      ADMIN_USER: ${ADMIN_USER:?Set ADMIN_USER}
+      ADMIN_PASS: ${ADMIN_PASS:?Set ADMIN_PASS}
+      TLS_CERT_FILE: /run/tls/tls.crt
+      TLS_KEY_FILE: /run/tls/tls.key
     volumes:
-      # Map shared test root to /data so subdirs land in correct place
       - ./testfiles:/data
-    restart: always
+      - receiver_test_config:/config
+      - ${TLS_CERT_PATH:?Set TLS_CERT_PATH}:/run/tls/tls.crt:ro
+      - ${TLS_KEY_PATH:?Set TLS_KEY_PATH}:/run/tls/tls.key:ro
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
 
   sender:
     build: .
     depends_on:
-      - receiver
+      receiver:
+        condition: service_healthy
     environment:
-      - MODE=sender
-      - RSYNC_USER=syncuser
-      - RSYNC_PASSWORD=secretpassword
-      - BWLIMIT_MBPS=500
-      - POLL_INTERVAL=10
-      - DEST_HOST=receiver
-      - DEST_MODULE=video-sync
-      - AUTH_ENABLED=true
-      - ADMIN_USER=admin
-      - ADMIN_PASS=schnorarr
-
-      # 1. Sender 1 -> Receiver 1 (Series Profile)
-      - SYNC_1_SOURCE=/data/sender1
-      - SYNC_1_TARGET=syncuser@receiver::video-sync/receiver1
-      - SYNC_1_RULE=series
-
-      # 2. Sender 2 -> Receiver 2 (Series Profile)
-      - SYNC_2_SOURCE=/data/sender2
-      - SYNC_2_TARGET=syncuser@receiver::video-sync/receiver2
-      - SYNC_2_RULE=series
-
-      # 3. Sender 3 -> Receiver 3 (Movies Profile)
-      - SYNC_3_SOURCE=/data/sender3
-      - SYNC_3_TARGET=syncuser@receiver::video-sync/receiver3
-      - SYNC_3_RULE=flat
-
-      # 4. Sender 4 -> Receiver 4 (Movies Profile)
-      - SYNC_4_SOURCE=/data/sender4
-      - SYNC_4_TARGET=syncuser@receiver::video-sync/receiver4
-      - SYNC_4_RULE=flat
-
+      MODE: sender
+      SOURCE_DIR: /data
+      DEST_HOST: receiver
+      DEST_MODULE: video-sync
+      RECEIVER_API_URL: https://receiver:8080
+      INTERNAL_API_CA_FILE: /run/tls/ca.crt
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
+      RSYNC_USER: ${RSYNC_USER:?Set RSYNC_USER}
+      RSYNC_PASSWORD: ${RSYNC_PASSWORD:?Set RSYNC_PASSWORD}
+      BWLIMIT_MBPS: 500
+      POLL_INTERVAL: 10
+      AUTH_ENABLED: "true"
+      ADMIN_USER: ${ADMIN_USER:?Set ADMIN_USER}
+      ADMIN_PASS: ${ADMIN_PASS:?Set ADMIN_PASS}
+      TLS_CERT_FILE: /run/tls/tls.crt
+      TLS_KEY_FILE: /run/tls/tls.key
+      SYNC_1_SOURCE: /data/sender1
+      SYNC_1_TARGET: ${RSYNC_USER:?Set RSYNC_USER}@receiver::video-sync/receiver1
+      SYNC_1_RULE: series
+      SYNC_2_SOURCE: /data/sender2
+      SYNC_2_TARGET: ${RSYNC_USER:?Set RSYNC_USER}@receiver::video-sync/receiver2
+      SYNC_2_RULE: series
+      SYNC_3_SOURCE: /data/sender3
+      SYNC_3_TARGET: ${RSYNC_USER:?Set RSYNC_USER}@receiver::video-sync/receiver3
+      SYNC_3_RULE: flat
+      SYNC_4_SOURCE: /data/sender4
+      SYNC_4_TARGET: ${RSYNC_USER:?Set RSYNC_USER}@receiver::video-sync/receiver4
+      SYNC_4_RULE: flat
     ports:
-      - "8080:8080"
-
+      - 127.0.0.1:8443:8080
     volumes:
-      # Map same shared test root so we can seed sources from host
-      - ./testfiles:/data
-      # Separate config for sender (prevents database lock contention with receiver)
-      - ./testfiles/sender_config:/config
-    restart: always
+      - ./testfiles:/data:ro
+      - sender_test_config:/config
+      - ${TLS_CERT_PATH:?Set TLS_CERT_PATH}:/run/tls/tls.crt:ro
+      - ${TLS_KEY_PATH:?Set TLS_KEY_PATH}:/run/tls/tls.key:ro
+      - ${TLS_CA_PATH:?Set TLS_CA_PATH}:/run/tls/ca.crt:ro
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+
+volumes:
+  receiver_test_config:
+  sender_test_config:

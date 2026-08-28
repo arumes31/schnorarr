@@ -2,55 +2,66 @@ services:
   receiver:
     build: .
     environment:
-      - MODE=receiver
-      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
-      # - TS_HOSTNAME=schnorarr-receiver
-      # - TAILSCALE_UP_ARGS=--accept-routes
-      - RSYNC_USER=syncuser
-      - RSYNC_PASSWORD=secretpassword
+      MODE: receiver
+      SOURCE_DIR: /data
+      RSYNC_USER: ${RSYNC_USER:?Set RSYNC_USER}
+      RSYNC_PASSWORD: ${RSYNC_PASSWORD:?Set RSYNC_PASSWORD}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
+      AUTH_ENABLED: "true"
+      ADMIN_USER: ${ADMIN_USER:?Set ADMIN_USER}
+      ADMIN_PASS: ${ADMIN_PASS:?Set ADMIN_PASS}
+      TLS_CERT_FILE: /run/tls/tls.crt
+      TLS_KEY_FILE: /run/tls/tls.key
     volumes:
-      - ./receiver:/data
+      - ${RECEIVER_DATA_PATH:-./receiver}:/data
       - receiver_config:/config
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun:/dev/net/tun
+      - ${TLS_CERT_PATH:?Set TLS_CERT_PATH}:/run/tls/tls.crt:ro
+      - ${TLS_KEY_PATH:?Set TLS_KEY_PATH}:/run/tls/tls.key:ro
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
     restart: unless-stopped
 
   sender:
     build: .
-    environment:
-      - MODE=sender
-      - DEST_HOST=receiver
-      - DEST_MODULE=video-sync
-      - SYNC_INCLUDE=*.mkv,*.mp4,*.avi
-      - DRY_RUN=false
-      - RSYNC_USER=syncuser
-      - RSYNC_PASSWORD=secretpassword
-      - BWLIMIT_MBPS=50
-      - MIN_DISK_SPACE_GB=0
-      # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
-      # - TS_HOSTNAME=schnorarr-sender
-      # - TAILSCALE_UP_ARGS=--accept-dns=false
-      - DISCORD_WEBHOOK_URL=
-      - TELEGRAM_BOT_TOKEN=
-      - TELEGRAM_CHAT_ID=
-      - TELEGRAM_CHAT_ID=
-      - POLL_INTERVAL=60
-      - AUTH_ENABLED=true
-      - ADMIN_USER=admin
-      - ADMIN_PASS=schnorarr
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./sender:/data
-      - sender_config:/config
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun:/dev/net/tun
     depends_on:
-      - receiver
+      receiver:
+        condition: service_healthy
+    environment:
+      MODE: sender
+      SOURCE_DIR: /data
+      DEST_HOST: receiver
+      DEST_MODULE: video-sync
+      RECEIVER_API_URL: https://receiver:8080
+      INTERNAL_API_CA_FILE: /run/tls/ca.crt
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
+      RSYNC_USER: ${RSYNC_USER:?Set RSYNC_USER}
+      RSYNC_PASSWORD: ${RSYNC_PASSWORD:?Set RSYNC_PASSWORD}
+      BWLIMIT_MBPS: ${BWLIMIT_MBPS:-50}
+      MIN_DISK_SPACE_GB: ${MIN_DISK_SPACE_GB:-0}
+      POLL_INTERVAL: ${POLL_INTERVAL:-60}
+      AUTH_ENABLED: "true"
+      ADMIN_USER: ${ADMIN_USER:?Set ADMIN_USER}
+      ADMIN_PASS: ${ADMIN_PASS:?Set ADMIN_PASS}
+      TLS_CERT_FILE: /run/tls/tls.crt
+      TLS_KEY_FILE: /run/tls/tls.key
+    ports:
+      - ${DASHBOARD_BIND_ADDRESS:-127.0.0.1}:8443:8080
+    volumes:
+      - ${SENDER_DATA_PATH:-./sender}:/data:ro
+      - sender_config:/config
+      - ${TLS_CERT_PATH:?Set TLS_CERT_PATH}:/run/tls/tls.crt:ro
+      - ${TLS_KEY_PATH:?Set TLS_KEY_PATH}:/run/tls/tls.key:ro
+      - ${TLS_CA_PATH:?Set TLS_CA_PATH}:/run/tls/ca.crt:ro
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
     restart: unless-stopped
 
 volumes:

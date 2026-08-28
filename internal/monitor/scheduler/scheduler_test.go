@@ -9,10 +9,10 @@ import (
 
 func TestInQuietWindow(t *testing.T) {
 	tests := []struct {
-		name          string
-		start, end    string
-		currentHM     string
-		want          bool
+		name       string
+		start, end string
+		currentHM  string
+		want       bool
 	}{
 		{"normal window inside", "08:00", "18:00", "12:00", true},
 		{"normal window at start", "08:00", "18:00", "08:00", true},
