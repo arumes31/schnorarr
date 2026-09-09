@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"schnorarr/internal/monitor/health"
+	"schnorarr/internal/storage"
 )
 
 func TestStartSyncEngines_LoopCapture(t *testing.T) {
@@ -31,6 +32,13 @@ func TestStartSyncEngines_LoopCapture(t *testing.T) {
 	t.Setenv("SYNC_2_SOURCE", src2)
 	t.Setenv("SYNC_2_TARGET", t.TempDir())
 	t.Setenv("SYNC_2_RULE", "series")
+	for id, source := range map[string]string{"1": src1, "2": src2} {
+		for _, folder := range []string{source, os.Getenv("SYNC_" + id + "_TARGET")} {
+			if err := os.WriteFile(filepath.Join(folder, storage.MarkerName), []byte(strings.Repeat(id, 64)), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 
 	// Mock health state
 	healthState := &health.State{}

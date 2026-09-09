@@ -2,7 +2,9 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -91,6 +93,24 @@ func TestReceiverTokenEndpoint(t *testing.T) {
 		if _, err := r.Resolve(path); err == nil {
 			t.Fatalf("unsafe path accepted: %s", path)
 		}
+	}
+}
+
+func TestReceiverTokenEndpointHidesVerificationDetails(t *testing.T) {
+	r := NewReceiver(t.TempDir(), filepath.Join(t.TempDir(), "tokens.json"))
+	req := httptest.NewRequest(http.MethodGet, "/?path=private-folder", nil)
+	req.Header.Set("X-Schnorarr-Shared-Token", strings.Repeat("a", 64))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d", w.Code)
+	}
+	var result map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["status"] != "unavailable" || result["message"] != "storage unavailable" {
+		t.Fatalf("unexpected readiness response: %s", w.Body.String())
 	}
 }
 

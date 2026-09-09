@@ -28,7 +28,7 @@ function updateTopFiles(files) {
         list.innerHTML = '<li style="color: var(--text-muted); text-align: center; padding: 10px;">No completed transfers in the last 24 hours.</li>';
         return;
     }
-    list.innerHTML = files.map(f => `<li class="activity-item"><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(f.path)} <span style="color: var(--text-muted); font-size: 13px;">(${f.size})</span></div></li>`).join('');
+    list.innerHTML = files.map(f => `<li class="activity-item"><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(f.path)} <span style="color: var(--text-muted); font-size: 13px;">(${escapeHtml(f.size)})</span></div></li>`).join('');
 }
 
 function addLogLine(data) {
@@ -334,7 +334,7 @@ function updateProgress(data) {
             updateStorageStatus(eng);
             updateEndpointFlow(eng);
             const card = document.getElementById(`engine-card-${eng.id}`);
-            if (card) card.dataset.state = eng.storage_blocked ? 'STORAGE WAIT' : eng.is_waiting_approval ? 'WAITING_APPROVAL' : eng.is_active ? 'SYNCING' : eng.is_paused ? 'PAUSED' : 'ACTIVE';
+            if (card) card.dataset.state = eng.storage_blocked ? 'STORAGE WAIT' : eng.is_waiting_approval ? 'WAITING_APPROVAL' : eng.is_paused ? 'PAUSED' : eng.is_active ? 'SYNCING' : 'ACTIVE';
             const preview = document.getElementById(`engine-preview-${eng.id}`);
             if (preview) preview.textContent = eng.is_waiting_approval ? 'Review changes' : 'Preview';
             const toggle = document.getElementById(`engine-btn-toggle-${eng.id}`);

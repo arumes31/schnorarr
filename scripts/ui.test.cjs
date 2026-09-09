@@ -45,6 +45,27 @@ function dashboard(fetch = async () => ({ ok: false, status: 503, statusText: 'S
     return {context, element, listeners, notices};
 }
 
+test('top files escapes markup in both paths and sizes', () => {
+    const {context, element} = dashboard();
+    context.updateTopFiles([{
+        path: '<img src=x onerror=alert(1)>.mkv',
+        size: '<svg onload=alert(2)>',
+    }]);
+    const html = element('top-files-list').innerHTML;
+    assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;\.mkv/);
+    assert.match(html, /\(&lt;svg onload=alert\(2\)&gt;\)/);
+    assert.doesNotMatch(html, /<(?:img|svg)\b/);
+});
+
+test('top files renders formatted sizes and the empty state', () => {
+    const {context, element} = dashboard();
+    context.updateTopFiles([{path: 'Movie.mkv', size: '1.5 GB'}]);
+    assert.match(element('top-files-list').innerHTML, /Movie\.mkv/);
+    assert.match(element('top-files-list').innerHTML, /\(1\.5 GB\)/);
+    context.updateTopFiles([]);
+    assert.match(element('top-files-list').innerHTML, /No completed transfers/);
+});
+
 test('failed preview stops loading, exposes recovery, and cannot execute', async () => {
     const {context, element} = dashboard();
     await context.showPreview('1');
@@ -177,6 +198,21 @@ test('endpoint motion follows transferring, paused, blocked, and idle states', (
     for (const state of cases) {
         context.updateEndpointFlow({id: '1', ...state});
         assert.equal(element('flow-1').dataset.active, state.expected);
+    }
+});
+
+test('card state prioritizes storage, approval, and pause over active transfers', () => {
+    const {context, element} = dashboard();
+    const cases = [
+        {is_active: true, is_paused: true, expected: 'PAUSED'},
+        {is_active: true, is_paused: true, storage_blocked: true, expected: 'STORAGE WAIT'},
+        {is_active: true, is_paused: true, is_waiting_approval: true, expected: 'WAITING_APPROVAL'},
+        {is_active: true, expected: 'SYNCING'},
+        {is_active: false, expected: 'ACTIVE'},
+    ];
+    for (const state of cases) {
+        context.updateProgress({engines: [{id: '1', ...state}]});
+        assert.equal(element('engine-card-1').dataset.state, state.expected);
     }
 });
 

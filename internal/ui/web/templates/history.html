@@ -110,7 +110,7 @@
 
         <!-- Pagination -->
         {{if gt .TotalPages 1}}
-        <div class="pagination" aria-label="History pages">
+        <nav class="pagination" aria-label="History pages">
             {{if gt .CurrentPage 1}}
             <a href="/history?page={{.PrevPage}}{{if .Query}}&q={{.Query}}{{end}}" class="btn-premium btn-outline" style="padding: 8px 16px;">&larr; Previous</a>
             {{else}}
@@ -124,7 +124,7 @@
             {{else}}
             <span class="btn-premium btn-outline" aria-disabled="true">Next &rarr;</span>
             {{end}}
-        </div>
+        </nav>
         {{end}}
     </main>
 </body>

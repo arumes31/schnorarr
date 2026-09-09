@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -88,7 +89,7 @@ func (r *Receiver) Verify(ctx context.Context, path, token string) error {
 		return fmt.Errorf("%w: invalid shared token", ErrUnavailable)
 	}
 	for _, ch := range token {
-		if !(ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f') {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
 			return fmt.Errorf("%w: invalid shared token", ErrUnavailable)
 		}
 	}
@@ -117,7 +118,7 @@ func (r *Receiver) Verify(ctx context.Context, path, token string) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(file.Name())
+	defer func() { _ = os.Remove(file.Name()) }()
 	_, writeErr := file.Write(data)
 	syncErr := file.Sync()
 	closeErr := file.Close()
@@ -182,8 +183,9 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
 	if err := r.Verify(req.Context(), req.URL.Query().Get("path"), req.Header.Get("X-Schnorarr-Shared-Token")); err != nil {
+		log.Printf("[Storage] Receiver verification failed: %v", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "unavailable", "message": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "unavailable", "message": "storage unavailable"})
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})

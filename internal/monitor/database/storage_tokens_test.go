@@ -12,7 +12,7 @@ func TestEngineTokenPersistsAndIsDistinct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if _, err := db.Exec("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)"); err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestEngineTokenPersistsAndIsDistinct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reopened.Close()
+	defer func() { _ = reopened.Close() }()
 	after, err := engineStorageToken(reopened, "1")
 	if err != nil {
 		t.Fatal(err)

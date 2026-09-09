@@ -269,16 +269,20 @@ func (e *Engine) checkStorage() error {
 	}
 	err := e.config.CheckStorage()
 	e.pausedMu.Lock()
+	previousError := e.storageError
 	e.storageBlocked = err != nil
 	e.storageCheckedAt = time.Now()
 	e.storageError = ""
 	if err != nil {
 		e.storageError = err.Error()
 	}
+	errorChanged := e.storageError != previousError
 	e.pausedMu.Unlock()
 	if err != nil {
 		err = fmt.Errorf("%w: %w", storage.ErrUnavailable, err)
-		database.ReportEngineError(e.config.ID, err.Error())
+		if errorChanged {
+			database.ReportEngineError(e.config.ID, err.Error())
+		}
 	}
 	return err
 }

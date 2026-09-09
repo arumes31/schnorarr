@@ -68,6 +68,33 @@ func TestCopyChecksStorageForEachFile(t *testing.T) {
 	}
 }
 
+func TestCopyRemovesTemporaryFileWhenRetryStorageCheckFails(t *testing.T) {
+	// Reading a directory fails after CopyFile has created the temporary file.
+	source := t.TempDir()
+	target := filepath.Join(t.TempDir(), "movie.mkv")
+	unavailable := errors.New("share disconnected before retry")
+	checks := 0
+	tr := NewTransferer(TransferOptions{CheckStorage: func() error {
+		checks++
+		if checks > 1 {
+			if _, err := os.Stat(target + ".tmp"); err != nil {
+				t.Fatalf("first attempt did not leave a temporary file: %v", err)
+			}
+			return unavailable
+		}
+		return nil
+	}})
+	if err := tr.CopyFile(source, target); err != unavailable {
+		t.Fatalf("retry lost the storage error: %v", err)
+	}
+	if _, err := os.Stat(target + ".tmp"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary file remains after storage failure: %v", err)
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed copy created the destination: %v", err)
+	}
+}
+
 func TestEngineStopsPlanWhenShareDisconnectsBetweenFiles(t *testing.T) {
 	source, target := t.TempDir(), t.TempDir()
 	marker := filepath.Join(source, storage.MarkerName)

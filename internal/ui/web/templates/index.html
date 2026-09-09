@@ -145,11 +145,11 @@
                     <button type="button" class="text-button" onclick="showSharedToken('{{.ID}}', this)" aria-haspopup="dialog">Check shared token</button>
                 </div>
                 <div class="path-box">
-                    <div class="engine-path"><span class="path-label">Source</span><span class="path-value">{{.Source}}</span><button type="button" class="copy-btn" onclick="copyToClipboard('{{.Source}}', this)" aria-label="Copy source path for {{.Alias}}">Copy</button></div>
+                    <div class="engine-path"><span class="path-label">Source</span><span class="path-value">{{.Source}}</span><button type="button" class="copy-btn" onclick="copyToClipboard('{{.Source}}', this)" aria-label="Copy source path for {{if .Alias}}{{.Alias}}{{else}}Engine {{.ID}}{{end}}">Copy</button></div>
                     <div id="flow-{{.ID}}" class="endpoint-flow" data-active="{{and (gt .CurrentPercent 0.0) (not .IsPaused) (not .StorageBlocked) (not .WaitingForApproval)}}" data-visible="false" aria-hidden="true">
                         <svg viewBox="0 0 64 16" fill="none"><path class="endpoint-flow-track" d="M4 8H58M52 3L58 8L52 13"/><circle cx="4" cy="8" r="3" fill="currentColor"/><circle class="endpoint-flow-packet" cx="4" cy="8" r="3" fill="currentColor"/></svg>
                     </div>
-                    <div class="engine-path"><span class="path-label">Destination</span><span class="path-value">{{.Target}}</span><button type="button" class="copy-btn" onclick="copyToClipboard('{{.Target}}', this)" aria-label="Copy destination path for {{.Alias}}">Copy</button></div>
+                    <div class="engine-path"><span class="path-label">Destination</span><span class="path-value">{{.Target}}</span><button type="button" class="copy-btn" onclick="copyToClipboard('{{.Target}}', this)" aria-label="Copy destination path for {{if .Alias}}{{.Alias}}{{else}}Engine {{.ID}}{{end}}">Copy</button></div>
                 </div>
                 <div id="engine-progress-container-{{.ID}}" {{if not (gt .CurrentPercent 0.0)}}hidden{{end}}>
                     <div class="transfer-file"><span id="engine-current-file-{{.ID}}">{{.CurrentFile}}</span><span id="engine-current-speed-{{.ID}}">{{.CurrentSpeed}}</span></div>

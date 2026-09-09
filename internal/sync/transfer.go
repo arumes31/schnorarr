@@ -119,6 +119,7 @@ func (t *Transferer) CopyFile(src, dst string) error {
 			log.Printf("[Transferer] Retry %d/%d for %s...", i, maxRetries, src)
 			time.Sleep(sleep)
 			if err := t.checkStorage(); err != nil {
+				_ = os.Remove(tmpDst)
 				return err
 			}
 

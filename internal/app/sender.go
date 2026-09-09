@@ -118,16 +118,16 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 		}
 		checkStorage := func() error {
 			if err := storageChecker.Check(context.Background()); err != nil {
-				return fmt.Errorf("Source storage: %w", err)
+				return fmt.Errorf("source storage: %w", err)
 			}
 			if host != "" {
 				if err := storage.CheckRemote(context.Background(), fmt.Sprintf("http://%s:8080/api/storage-ready?path=%s", host, url.QueryEscape(remotePath)), token); err != nil {
-					return fmt.Errorf("Destination storage: %w", err)
+					return fmt.Errorf("destination storage: %w", err)
 				}
 				return nil
 			}
 			if err := localTarget.Check(context.Background()); err != nil {
-				return fmt.Errorf("Destination storage: %w", err)
+				return fmt.Errorf("destination storage: %w", err)
 			}
 			return nil
 		}

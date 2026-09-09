@@ -25,7 +25,7 @@ func CheckRemote(ctx context.Context, endpoint string, token ...string) error {
 	if err != nil {
 		return fmt.Errorf("%w: receiver: %w", ErrUnavailable, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var result struct {
 		Status string `json:"status"`
 	}
