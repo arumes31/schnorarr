@@ -118,12 +118,18 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 		}
 		checkStorage := func() error {
 			if err := storageChecker.Check(context.Background()); err != nil {
-				return err
+				return fmt.Errorf("Source storage: %w", err)
 			}
 			if host != "" {
-				return storage.CheckRemote(context.Background(), fmt.Sprintf("http://%s:8080/api/storage-ready?path=%s", host, url.QueryEscape(remotePath)), token)
+				if err := storage.CheckRemote(context.Background(), fmt.Sprintf("http://%s:8080/api/storage-ready?path=%s", host, url.QueryEscape(remotePath)), token); err != nil {
+					return fmt.Errorf("Destination storage: %w", err)
+				}
+				return nil
 			}
-			return localTarget.Check(context.Background())
+			if err := localTarget.Check(context.Background()); err != nil {
+				return fmt.Errorf("Destination storage: %w", err)
+			}
+			return nil
 		}
 		engine := sync.NewEngine(sync.SyncConfig{
 			SharedToken:  token,
@@ -185,6 +191,8 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 			IsRemoteScan      bool    `json:"is_remote_scan"`
 			IsWaitingApproval bool    `json:"is_waiting_approval"`
 			StorageBlocked    bool    `json:"storage_blocked"`
+			StorageError      string  `json:"storage_error"`
+			StorageCheckedAt  string  `json:"storage_checked_at"`
 		}
 		engineStats := make([]EngineProgress, 0)
 		for _, engine := range syncEngines {
@@ -228,11 +236,12 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 					etaStr = fmt.Sprintf("%ds", sec)
 				}
 			}
+			blocked, storageError, checkedAt := engine.GetStorageStatus()
 			engineStats = append(engineStats, EngineProgress{
 				ID: engine.GetConfig().ID, File: filepath.Base(file), Percent: percent, Speed: database.FormatBytes(speed) + "/s", Today: database.FormatBytes(stats.Today), Total: database.FormatBytes(stats.Total), IsActive: speed > 0, ETA: etaStr, QueueCount: queuedCount, IsScanning: engine.IsScanning(),
 				AvgSpeed: database.FormatBytes(avgSpeed) + "/s", Elapsed: elapsedStr, SpeedHistory: engine.GetSpeedHistory(), IsPaused: isPaused, LastSync: engine.GetLastSyncTime().Format(time.RFC3339), IsRemoteScan: engine.IsRemoteScan(),
 				IsWaitingApproval: engine.IsWaitingForApproval(),
-				StorageBlocked:    engine.IsStorageBlocked(),
+				StorageBlocked:    blocked, StorageError: storageError, StorageCheckedAt: checkedAt.Format(time.RFC3339),
 			})
 		}
 		state := "ACTIVE"
@@ -282,6 +291,9 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 			"bw_limit_mbps":    bwLimitMbps,
 			"bw_active":        bwActive,
 			"bw_source":        bwSource,
+			"sync_mode":        database.GetSetting("sync_mode", "dry"),
+			"auto_approve":     database.GetSetting("auto_approve", "off"),
+			"sender_override":  healthState.IsOverrideEnabled(),
 		})
 		wsHub.Broadcast("sync_status", map[string]interface{}{"status": progress, "engines": len(syncEngines)})
 	}

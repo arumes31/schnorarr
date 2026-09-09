@@ -59,8 +59,10 @@ type Engine struct {
 	deletionAllowed    bool
 
 	// Retry Delay
-	failedFiles    map[string]time.Time
-	storageBlocked bool
+	failedFiles      map[string]time.Time
+	storageBlocked   bool
+	storageError     string
+	storageCheckedAt time.Time
 }
 
 // NewEngine creates a new sync engine
@@ -268,6 +270,11 @@ func (e *Engine) checkStorage() error {
 	err := e.config.CheckStorage()
 	e.pausedMu.Lock()
 	e.storageBlocked = err != nil
+	e.storageCheckedAt = time.Now()
+	e.storageError = ""
+	if err != nil {
+		e.storageError = err.Error()
+	}
 	e.pausedMu.Unlock()
 	if err != nil {
 		err = fmt.Errorf("%w: %w", storage.ErrUnavailable, err)
@@ -837,6 +844,14 @@ func (e *Engine) IsStorageBlocked() bool {
 	e.pausedMu.RLock()
 	defer e.pausedMu.RUnlock()
 	return e.storageBlocked
+}
+
+// GetStorageStatus returns the last completed check, without probing the shares.
+// A zero timestamp means no check has completed yet.
+func (e *Engine) GetStorageStatus() (blocked bool, message string, checkedAt time.Time) {
+	e.pausedMu.RLock()
+	defer e.pausedMu.RUnlock()
+	return e.storageBlocked, e.storageError, e.storageCheckedAt
 }
 func (e *Engine) SetAlias(alias string) {
 	e.pausedMu.Lock()

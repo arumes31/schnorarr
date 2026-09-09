@@ -15,13 +15,42 @@
 ## 🚀 Features
 
 *   **Real-Time Dashboard:** Live WebSocket-powered updates for transfer speeds, ETA, and file progress.
-*   **Visual Transfer Graphs:** Beautiful Sparkline charts and "Node Map" visualizations.
+*   **Visual Transfer Graphs:** Per-engine speed history and global speed/latency charts.
 *   **Multi-Engine Support:** Monitor and control multiple sync pairs (Sender -> Receiver) simultaneously.
 *   **Smart Conflict Resolution:** Auto-detects and handles file conflicts with "Dry Run" previews.
 *   **Cyberpunk Aesthetics:** Fully themed UI with 5 distinct color palettes (Cyber Green, Plasma Purple, Nuclear Orange, Crimson Red, Midnight Blue).
 *   **Log Terminal:** Integrated web-based terminal for viewing real-time system logs with filtering.
 *   **Discord Notifications:** Get alerted on sync completion or critical errors.
 *   **Built-in Mesh VPN:** Optional Tailscale integration for secure, zero-config cross-network synchronization.
+
+## Dashboard controls and accessibility
+
+The dashboard puts engine status and actions before historical traffic. **Needs
+attention** filters engines blocked by storage or awaiting review. A storage
+failure includes the source/destination error, last check, and shared-token help.
+
+The active mode and deletion/conflict policy appear beside global controls.
+**Change policy** opens the settings section. Enabling automatic synchronization,
+automatic deletion approval, or sender override requires a review of its scope.
+**Bandwidth & quiet hours** configures transfer limits; the live effective limit
+also appears beside Speed. **Appearance** contains themes shared with History.
+
+**Traffic history & charts** contains historical totals, speed/latency charts,
+and largest transfers. **Log tools** contains scrolling, expansion, clear, and
+download controls. **Sync help** explains archive semantics and storage checks.
+
+The connection indicator distinguishes live updates from last-known data during
+reconnection. A failed preview shows an error and retry control; execution stays
+disabled until a current preview loads. Dialogs support keyboard navigation and
+Escape. Global single-letter sync/pause shortcuts have been removed to prevent
+accidental operations. Reduced-motion preferences suppress decorative movement.
+
+Frontend regression checks use Node's built-in test runner:
+
+```sh
+node --test scripts/ui.test.cjs
+go test ./...
+```
 
 ## 🛠️ Tech Stack
 
@@ -268,14 +297,13 @@ graph LR
 
 ## 📊 Dashboard Guide
 
-The Schnorarr dashboard is designed for high-density information display:
+The dashboard prioritizes operational decisions:
 
-*   **Real-Time Status**: View total accumulated traffic and "Traffic Today" at a glance.
-*   **Active Engines**: Each sync engine shows its current speed, percentage progress, ETA, and a 60-second speed sparkline.
-*   **Node Map**: A real-time visualization of file transfer activity across all engines.
-*   **Daily Traffic**: A 7-day bar chart showing data transfer volume trends.
-*   **Top Files**: Rankings of the most frequently synced or largest files.
-*   **Log Terminal**: A live-streaming terminal with ANSI color support and level filtering (INFO, WARN, ERROR).
+*   **Engine status**: Storage-blocked and active engines appear first on load. The attention filter follows live state without moving focused controls.
+*   **Current transfers**: Per-engine progress, speed, elapsed time, and speed history, with global speed and effective bandwidth limits above.
+*   **Engine details**: Per-engine traffic totals, reliability grade, layout rule, and shared-token instructions.
+*   **Traffic history & charts**: Today/all-time totals, speed and receiver-latency charts, and largest transfers in the last 24 hours.
+*   **Live logs**: Search and level filtering, with named utility controls under Log tools.
 
 ## 🎛️ Advanced Configuration
 
@@ -286,7 +314,7 @@ Beyond the basic setup, you can fine-tune Schnorarr using these environment vari
 | `MIN_DISK_SPACE_GB` | (Sender) Stop syncing if source disk space falls below this. | `0` (Disabled) |
 | `MAX_RETRIES` | (Sender) Number of attempts to connect to receiver before failing. | `30` |
 | `CONFIG_DIR` | Path to store logs and database. | `/config` |
-| `BWLIMIT_MBPS` | Initial global bandwidth limit for all transfers in Mbps. Shared across active engines and adjustable at runtime from the dashboard (Traffic Shaping card); the saved dashboard value wins over this env var. | `0` (Unlimited) |
+| `BWLIMIT_MBPS` | Initial global bandwidth limit for all transfers in Mbps. Shared across active engines and adjustable at runtime from Bandwidth & quiet hours; the saved dashboard value wins over this env var. | `0` (Unlimited) |
 | `RSYNC_PASSWORD` | Optional: Password for authenticated rsync transfers. | - |
 | `POLL_INTERVAL` | (Sender) Frequency in seconds to check for file changes. | `60` |
 | `WATCH_INTERVAL` | (Sender) Frequency in seconds for a full safety reconciliation scan. | `43200` (12h) |

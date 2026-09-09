@@ -5,12 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>schnorarr | Sync Dashboard</title>
+    <script src="/static/js/theme.js"></script>
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <link rel="manifest" href="/static/manifest.json">
 </head>
 
-<body>
-    <div id="node-map-bg" style="position: fixed; inset: 0; pointer-events: none; opacity: 0.05; z-index: -1;"></div>
+<body class="dashboard-page">
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <div class="toast-container" id="toast-container"></div>
 
     <!-- Navigation Sidebar -->
@@ -23,11 +24,11 @@
                 <path d="M2 12L12 17L22 12" stroke="var(--accent-secondary)" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round" />
             </svg>
-            <h1>schnorarr</h1>
+            <span class="brand-name">schnorarr</span>
         </div>
 
-        <nav class="nav-items">
-            <a href="#" class="nav-link active">
+        <nav class="nav-items" aria-label="Main navigation">
+            <a href="#" class="nav-link active" aria-current="page">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -57,59 +58,7 @@
             </a>
         </nav>
 
-        <div class="sidebar-footer">
-            <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">Sync
-                Mode</div>
-            <div class="three-state-container">
-                <div id="sync-mode-switch" class="three-state-switch" data-val="{{.SyncMode}}"
-                    onclick="cycleSyncMode()">
-                    <div class="three-state-slider"></div>
-                    <div class="three-state-option opt-dry">Dry</div>
-                    <div class="three-state-option opt-manual">Man</div>
-                    <div class="three-state-option opt-auto">Auto</div>
-                </div>
-            </div>
-
-            <div
-                style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-top: 20px; margin-bottom: 5px;">
-                Safety Controls</div>
-            <div class="mode-toggle-container">
-                <span style="font-size: 11px; font-weight: bold; color: var(--text-muted);">AUTO-APPROVE</span>
-                <label class="switch">
-                    {{$checked := ""}}{{if eq .AutoApproveDeletions "on"}}{{$checked = "checked"}}{{end}}
-                    <input type="checkbox" id="auto-approve-toggle" onchange="updateAutoApprove(this)" {{$checked}}>
-                    <span class="slider"></span>
-                </label>
-            </div>
-
-            <div
-                style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-top: 20px; margin-bottom: 10px;">
-                Conflicts</div>
-            <div class="two-state-switch" id="override-switch"
-                data-val="{{if .SenderOverride}}override{{else}}ask{{end}}" onclick="cycleOverrideMode()">
-                <div class="two-state-slider"></div>
-                <div class="two-state-option opt-ask">Ask</div>
-                <div class="two-state-option opt-override">Override</div>
-            </div>
-
-            <!-- Dashboard Theme (Moved to bottom) -->
-            <div style="margin-top: 25px;">
-                <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">
-                    Interface Theme</div>
-                <div style="display: flex; gap: 12px; justify-content: flex-start; padding-left: 5px;">
-                    <div onclick="setTheme('green')" class="theme-dot" style="background: #00ffad;" title="Cyber Green">
-                    </div>
-                    <div onclick="setTheme('purple')" class="theme-dot" style="background: #a855f7;"
-                        title="Plasma Purple"></div>
-                    <div onclick="setTheme('orange')" class="theme-dot" style="background: #f97316;"
-                        title="Nuclear Orange"></div>
-                    <div onclick="setTheme('red')" class="theme-dot" style="background: #ff3d00;" title="Crimson Red">
-                    </div>
-                    <div onclick="setTheme('blue')" class="theme-dot" style="background: #38bdf8;"
-                        title="Midnight Blue"></div>
-                </div>
-            </div>
-        </div>
+        <a class="nav-link sidebar-settings" href="#settings">Settings &amp; help</a>
     </aside>
 
     <!-- Floating Group Actions Toolbar -->
@@ -118,231 +67,114 @@
             <span id="group-count" class="group-count-badge">0</span>
             <span style="font-size: 13px; font-weight: 600; color: white;">Engines Selected</span>
             <div style="height: 20px; width: 1px; background: rgba(255,255,255,0.1); margin: 0 10px;"></div>
-            <button onclick="executeBulkAction('sync')" class="group-btn btn-sync">⚡ Sync Selected</button>
-            <button onclick="executeBulkAction('pause')" class="group-btn">⏸️ Pause</button>
-            <button onclick="executeBulkAction('resume')" class="group-btn">▶️ Resume</button>
+            <button onclick="executeBulkAction('sync')" class="group-btn btn-sync"><span data-sync-label="selected">Sync selected</span></button>
+            <button onclick="executeBulkAction('pause')" class="group-btn">Pause</button>
+            <button onclick="executeBulkAction('resume')" class="group-btn">Resume</button>
             <button onclick="deselectAll()" class="group-btn btn-outline"
                 style="margin-left: 10px; border: none; opacity: 0.6;">&times; Deselect</button>
         </div>
     </div>
 
     <!-- Main Content -->
-    <main class="main-content">
+    <main class="main-content" id="main-content">
+
         <header class="action-bar">
             <div>
-                <h1 style="font-size: 32px; font-weight: 800; margin: 0;">Sync Center</h1>
-                <p style="color: var(--text-muted); margin: 5px 0 0 0;">
-                    {{$sysClass := "pill-critical"}}
-                    {{if eq .State "ACTIVE"}}{{$sysClass = "pill-active"}}
-                    {{else if eq .State "PAUSED"}}{{$sysClass = "pill-paused"}}
-                    {{else if eq .State "SYNCING"}}{{$sysClass = "pill-syncing"}}{{end}}
-                    System: <span id="main-status-badge" class="status-pill {{$sysClass}}">{{.State}}</span>
-                    <span style="margin: 0 8px; color: var(--border-glass);">|</span>
-                    Receiver: <span id="receiver-badge"
-                        class="status-pill {{if .ReceiverHealthy}}pill-active{{else}}pill-critical{{end}}"
-                        title="Ver: {{.ReceiverVersion}} | Up: {{.ReceiverUptime}}" onclick="showReceiverError()"
-                        style="cursor: pointer;">{{if .ReceiverHealthy}}ONLINE{{else}}OFFLINE{{end}}</span>
-                </p>
-            </div>
-            <div style="display: flex; gap: 12px;">
-                <a href="/sync" class="btn-premium btn-sync-all"><svg width="20" height="20" fill="none"
-                        stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>SYNC ALL</a>
-                <div style="display: flex; gap: 8px;">
-                    <a href="/pause" class="btn-premium btn-outline" title="Pause All">⏸️</a>
-                    <a href="/resume" class="btn-premium btn-outline" title="Resume All">▶️</a>
-                    <a href="/test-notify" class="btn-premium btn-outline" title="Test Notification">🔔</a>
+                <h1>Sync dashboard</h1>
+                <div class="system-summary">
+                    System <span id="main-status-badge" class="status-pill {{if eq .State "ACTIVE"}}pill-active{{else if eq .State "PAUSED"}}pill-paused{{else}}pill-waiting{{end}}">{{.State}}</span>
+                    <button type="button" id="receiver-badge" class="status-pill {{if .ReceiverHealthy}}pill-active{{else}}pill-critical{{end}}"
+                        title="Receiver connection only. Storage readiness is checked separately for each engine. Version: {{.ReceiverVersion}} · Uptime: {{.ReceiverUptime}}"
+                        onclick="showReceiverError()">Receiver {{if .ReceiverHealthy}}online{{else}}offline{{end}}</button>
                 </div>
             </div>
+            <a class="text-link" href="#sync-help">Sync help</a>
         </header>
+        <p class="connection-status"><span id="connection-status" role="status">Connecting…</span><span id="connection-age"> · showing page-load data</span></p>
 
-        <!-- Stats Overview -->
-        <section class="top-stats" style="grid-template-columns: repeat(4, 1fr);">
-            <div class="stat-card">
-                <div class="stat-label">Traffic Today</div>
-                <div style="display: flex; align-items: baseline; gap: 10px;">
-                    <div id="stat-today" class="stat-value">{{.TrafficToday}}</div>
-                    <span id="stat-delta" style="font-size: 10px; font-weight: bold;"
-                        class="{{if .TrafficDeltaPositive}}color-success{{else}}color-error{{end}}">
-                        {{if .TrafficDeltaPositive}}↑{{else}}↓{{end}} {{.TrafficDelta}}%
-                    </span>
-                </div>
-                <div style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">vs Yesterday: <span
-                        id="stat-yesterday-val">{{.TrafficYesterday}}</span></div>
+        <div class="live-metrics" aria-label="Current transfer activity">
+            <div id="speed-card"><span class="metric-label">Speed</span> <strong id="stat-speed">{{.CurrentSpeed}}</strong>
+                {{if .IsSender}}<a href="#traffic-settings" class="text-link">Limit: <span id="live-bw-limit">awaiting live data</span></a>{{end}}
             </div>
-            <div class="stat-card">
-                <div class="stat-label">Total Traffic</div>
-                <div id="stat-total" class="stat-value" style="color: var(--accent-secondary);">{{.TrafficTotal}}</div>
+            <div><span class="metric-label">Remaining</span> <strong id="stat-eta">{{if eq .ETA "Done"}}No active transfer{{else}}{{.ETA}}{{end}}</strong>
+                <span id="stat-clock" class="helper-text"></span></div>
+        </div>
+        <section class="sync-toolbar" aria-label="Global sync controls">
+            <div class="policy-summary">
+                <strong id="current-mode">{{if eq .SyncMode "dry"}}Dry run{{else if eq .SyncMode "manual"}}Manual{{else}}Automatic{{end}}</strong>
+                <span id="current-policy">{{if eq .SyncMode "dry"}}No files changed{{else}}Review the active deletion and conflict policy{{end}}</span>
+                <a href="#sync-policy" class="text-link">Change policy</a>
             </div>
-            <div class="stat-card" id="speed-card">
-                <div class="stat-label">
-                    <span>Speed</span>
-                </div>
-                <div id="stat-speed" class="stat-value" style="color: #FF00E5;">{{.CurrentSpeed}}</div>
-                <div class="sparkline-container latency-background" id="speed-sparkline" data-history="">
-                    <svg width="100%" height="100%" preserveAspectRatio="none">
-                        <path d="" fill="none" stroke="#FF00E5" stroke-width="2"></path>
-                    </svg>
-                </div>
-                <div class="sparkline-container latency-background" id="latency-sparkline" data-history="">
-                    <span id="latency-val"
-                        style="position: absolute; right: 8px; bottom: 8px; font-size: 14px; font-weight: 900; color: var(--accent-warning); pointer-events: none; z-index: 2;"></span>
-                    <svg width="100%" height="100%" preserveAspectRatio="none">
-                        <path d="" fill="none" stroke="var(--accent-warning)" stroke-width="2"></path>
-                    </svg>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Estimated Time</div>
-                <div id="stat-eta" class="stat-value" style="color: var(--accent-warning);">{{.ETA}}</div>
-                <div id="stat-clock" style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">Finishes at:
-                    --:--</div>
+            <div class="global-actions">
+                <a href="/sync" class="btn-premium btn-sync-all" data-sync-label="all">{{if eq .SyncMode "dry"}}Dry run all{{else if eq .SyncMode "manual"}}Scan all{{else}}Sync all{{end}}</a>
+                <a href="/pause" class="btn-premium btn-outline">Pause all</a>
+                <a href="/resume" class="btn-premium btn-outline">Resume all</a>
             </div>
         </section>
 
-        <!-- Engine Grid -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <div style="display: flex; align-items: center; gap: 15px;">
-                <label class="checkbox-container" style="margin: 0; padding: 0; width: 24px; height: 24px;">
-                    <input type="checkbox" id="select-all-engines" onchange="toggleAllEngines(this)">
+        <div class="engine-section-heading">
+            <div class="engine-heading-label">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="select-all-engines" aria-label="Select all engines" onchange="toggleAllEngines(this)">
                     <span class="checkmark"></span>
                 </label>
-                <h2
-                    style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 0;">
-                    Active Sync Engines</h2>
+                <h2>Engines</h2>
+                <button type="button" id="attention-filter" class="text-button" aria-pressed="false" onclick="toggleAttentionFilter()">Needs attention</button>
             </div>
-            <input type="text" id="engine-search" placeholder="Search engines..." onkeyup="filterEngines()"
-                style="background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: 8px; padding: 6px 12px; color: white; font-size: 12px; width: 200px; outline: none;">
+            <input type="search" id="engine-search" aria-label="Search engines" placeholder="Search engines…" oninput="filterEngines()">
         </div>
-        <section class="engine-grid">
+        <p id="engine-empty" class="empty-state" hidden>No engines match. <button type="button" class="text-button" onclick="clearEngineFilters()">Clear filters</button></p>
+        <section class="engine-grid" aria-label="Sync engines">
             {{range .Engines}}
-            <div id="engine-card-{{.ID}}" class="engine-card {{if (gt .CurrentPercent 0.0)}}syncing-glow{{end}}">
-                <label class="engine-checkbox">
-                    <input type="checkbox" class="engine-select" value="{{.ID}}" onchange="onEngineSelect()">
-                    <span class="checkmark"></span>
-                </label>
-                <div class="engine-header">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div class="engine-title" id="alias-{{.ID}}" onclick="editAlias('{{.ID}}')"
-                            title="Click to rename" style="cursor: pointer;">{{if .Alias}}{{.Alias}}{{else}}Engine
-                            #{{.ID}}{{end}}</div>
-                        {{if .IsRemoteScan}}<div class="status-pill"
-                            style="background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #a855f7; font-weight: 900; font-size: 10px; padding: 2px 6px;"
-                            title="Using Remote Manifest API">REMOTE</div>{{end}}
-                        <div class="status-pill health-pill" style="--health-color: {{.HealthColor}};"
-                            title="Reliability Score: {{.HealthGrade}}">{{.HealthGrade}}</div>
+            <article id="engine-card-{{.ID}}" class="engine-card" data-state="{{.State}}" data-storage-blocked="{{.StorageBlocked}}">
+                <header class="engine-header">
+                    <div class="engine-identity">
+                        <label class="engine-checkbox">
+                            <input type="checkbox" class="engine-select" aria-label="Select engine {{.ID}} {{.Alias}}" value="{{.ID}}" onchange="onEngineSelect()">
+                            <span class="checkmark"></span>
+                        </label>
+                        <h3><button type="button" class="engine-title" id="alias-{{.ID}}" aria-label="Rename {{if .Alias}}{{.Alias}}{{else}}engine {{.ID}}{{end}}, engine {{.ID}}" onclick="editAlias('{{.ID}}')">{{if .Alias}}{{.Alias}}{{else}}Engine {{.ID}}{{end}}</button></h3>
                     </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <span id="engine-queue-{{.ID}}" class="status-pill pill-rule"
-                            style="display: none; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6;"></span>
-
-                        {{$ruleTitle := "Standard"}}{{$rule := .Rule}}
-                        {{if eq $rule "flat"}}{{$ruleTitle = "Syncs into root"}}
-                        {{else if eq $rule "series"}}{{$ruleTitle = "Hierarchy"}}{{end}}
-                        {{if .Rule}}<span class="status-pill pill-rule"
-                            title="Rule: {{$ruleTitle}}">{{.Rule}}</span>{{end}}
-
-                        {{$engClass := "pill-critical"}}
-                        {{if .WaitingForApproval}}{{$engClass = "pill-waiting"}}
-                        {{else if (gt .CurrentPercent 0.0)}}{{$engClass = "pill-syncing"}}
-                        {{else if eq .State "ACTIVE"}}{{$engClass = "pill-active"}}
-                        {{else if eq .State "STORAGE WAIT"}}{{$engClass = "pill-waiting"}}
-                        {{else if eq .State "PAUSED"}}{{$engClass = "pill-paused"}}{{end}}
-                        <span id="engine-status-{{.ID}}" class="status-pill {{$engClass}}">
-                            {{if (gt .CurrentPercent 0.0)}}SYNCING{{else}}{{.State}}{{end}}
-                        </span>
-                    </div>
+                    <span id="engine-status-{{.ID}}" class="status-pill {{if .StorageBlocked}}pill-waiting{{else if .WaitingForApproval}}pill-waiting{{else if .IsPaused}}pill-paused{{else}}pill-active{{end}}">{{.State}}</span>
+                </header>
+                <div id="storage-wait-{{.ID}}" class="storage-wait" {{if not .StorageBlocked}}hidden{{end}}>
+                    <strong>Waiting for storage</strong>
+                    <p id="storage-reason-{{.ID}}">{{if .StorageError}}{{.StorageError}}{{else}}Waiting for the first storage check.{{end}}</p>
+                    <span id="storage-checked-{{.ID}}" class="helper-text">{{if or (not .StorageCheckedAt) (eq .StorageCheckedAt "0001-01-01T00:00:00Z")}}Storage not checked yet{{else}}Last check: <time class="relative-time" data-time="{{.StorageCheckedAt}}">{{.StorageCheckedAt}}</time>{{end}}</span>
+                    <p>Check that both shares are mounted and their token files match. New work waits for storage recovery.</p>
+                    <button type="button" class="text-button" onclick="showSharedToken('{{.ID}}', this)" aria-haspopup="dialog">Check shared token</button>
                 </div>
                 <div class="path-box">
-                    <div class="path-label" style="display: flex; justify-content: space-between; align-items: center;">
-                        <span>Source</span>
-                        <div id="engine-radar-{{.ID}}"
-                            style="display: none; align-items: center; gap: 5px; color: var(--accent-primary);">
-                            <div class="radar-circle"></div><span
-                                style="font-size: 8px; font-weight: 900;">INDEXING</span>
-                        </div>
-                        <button class="copy-btn" onclick="copyToClipboard('{{.Source}}', this)"
-                            title="Copy Path">📋</button>
-                    </div>
-                    <div class="path-value">{{.Source}}</div>
-                    <div class="data-flow-line {{if (gt .CurrentPercent 0.0)}}syncing{{end}}" id="flow-{{.ID}}">
-                        <div class="data-flow-pulse"></div>
-                    </div>
-                    <div class="path-label"
-                        style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>Target</span>
-                        <button class="copy-btn" onclick="copyToClipboard('{{.Target}}', this)"
-                            title="Copy Path">📋</button>
-                    </div>
-                    <div class="path-value">{{.Target}}</div>
+                    <div class="engine-path"><span class="path-label">Source</span><span class="path-value">{{.Source}}</span><button type="button" class="copy-btn" onclick="copyToClipboard('{{.Source}}', this)" aria-label="Copy source path for {{.Alias}}">Copy</button></div>
+                    <div class="engine-path"><span class="path-label">Destination</span><span class="path-value">{{.Target}}</span><button type="button" class="copy-btn" onclick="copyToClipboard('{{.Target}}', this)" aria-label="Copy destination path for {{.Alias}}">Copy</button></div>
                 </div>
-                <div id="engine-progress-container-{{.ID}}"
-                    class="{{if (gt .CurrentPercent 0.0)}}d-block{{else}}d-none{{end}}" style="margin-top: 5px;">
-                    <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px;">
-                        <span id="engine-current-file-{{.ID}}"
-                            style="color: var(--accent-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">{{.CurrentFile}}</span>
-                        <span id="engine-current-speed-{{.ID}}"
-                            style="color: var(--text-muted);">{{.CurrentSpeed}}</span>
-                    </div>
-                    <div
-                        style="width: 100%; height: 6px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; border: 1px solid var(--border-glass); margin-bottom: 8px;">
-                        <div id="engine-progress-bar-{{.ID}}" style="--progress: {{.CurrentPercent}}%;"
-                            class="progress-bar-fill">
-                        </div>
-                    </div>
-                    <div
-                        style="display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); margin-bottom: 5px;">
-                        <span id="engine-elapsed-{{.ID}}">Elapsed: 0s</span>
-                        <span id="engine-avg-{{.ID}}">Avg: 0 B/s</span>
-                    </div>
-                    <div class="sparkline-container" id="sparkline-{{.ID}}" data-history="{{.SpeedHistory}}"><svg
-                            width="100%" height="100%" preserveAspectRatio="none">
-                            <path d="" fill="none" stroke="var(--accent-primary)" stroke-width="1.5" opacity="0.6">
-                            </path>
-                        </svg></div>
+                <div id="engine-progress-container-{{.ID}}" {{if not (gt .CurrentPercent 0.0)}}hidden{{end}}>
+                    <div class="transfer-file"><span id="engine-current-file-{{.ID}}">{{.CurrentFile}}</span><span id="engine-current-speed-{{.ID}}">{{.CurrentSpeed}}</span></div>
+                    <div class="progress-track"><div id="engine-progress-bar-{{.ID}}" class="progress-bar-fill" style="width: {{.CurrentPercent}}%;"></div></div>
+                    <div class="engine-metadata"><span id="engine-elapsed-{{.ID}}">Elapsed: 0s</span><span id="engine-avg-{{.ID}}">Average: 0 B/s</span></div>
+                    <div class="sparkline-container" id="sparkline-{{.ID}}" data-history="{{.SpeedHistory}}"><svg width="100%" height="100%" preserveAspectRatio="none" aria-hidden="true"><path d="" fill="none" stroke="var(--accent-primary)" stroke-width="1.5"></path></svg></div>
                 </div>
-                {{if .WaitingForApproval}}<div class="warning-box"><span>⚠️</span><span><b>Safety Lock:</b>
-                        {{.PendingDeletions}} changes pending.</span></div>{{end}}
-                <div style="display: flex; gap: 10px; margin-top: 12px; margin-bottom: 12px;">
-                    <div
-                        style="flex: 1; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
-                        <div
-                            style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">
-                            Today</div>
-                        <div id="engine-today-{{.ID}}"
-                            style="font-size: 13px; font-weight: bold; color: var(--text-main);">{{.TrafficToday}}</div>
-                    </div>
-                    <div
-                        style="flex: 1; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
-                        <div
-                            style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px;">
-                            Total</div>
-                        <div id="engine-total-{{.ID}}"
-                            style="font-size: 13px; font-weight: bold; color: var(--accent-secondary);">
-                            {{.TrafficTotal}}</div>
-                    </div>
-                </div>
-                <div style="font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between;">
-                    <span>Last Sync:</span><span id="engine-lastsync-{{.ID}}" class="relative-time"
-                        data-time="{{.LastSync}}" style="color: var(--text-main);">{{.LastSync}}</span>
+                <div class="engine-metadata">
+                    <span>Last sync <time id="engine-lastsync-{{.ID}}" class="relative-time" data-time="{{.LastSync}}">{{.LastSync}}</time></span>
+                    <span id="engine-radar-{{.ID}}" hidden>Indexing</span>
+                    <span id="engine-queue-{{.ID}}" hidden></span>
                 </div>
                 <div class="engine-controls">
-                    {{if .WaitingForApproval}}<button onclick="showPreview('{{.ID}}', 'approve')"
-                        class="ctrl-btn ctrl-btn-approve">✅ Review & Approve Changes</button>
-                    {{else}}<button onclick="engineAction('{{.ID}}', 'sync')" class="ctrl-btn ctrl-btn-sync">⚡
-                        Sync</button><button onclick="showPreview('{{.ID}}')" class="ctrl-btn ctrl-btn-preview">🔍
-                        Preview</button><button id="engine-btn-toggle-{{.ID}}"
-                        onclick="engineAction('{{.ID}}', '{{if .IsPaused}}resume{{else}}pause{{end}}')"
-                        class="ctrl-btn">{{if .IsPaused}}▶️ Resume{{else}}⏸️ Pause{{end}}</button>{{end}}
+                    <button type="button" id="engine-preview-{{.ID}}" onclick="showPreview('{{.ID}}')" class="ctrl-btn ctrl-btn-preview">{{if .WaitingForApproval}}Review changes{{else}}Preview{{end}}</button>
+                    <button type="button" onclick="engineAction('{{.ID}}', 'sync')" class="ctrl-btn" data-sync-label="engine">{{if eq $.SyncMode "dry"}}Dry run{{else if eq $.SyncMode "manual"}}Scan{{else}}Sync{{end}}</button>
+                    <button type="button" id="engine-btn-toggle-{{.ID}}" onclick="engineAction('{{.ID}}', '{{if .IsPaused}}resume{{else}}pause{{end}}')" class="ctrl-btn">{{if .IsPaused}}Resume{{else}}Pause{{end}}</button>
                 </div>
-                <button type="button" class="ctrl-btn shared-token-button" onclick="showSharedToken('{{.ID}}', this)"
-                    aria-haspopup="dialog" aria-controls="shared-token-modal">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 3-3m-6 0 3-3"/></svg>
-                    Shared token
-                </button>
-            </div>
+                <details class="engine-details">
+                    <summary>Engine details &amp; shared token</summary>
+                    <div class="engine-metadata"><span>Today <strong id="engine-today-{{.ID}}">{{.TrafficToday}}</strong></span><span>Total <strong id="engine-total-{{.ID}}">{{.TrafficTotal}}</strong></span></div>
+                    <p>Reliability grade: {{.HealthGrade}} · <a class="text-link" href="#sync-help">How grades work</a></p>
+                    <p>Layout: {{if eq .Rule "series"}}Preserve folder hierarchy{{else if eq .Rule "flat"}}Sync into destination root{{else}}{{if .Rule}}{{.Rule}}{{else}}Standard{{end}}{{end}}</p>
+                    <p id="engine-remote-{{.ID}}" {{if not .IsRemoteScan}}hidden{{end}}>Scanning through the receiver manifest API</p>
+                    <button type="button" class="ctrl-btn shared-token-button" onclick="showSharedToken('{{.ID}}', this)" aria-haspopup="dialog" aria-controls="shared-token-modal">Shared token</button>
+                </details>
+            </article>
+            {{else}}
+            <p class="empty-state">No engines configured. Add a source and destination sync pair in your deployment configuration, then restart Schnorarr.</p>
             {{end}}
         </section>
 
@@ -351,101 +183,88 @@
             <section class="activity-card recent-activity-panel">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2 style="margin: 0; font-size: 18px;">Recent Activity</h2><a href="/history"
-                        style="color: var(--accent-secondary); font-size: 12px; text-decoration: none; font-weight: bold;">View
+                        style="color: var(--accent-secondary); font-size: 13px; text-decoration: none; font-weight: bold;">View
                         All →</a>
                 </div>
                 <ul id="history-list" class="activity-list">
                     {{range .History}}<li class="activity-item"><span
                             class="action-badge badge-{{lower .Action}}">{{.Action}}</span>
-                        <div style="flex: 1; white-space: nowrap;">{{.Path}}
-                            <span style="color: var(--text-muted); font-size: 11px;">({{.Size}})</span>
-                        </div><span
-                            style="font-family: monospace; font-size: 11px; color: var(--text-muted);">{{.Time}}</span>
+                        <div class="activity-description">{{.Path}}
+                            <span style="color: var(--text-muted); font-size: 13px;">({{.Size}})</span>
+                        </div><span class="activity-time">{{.Time}}</span>
                     </li>
                     {{else}}<li style="color: var(--text-muted); text-align: center; padding: 20px;">No recent activity.
                     </li>{{end}}
                 </ul>
             </section>
             <section id="logs" class="terminal-window">
+
                 <header class="terminal-header">
-                    <div class="dot dot-red"></div>
-                    <div class="dot dot-yellow"></div>
-                    <div class="dot dot-green"></div>
-                    <div class="live-indicator">
-                        <div class="live-dot"></div>LIVE
+                    <h2>Live logs <span id="log-connection-status" class="helper-text">STALE</span></h2>
+                    <div class="log-filters">
+                        <label>Level<select id="log-level-select" onchange="setLogLevel(this.value)"><option value="all">All levels</option><option value="info">Info</option><option value="warn">Warnings</option><option value="error">Errors</option></select></label>
+                        <label>Search<input type="search" id="log-filter" class="log-search" aria-label="Search logs" placeholder="Filter logs…" oninput="filterLogs()"></label>
                     </div>
-                    <div style="display: flex; gap: 5px; margin-left: 10px;">
-                        <button onclick="setLogLevel('all')" class="copy-btn"
-                            style="font-size: 8px; padding: 2px 5px;">ALL</button>
-                        <button onclick="setLogLevel('info')" class="copy-btn"
-                            style="font-size: 8px; padding: 2px 5px; color: var(--accent-primary);">INFO</button>
-                        <button onclick="setLogLevel('warn')" class="copy-btn"
-                            style="font-size: 8px; padding: 2px 5px; color: var(--accent-warning);">WARN</button>
-                        <button onclick="setLogLevel('error')" class="copy-btn"
-                            style="font-size: 8px; padding: 2px 5px; color: var(--accent-error);">ERR</button>
-                    </div>
-                    <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
-                        <input type="text" id="log-filter" class="log-search" placeholder="Filter logs..."
-                            onkeyup="filterLogs()" style="margin-left: 0;">
-                        <button id="log-scroll-toggle" onclick="toggleLogScroll()" class="copy-btn" title="Lock Scroll"
-                            style="opacity: 0.8;">🔒</button>
-                        <button onclick="clearLogs()" class="copy-btn" title="Clear Terminal"
-                            style="opacity: 0.8;">🗑️</button>
-                        <button onclick="toggleTerminalFullscreen()" class="copy-btn" title="Toggle Fullscreen"
-                            style="opacity: 0.8;">⛶</button>
-                        <button onclick="downloadLogs()" class="copy-btn" title="Download Logs"
-                            style="opacity: 0.8;">💾</button>
-                    </div>
+                    <details class="log-tools"><summary>Log tools</summary><div>
+                        <button type="button" id="log-scroll-toggle" onclick="toggleLogScroll()" class="ctrl-btn" aria-pressed="false">Pause scrolling</button>
+                        <button type="button" onclick="clearLogs()" class="ctrl-btn">Clear displayed logs</button>
+                        <button type="button" id="log-fullscreen-toggle" onclick="toggleTerminalFullscreen()" class="ctrl-btn" aria-pressed="false">Expand logs</button>
+                        <button type="button" onclick="downloadLogs()" class="ctrl-btn">Download logs</button>
+                    </div></details>
                 </header>
-                <div class="terminal-body" id="log-container">
+                <div class="terminal-body" id="log-container" tabindex="0" aria-label="System logs">
                     <div style="color: var(--text-muted);">[SYSTEM] Awaiting logs...</div>
                 </div>
             </section>
         </div>
 
-        <h2
-            style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 50px 0 20px 0;">
-            Performance Analytics</h2>
-        <div style="display: grid; grid-template-columns: 1fr; gap: 30px; margin-bottom: 50px;">
-            <div class="activity-card">
-                <h3 style="margin-top: 0; font-size: 16px;">🏆 Largest Transfers (24h)</h3>
-                <ul id="top-files-list" class="activity-list">
-                    <li style="color: var(--text-muted); text-align: center; padding: 10px;">Monitoring for large
-                        files...</li>
-                </ul>
-            </div>
-        </div>
 
-        <h2
-            style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin: 0 0 20px 0;">
-            Settings</h2>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 50px;">
-            <div class="activity-card">
-                <h3 style="margin-top: 0; font-size: 16px;">📧 Notifications</h3>
-                <form action="/settings/notifications" method="POST"
-                    style="display: flex; flex-direction: column; gap: 15px;">
-                    <div>
-                        <label style="font-size: 12px; color: var(--text-muted);">Discord Webhook URL</label>
-                        <div style="position: relative; display: flex; align-items: center; margin-top: 5px;">
-                            <input type="password" id="webhook-input" name="webhook_url" placeholder="https://..."
-                                style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; padding-right: 40px;">
-                            <button type="button" onclick="toggleWebhookVisibility()" class="copy-btn"
-                                style="position: absolute; right: 10px; opacity: 0.6; padding: 5px;">👁️</button>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 10px;"><button type="submit" class="btn-premium btn-outline"
-                            style="flex: 1; justify-content: center;">Save</button><a href="/test-notify"
-                            class="btn-premium btn-outline" style="padding: 10px;" title="Test Notification">🔔</a>
-                    </div>
-                </form>
+        <details class="traffic-history">
+            <summary>Traffic history &amp; charts</summary>
+            <dl class="traffic-totals">
+                <div><dt>Today</dt><dd id="stat-today">{{.TrafficToday}}</dd><span id="stat-delta">{{if .TrafficDeltaPositive}}↑{{else}}↓{{end}} {{.TrafficDelta}}% vs yesterday (<span id="stat-yesterday-val">{{.TrafficYesterday}}</span>)</span></div>
+                <div><dt>All time</dt><dd id="stat-total">{{.TrafficTotal}}</dd></div>
+            </dl>
+            <div class="telemetry-charts">
+                <div><h3>Transfer speed</h3><div class="sparkline-container" id="speed-sparkline" data-history=""><svg width="100%" height="100%" preserveAspectRatio="none" aria-hidden="true"><path d="" fill="none" stroke="var(--accent-primary)" stroke-width="2"></path></svg></div></div>
+                <div><h3>Receiver latency <span id="latency-val" class="helper-text">Awaiting update</span></h3><div class="sparkline-container" id="latency-sparkline" data-history=""><svg width="100%" height="100%" preserveAspectRatio="none" aria-hidden="true"><path d="" fill="none" stroke="var(--accent-warning)" stroke-width="2"></path></svg></div></div>
             </div>
+            <h3>Largest transfers in the last 24 hours</h3>
+            <ul id="top-files-list" class="activity-list"><li>No completed transfers in the last 24 hours.</li></ul>
+        </details>
+        <h2 id="settings" class="section-title">Settings</h2>
+        <section id="sync-policy" class="activity-card policy-settings" aria-labelledby="sync-policy-title">
+            <h3 id="sync-policy-title">Sync policy</h3>
+            <p class="helper-text">Applies to all engines. Changes save immediately after any required review.</p>
+            <div class="sync-preferences">
+                <div><label for="sync-mode-switch">Sync mode</label>
+                    <select id="sync-mode-switch" data-val="{{.SyncMode}}" onchange="cycleSyncMode()" aria-describedby="sync-mode-help">
+                        <option value="dry" {{if eq .SyncMode "dry"}}selected{{end}}>Dry run</option>
+                        <option value="manual" {{if eq .SyncMode "manual"}}selected{{end}}>Manual</option>
+                        <option value="auto" {{if eq .SyncMode "auto"}}selected{{end}}>Automatic</option>
+                    </select>
+                    <p id="sync-mode-help" class="helper-text">Dry run checks changes without applying them. Manual waits for review. Automatic applies eligible changes as they are detected.</p>
+                </div>
+                <div><label class="setting-check" for="auto-approve-toggle"><input type="checkbox" id="auto-approve-toggle" data-val="{{.AutoApproveDeletions}}" onchange="updateAutoApprove(this)" {{if eq .AutoApproveDeletions "on"}}checked{{end}} aria-describedby="deletion-help">Auto-approve deletions</label>
+                    <p id="deletion-help" class="helper-text">Allows eligible file deletions without a separate deletion approval. Receiver-only top-level directories are preserved; files missing from shared directories may be deleted.</p>
+                </div>
+                <div><label for="override-switch">Conflicting files</label>
+                    <select id="override-switch" data-val="{{if .SenderOverride}}override{{else}}ask{{end}}" onchange="cycleOverrideMode()" aria-describedby="override-help">
+                        <option value="ask" {{if not .SenderOverride}}selected{{end}}>Ask before overriding</option>
+                        <option value="override" {{if .SenderOverride}}selected{{end}}>Override with sender</option>
+                    </select>
+                    <p id="override-help" class="helper-text">Sender override lets the source replace conflicting destination files. Dry run still makes no file changes.</p>
+                </div>
+            </div>
+        </section>
+        <div class="settings-grid">
             {{if .IsSender}}
-            <div class="activity-card">
-                <h3 style="margin-top: 0; font-size: 16px;">🚦 Traffic Shaping</h3>
+            <div class="activity-card" id="traffic-settings">
+                <h3 style="margin-top: 0; font-size: 16px;">Bandwidth &amp; quiet hours</h3>
                 <form onsubmit="applyBwlimit(event)"
                     style="display: flex; flex-direction: column; gap: 15px;">
                     <div>
-                        <label style="font-size: 12px; color: var(--text-muted);">Global Bandwidth Limit (Mbps, 0 =
+                        <label for="bwlimit-input" style="font-size: 13px; color: var(--text-muted);">Global Bandwidth Limit (Mbps, 0 =
                             unlimited)</label>
                         <input type="number" id="bwlimit-input" min="0" step="1" value="{{.BwlimitMbps}}"
                             style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
@@ -454,43 +273,43 @@
                         style="width: 100%; justify-content: center;">Apply Limit</button>
                 </form>
                 <div
-                    style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-glass); border-radius: 8px; font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
+                    style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-glass); border-radius: 8px; font-size: 13px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
                     <span>Effective: <span id="bw-current"
-                            style="color: var(--accent-primary); font-weight: bold;">{{if .BwlimitMbps}}{{.BwlimitMbps}} Mbps{{else}}Unlimited{{end}}</span>
+                            style="color: var(--accent-primary); font-weight: bold;">Awaiting live data</span>
                         · Sharing: <span id="bw-active" style="color: var(--accent-secondary); font-weight: bold;">0</span>
                         transfer(s)</span>
-                    <span class="status-pill pill-rule" id="bw-source" title="Source of the current limit">manual</span>
+                    <span class="status-pill pill-rule" id="bw-source" title="Source of the current limit">Awaiting update</span>
                 </div>
                 <div style="border-top: 1px solid var(--border-glass); margin: 20px 0 15px 0;"></div>
                 <form onsubmit="saveSchedule(event)"
                     style="display: flex; flex-direction: column; gap: 15px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <label style="font-size: 12px; color: var(--text-muted);">Quiet Hours Schedule</label>
+                        <label for="sched-enabled" style="font-size: 13px; color: var(--text-muted);">Quiet Hours Schedule</label>
                         <label class="switch">
-                            <input type="checkbox" id="sched-enabled" {{if .SchedulerEnabled}}checked{{end}}>
+                            <input type="checkbox" id="sched-enabled" aria-label="Enable quiet hours schedule" {{if .SchedulerEnabled}}checked{{end}}>
                             <span class="slider"></span>
                         </label>
                     </div>
                     <div style="display: flex; gap: 10px;">
-                        <div style="flex: 1;">
-                            <label style="font-size: 11px; color: var(--text-muted);">Start (HH:MM)</label>
+                        <div style="flex: 1; min-width: 0;">
+                            <label for="sched-quiet-start" style="font-size: 13px; color: var(--text-muted);">Start (HH:MM)</label>
                             <input type="time" id="sched-quiet-start" value="{{.QuietStart}}" required
                                 style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
                         </div>
-                        <div style="flex: 1;">
-                            <label style="font-size: 11px; color: var(--text-muted);">End (HH:MM)</label>
+                        <div style="flex: 1; min-width: 0;">
+                            <label for="sched-quiet-end" style="font-size: 13px; color: var(--text-muted);">End (HH:MM)</label>
                             <input type="time" id="sched-quiet-end" value="{{.QuietEnd}}" required
                                 style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px;">
-                        <div style="flex: 1;">
-                            <label style="font-size: 11px; color: var(--text-muted);">Quiet Limit (Mbps)</label>
+                        <div style="flex: 1; min-width: 0;">
+                            <label for="sched-quiet-limit" style="font-size: 13px; color: var(--text-muted);">Quiet Limit (Mbps)</label>
                             <input type="number" id="sched-quiet-limit" min="0" step="1" value="{{.QuietLimit}}"
                                 style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
                         </div>
-                        <div style="flex: 1;">
-                            <label style="font-size: 11px; color: var(--text-muted);">Normal Limit (Mbps)</label>
+                        <div style="flex: 1; min-width: 0;">
+                            <label for="sched-normal-limit" style="font-size: 13px; color: var(--text-muted);">Normal Limit (Mbps)</label>
                             <input type="number" id="sched-normal-limit" min="0" step="1" value="{{.NormalLimit}}"
                                 style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; margin-top: 5px;">
                         </div>
@@ -500,49 +319,70 @@
                 </form>
             </div>
             {{end}}
+            <div class="activity-card">
+                <h3 style="margin-top: 0; font-size: 16px;">Notifications</h3>
+                <form action="/settings/notifications" method="POST"
+                    style="display: flex; flex-direction: column; gap: 15px;">
+                    <div>
+                        <label for="webhook-input" style="font-size: 13px; color: var(--text-muted);">Discord Webhook URL</label>
+                        <div style="position: relative; display: flex; align-items: center; margin-top: 5px;">
+                            <input type="password" id="webhook-input" name="webhook_url" placeholder="https://..."
+                                style="width: 100%; background: var(--bg-deep); border: 1px solid var(--border-glass); padding: 10px; border-radius: 8px; color: white; padding-right: 60px;">
+                            <button type="button" id="webhook-visibility" onclick="toggleWebhookVisibility()" aria-label="Show webhook URL" class="copy-btn"
+                                style="position: absolute; right: 4px;">👁️</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px;"><button type="submit" class="btn-premium btn-outline"
+                            style="flex: 1; justify-content: center;">Save</button><a href="/test-notify"
+                            class="btn-premium btn-outline">Test notification</a>
+                    </div>
+                </form>
+            </div>
+
         </div>
+
+        <section class="settings-grid secondary-settings">
+            <div class="activity-card"><h3>Appearance</h3><label for="theme-select">Interface theme</label>
+                <select id="theme-select" onchange="setTheme(this.value)"><option value="green">Cyber Green</option><option value="purple">Plasma Purple</option><option value="orange">Nuclear Orange</option><option value="red">Crimson Red</option><option value="blue">Midnight Blue</option></select>
+            </div>
+            <div class="activity-card" id="sync-help"><h3>Sync help</h3>
+                <p>Preview an engine to inspect planned changes before applying them. Dry run does not change files; manual mode waits for review.</p>
+                <p>Storage checks guard new work. An online receiver can still have an unavailable share. Open the affected engine’s shared token instructions to check the marker files. Checks do not guarantee an in-progress transfer is protected from a later outage.</p>
+                <p>Receiver-only top-level directories are preserved, and sync does not delete directories. Eligible files within directories present on both servers may be deleted according to your approval policy.</p>
+                <p>Reliability grades reflect recorded engine successes and errors; they do not certify storage readiness or protect files.</p>
+            </div>
+        </section>
     </main>
+    <dialog id="policy-confirm-modal" class="app-dialog error-dialog" aria-labelledby="policy-confirm-title" aria-describedby="policy-confirm-message">
+        <h2 id="policy-confirm-title">Review sync policy</h2><p id="policy-confirm-message"></p>
+        <form method="dialog" class="dialog-actions"><button class="btn-premium btn-outline" value="cancel" autofocus>Keep current policy</button><button id="policy-confirm-action" class="btn-premium btn-sync-all" value="confirm">Apply policy</button></form>
+    </dialog>
 
-    <div id="modal-container" style="display: none;">
-        <div class="modal-overlay">
-            <div class="modal-content">
-                <div
-                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 1px solid var(--border-glass); padding-bottom: 15px;">
-                    <h2 style="margin: 0; color: var(--accent-secondary);">Sync Preview: <span id="preview-id"></span>
-                    </h2><button onclick="closeModal()"
-                        style="background: transparent; border: none; color: white; font-size: 24px; cursor: pointer;">&times;</button>
-                </div>
-                <div id="preview-loading" style="text-align:center; padding: 40px; color: var(--text-muted);">
-                    <div class="sync-pulse" style="font-size: 32px; margin-bottom: 15px;">🔄</div>Analyzing...
-                </div>
-                <div id="preview-body" style="display:none;">
-                    <div id="preview-stats"
-                        style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:25px;">
-                    </div>
-                    <div id="preview-details"
-                        style="max-height: 400px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 20px; border: 1px solid var(--border-glass);">
-                    </div>
-                </div>
-                <div style="margin-top:30px; display: flex; justify-content: flex-end; gap: 12px;"><button
-                        class="btn-premium btn-outline" onclick="closeModal()">Dismiss</button><button
-                        id="preview-confirm-btn" class="btn-premium btn-sync-all"
-                        onclick="confirmSyncFromPreview()">Execute Now ⚡</button></div>
-            </div>
+    <dialog id="modal-container" class="app-dialog" aria-labelledby="preview-title">
+        <header class="dialog-heading">
+            <h2 id="preview-title">Sync preview: <span id="preview-id"></span></h2>
+            <button type="button" class="copy-btn" onclick="closeModal()" aria-label="Close sync preview" autofocus>Close</button>
+        </header>
+        <div id="preview-loading" role="status">Analyzing changes…</div>
+        <div id="preview-error" hidden>
+            <p id="preview-error-message" role="alert"></p>
+            <button type="button" class="ctrl-btn" onclick="showPreview(currentPreviewId)">Try again</button>
         </div>
-    </div>
+        <div id="preview-body" style="display:none;">
+            <div id="preview-stats" class="preview-stats"></div>
+            <div id="preview-details" class="preview-details" tabindex="0" aria-label="Planned changes"></div>
+        </div>
+        <footer class="dialog-actions">
+            <button type="button" class="btn-premium btn-outline" onclick="closeModal()">Dismiss</button>
+            <button type="button" id="preview-confirm-btn" class="btn-premium btn-sync-all" onclick="confirmSyncFromPreview()" disabled>Execute selected changes</button>
+        </footer>
+    </dialog>
 
-    <div id="error-modal" style="display: none;">
-        <div class="modal-overlay">
-            <div class="modal-content" style="max-width: 500px;">
-                <h2 id="error-title" style="color: var(--accent-error);">System Error</h2>
-                <div id="error-msg"
-                    style="padding: 20px; background: rgba(0,0,0,0.3); border-radius: 12px; font-family: monospace; color: white;">
-                </div>
-                <div style="margin-top: 20px; text-align: right;"><button class="btn-premium btn-outline"
-                        onclick="closeErrorModal()">Close</button></div>
-            </div>
-        </div>
-    </div>
+    <dialog id="error-modal" class="app-dialog error-dialog" aria-labelledby="error-title" aria-describedby="error-msg">
+        <h2 id="error-title">System error</h2>
+        <p id="error-msg" class="error-message"></p>
+        <form method="dialog" class="dialog-actions"><button class="btn-premium btn-outline" autofocus>Close</button></form>
+    </dialog>
 
     <dialog id="shared-token-modal" class="shared-token-dialog" aria-labelledby="shared-token-title" aria-describedby="shared-token-intro">
         <div class="shared-token-heading">

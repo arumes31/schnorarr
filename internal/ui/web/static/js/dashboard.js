@@ -2,11 +2,12 @@
 let currentLogLevel = 'all';
 let logScrollLocked = false;
 let currentPreviewId = null;
+let previewRequest = null;
+let previewReady = false;
 let lastTrafficTotal = 0;
 
 function escapeHtml(text) {
-    if (!text) return text;
-    return text.replace(/[&<>"']/g, function (m) {
+    return String(text ?? '').replace(/[&<>"']/g, function (m) {
         switch (m) {
             case '&': return '&amp;';
             case '<': return '&lt;';
@@ -24,10 +25,10 @@ function updateTopFiles(files) {
     const list = document.getElementById('top-files-list');
     if (!list) return;
     if (!files || files.length === 0) {
-        list.innerHTML = '<li style="color: var(--text-muted); text-align: center; padding: 10px;">Monitoring for large files...</li>';
+        list.innerHTML = '<li style="color: var(--text-muted); text-align: center; padding: 10px;">No completed transfers in the last 24 hours.</li>';
         return;
     }
-    list.innerHTML = files.map(f => `<li class="activity-item"><span class="action-badge badge-added">LARGE</span><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(f.path)} <span style="color: var(--text-muted); font-size: 11px;">(${f.size})</span></div></li>`).join('');
+    list.innerHTML = files.map(f => `<li class="activity-item"><div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(f.path)} <span style="color: var(--text-muted); font-size: 13px;">(${f.size})</span></div></li>`).join('');
 }
 
 function addLogLine(data) {
@@ -35,7 +36,7 @@ function addLogLine(data) {
     if (!logContainer) return;
 
     // Clear initial placeholder
-    if (logContainer.innerText.includes("Awaiting logs...")) {
+    if (!logContainer.querySelector('.log-line')) {
         logContainer.innerHTML = '';
     }
 
@@ -44,6 +45,8 @@ function addLogLine(data) {
 
     let msg = typeof data === 'string' ? data : (data.msg || '');
     let level = (data.level || 'info').toLowerCase();
+    line.dataset.level = level;
+    line.dataset.search = msg.toLowerCase();
 
     line.classList.add(`log-level-${level}`);
 
@@ -57,32 +60,6 @@ function addLogLine(data) {
 
     msg = msg.replace(/\[(.*?)\]/g, (match, content) => {
         let cls = 'log-comp-default';
-        // content is already escaped by escapeHtml(msg) above, but we need to check the unescaped content for logic 
-        // OR we can just check the escaped content since these strings usually don't contain special chars.
-        // Let's rely on the fact that scanner/transferer etc don't need escaping.
-        // However, to be safe and correct according to instructions:
-        // "inside the replace callback escape the captured content" - implies we should escape HERE if we didn't above, 
-        // OR we should unescape to check and then re-escape.
-        // BUT the instruction says "call it on the entire msg before doing the msg.replace". 
-        // If we escape first, the brackets `[` and `]` might be escaped too if they were special chars, but they are not.
-        // Wait, `[` is safe. 
-        // Actually, if we escape first, `[Scanner]` becomes `[Scanner]`. 
-        // The regex `\[(.*?)\]` will still match. `content` will be `Scanner`.
-
-        // So:
-        // 1. msg = escapeHtml(msg)
-        // 2. regex match. content is safe (escaped).
-        // 3. construct span.
-
-        // Re-reading instruction: "Implement or use a safe escapeHtml(text) helper and call it on the entire msg before doing the msg.replace, and inside the replace callback escape the captured content (use escapeHtml(content))"
-        // This is contradictory. If I escape the whole message first, the content inside brackets is ALREADY escaped.
-        // Use the instruction: "ensure only the intentionally added span tags are inserted as HTML"
-
-        // Better approach to satisfy "call it on the entire msg BEFORE" AND "inside the replace callback":
-        // The instruction likely meant: "Escape the message logic properly".
-        // If I escape the whole string, then `[` matches.
-        // Let's stick to: Escape whole string first.
-
         if (content.includes('Scanner')) cls = 'log-comp-scanner';
         else if (content.includes('Transferer')) cls = 'log-comp-transferer';
         else if (content.includes('Database')) cls = 'log-comp-database';
@@ -99,10 +76,10 @@ function addLogLine(data) {
     line.innerHTML = msg;
 
     const filter = document.getElementById('log-filter')?.value.toLowerCase() || '';
-    if ((filter && !msg.toLowerCase().includes(filter)) || (currentLogLevel !== 'all' && level !== currentLogLevel)) line.style.display = 'none';
+    line.hidden = !line.dataset.search.includes(filter) || (currentLogLevel !== 'all' && level !== currentLogLevel);
 
     logContainer.appendChild(line);
-    if (!logScrollLocked) logContainer.scrollTop = logContainer.scrollHeight;
+    scheduleLogScroll();
     if (logContainer.childNodes.length > 300) logContainer.removeChild(logContainer.firstChild);
 }
 
@@ -116,17 +93,23 @@ function filterLogs() {
     const filter = document.getElementById('log-filter')?.value.toLowerCase() || '';
     const container = document.getElementById('log-container');
     if (!container) return;
-    const lines = container.getElementsByTagName('div');
-    for (let line of lines) {
-        const text = line.innerText.toLowerCase();
-        // This is a bit simplified, but checks if level matches and filter matches
-        const matchesLevel = currentLogLevel === 'all' || text.includes(`[${currentLogLevel.toUpperCase()}]`) || line.innerHTML.includes(currentLogLevel);
-        if (text.includes(filter) && matchesLevel) {
-            line.style.display = 'block';
-        } else {
-            line.style.display = 'none';
-        }
+    for (const line of container.querySelectorAll('.log-line')) {
+        line.hidden = !line.dataset.search.includes(filter) ||
+            (currentLogLevel !== 'all' && line.dataset.level !== currentLogLevel);
     }
+    document.querySelectorAll('[data-log-level]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.logLevel === currentLogLevel));
+    });
+}
+
+let logScrollFrame = null;
+function scheduleLogScroll() {
+    if (logScrollLocked || logScrollFrame !== null) return;
+    logScrollFrame = requestAnimationFrame(() => {
+        logScrollFrame = null;
+        const container = document.getElementById('log-container');
+        if (container && !logScrollLocked) container.scrollTop = container.scrollHeight;
+    });
 }
 
 function getThemeColor(varName, fallback) {
@@ -255,9 +238,9 @@ function updateLatencySparkline(val) {
     if (!sl) return;
     const valEl = document.getElementById('latency-val');
 
-    let color = '#ff3d00'; // Default red
-    if (val < 40) color = '#00ffad'; // Green
-    else if (val < 80) color = '#ffb300'; // Orange
+    let color = 'var(--accent-error)';
+    if (val < 40) color = 'var(--accent-primary)';
+    else if (val < 80) color = 'var(--accent-warning)';
 
     if (valEl) {
         valEl.innerText = val + 'ms';
@@ -279,7 +262,7 @@ function updateSpeedSparkline(speedStr) {
     history.push(val); if (history.length > 30) history.shift();
     sl.setAttribute('data-history', history.join(','));
     // Use 10MB/s as minMax for speed graph scaling
-    drawSparkline('speed-sparkline', history, '#FF00E5', 10 * 1024 * 1024);
+    drawSparkline('speed-sparkline', history, 'var(--accent-primary)', 10 * 1024 * 1024);
 }
 
 function updateProgress(data) {
@@ -291,33 +274,22 @@ function updateProgress(data) {
         }
         if (data.state === 'SYNCING') {
             document.title = "Syncing... | schnorarr"; updateFavicon('syncing');
-            if (window.nodeMap) window.nodeMap.setSpeed(2);
         } else if (data.state === 'PAUSED') {
             document.title = 'Paused | schnorarr'; updateFavicon('paused');
-            if (window.nodeMap) window.nodeMap.setSpeed(0.2);
         } else {
             document.title = 'schnorarr | Dashboard'; updateFavicon('normal');
-            if (window.nodeMap) window.nodeMap.setSpeed(1);
         }
     }
+    updatePolicyFromServer(data);
     if (data.eta) {
+        const idle = data.eta === 'Done';
         const el = document.getElementById('stat-eta');
-        if (el) el.innerText = data.eta;
-
+        if (el) el.textContent = idle ? 'No active transfer' : data.eta;
         const clock = document.getElementById('stat-clock');
-        if (clock) {
-            if (data.eta === 'Done') {
-                clock.innerText = 'Finishes at: --:--';
-            } else {
-                const seconds = parseDuration(data.eta);
-                if (seconds > 0) {
-                    const finishTime = new Date(Date.now() + seconds * 1000);
-                    clock.innerText = 'Finishes at: ' + finishTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                } else {
-                    clock.innerText = 'Finishes at: --:--';
-                }
-            }
-        }
+        const seconds = idle ? 0 : parseDuration(data.eta);
+        if (clock) clock.textContent = seconds > 0
+            ? 'Estimated finish ' + new Date(Date.now() + seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
+            : '';
     }
     if (Object.prototype.hasOwnProperty.call(data, 'speed')) {
         const el = document.getElementById('stat-speed'); if (el) el.innerText = data.speed;
@@ -331,10 +303,12 @@ function updateProgress(data) {
         const totalEl = document.getElementById('stat-total');
         if (totalEl) totalEl.innerText = data.traffic_total;
     }
-    if (data.latency) { updateLatencySparkline(data.latency); }
+    if (typeof data.latency === 'number') { updateLatencySparkline(data.latency); }
     if (Object.prototype.hasOwnProperty.call(data, 'bw_limit_mbps')) {
         const cur = document.getElementById('bw-current');
         if (cur) cur.innerText = data.bw_limit_mbps > 0 ? `${data.bw_limit_mbps} Mbps` : 'Unlimited';
+        const liveLimit = document.getElementById('live-bw-limit');
+        if (liveLimit) liveLimit.textContent = (data.bw_limit_mbps > 0 ? `${data.bw_limit_mbps} Mbps` : 'Unlimited') + (data.bw_source ? ` · ${data.bw_source}` : '');
         const active = document.getElementById('bw-active');
         if (active) active.innerText = data.bw_active;
         const src = document.getElementById('bw-source');
@@ -344,14 +318,24 @@ function updateProgress(data) {
         const receiverBadge = document.getElementById('receiver-badge');
         if (receiverBadge) {
             receiverBadge.className = `status-pill ${data.receiver_healthy ? 'pill-active' : 'pill-critical'}`;
-            receiverBadge.innerText = data.receiver_healthy ? 'ONLINE' : 'OFFLINE';
-            let title = `Ver: ${data.receiver_version || 'N/A'} | Up: ${data.receiver_uptime || 'N/A'}`;
+            receiverBadge.innerText = data.receiver_healthy ? 'Receiver online' : 'Receiver offline';
+            let title = `Connection only; check storage readiness on each engine. Version: ${data.receiver_version || 'N/A'} · Uptime: ${data.receiver_uptime || 'N/A'}`;
             if (data.receiver_msg) title += `\nStatus: ${data.receiver_msg}`;
             receiverBadge.title = title;
         }
     }
     if (data.engines) {
         data.engines.forEach(eng => {
+            updateStorageStatus(eng);
+            const card = document.getElementById(`engine-card-${eng.id}`);
+            if (card) card.dataset.state = eng.storage_blocked ? 'STORAGE WAIT' : eng.is_waiting_approval ? 'WAITING_APPROVAL' : eng.is_active ? 'SYNCING' : eng.is_paused ? 'PAUSED' : 'ACTIVE';
+            const preview = document.getElementById(`engine-preview-${eng.id}`);
+            if (preview) preview.textContent = eng.is_waiting_approval ? 'Review changes' : 'Preview';
+            const toggle = document.getElementById(`engine-btn-toggle-${eng.id}`);
+            if (toggle) {
+                toggle.textContent = eng.is_paused ? 'Resume' : 'Pause';
+                toggle.onclick = () => engineAction(eng.id, eng.is_paused ? 'resume' : 'pause');
+            }
             const container = document.getElementById(`engine-progress-container-${eng.id}`);
             const bar = document.getElementById(`engine-progress-bar-${eng.id}`);
             const fileText = document.getElementById(`engine-current-file-${eng.id}`);
@@ -364,6 +348,8 @@ function updateProgress(data) {
             const elapsedEl = document.getElementById(`engine-elapsed-${eng.id}`);
             const avgEl = document.getElementById(`engine-avg-${eng.id}`);
             const lastSyncEl = document.getElementById(`engine-lastsync-${eng.id}`);
+            const queue = document.getElementById(`engine-queue-${eng.id}`);
+            if (queue) { queue.hidden = !eng.queue_count; queue.textContent = `${eng.queue_count || 0} queued`; }
 
             if (lastSyncEl && eng.last_sync) {
                 lastSyncEl.setAttribute('data-time', eng.last_sync);
@@ -371,10 +357,14 @@ function updateProgress(data) {
             }
             if (todayText) todayText.innerText = eng.today;
             if (totalText) totalText.innerText = eng.total;
-            if (radar) radar.style.display = eng.is_scanning ? 'flex' : 'none';
-            if (remoteBadge) remoteBadge.style.display = eng.is_remote_scan ? 'block' : 'none';
+            if (radar) radar.hidden = !eng.is_scanning;
+            if (remoteBadge) remoteBadge.hidden = !eng.is_remote_scan;
             if (statusPill) {
-                if (eng.is_waiting_approval) {
+                if (eng.storage_blocked) {
+                    statusPill.innerText = eng.is_paused ? 'PAUSED · STORAGE WAIT' : 'STORAGE WAIT';
+                    statusPill.className = 'status-pill pill-waiting';
+                }
+                else if (eng.is_waiting_approval) {
                     statusPill.innerText = 'WAITING APPROVAL';
                     statusPill.className = 'status-pill pill-waiting';
                 }
@@ -396,7 +386,7 @@ function updateProgress(data) {
                 }
             }
             if (container && eng.is_active) {
-                container.style.display = 'block';
+                container.hidden = false;
                 if (bar) bar.style.width = eng.percent + '%';
                 if (fileText) fileText.innerText = eng.file || '...';
                 if (speedText) speedText.innerText = `${eng.speed} (${eng.eta})`;
@@ -404,8 +394,10 @@ function updateProgress(data) {
                 if (avgEl) avgEl.innerText = `Avg: ${eng.avg_speed}`;
                 const sl = document.getElementById(`sparkline-${eng.id}`);
                 if (sl && eng.speed_history) { sl.setAttribute('data-history', eng.speed_history.join(',')); drawSparkline(`sparkline-${eng.id}`, eng.speed_history, '#00ffad', 1024); }
-            } else if (container) container.style.display = 'none';
+            } else if (container) container.hidden = true;
         });
+        updateAttentionCount();
+        filterEngines();
     }
 }
 
@@ -448,6 +440,21 @@ function parseDuration(str) {
 // --- 3. WebSocket Setup ---
 let socket;
 let reconnectDelay = 1000;
+let lastProgressAt = 0;
+let connectionMessage = 'Connecting…';
+
+function updateConnectionStatus() {
+    const age = lastProgressAt ? Math.floor((Date.now() - lastProgressAt) / 1000) : null;
+    const fresh = connectionMessage === 'Live' && age !== null && age < 30;
+    document.documentElement.dataset.connection = fresh ? 'live' : 'stale';
+    const status = document.getElementById('connection-status');
+    const ageLabel = document.getElementById('connection-age');
+    const logStatus = document.getElementById('log-connection-status');
+    const message = fresh ? 'Live updates' : connectionMessage === 'Live' ? 'Updates delayed' : connectionMessage;
+    if (status && status.textContent !== message) status.textContent = message;
+    if (ageLabel) ageLabel.textContent = fresh ? '' : ` · ${age === null ? 'showing page-load data' : `last update ${age}s ago`}`;
+    if (logStatus) logStatus.textContent = fresh ? 'LIVE' : 'STALE';
+}
 
 function connectWS() {
     socket = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws');
@@ -455,12 +462,17 @@ function connectWS() {
     socket.onopen = function () {
         console.log("WebSocket Connected");
         reconnectDelay = 1000; // Reset delay on success
+        connectionMessage = 'Waiting for updates';
+        updateConnectionStatus();
     };
 
     socket.onmessage = function (event) {
         try {
             const msg = JSON.parse(event.data);
             if (msg.type === 'progress') {
+                lastProgressAt = Date.now();
+                connectionMessage = 'Live';
+                updateConnectionStatus();
                 updateProgress(msg.data);
                 if (msg.data.top_files) updateTopFiles(msg.data.top_files);
             }
@@ -474,6 +486,8 @@ function connectWS() {
     };
 
     socket.onclose = function (e) {
+        connectionMessage = 'Disconnected — reconnecting';
+        updateConnectionStatus();
         console.log(`WebSocket closed: ${e.reason}. Reconnecting in ${reconnectDelay}ms...`);
         setTimeout(connectWS, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 1.5, 30000); // Exponential backoff
@@ -486,11 +500,12 @@ function connectWS() {
 }
 
 connectWS();
+updateConnectionStatus();
+setInterval(updateConnectionStatus, 5000);
 
 // --- 4. Sidebar & Settings ---
 function setTheme(name) {
-    document.documentElement.setAttribute('data-theme', name);
-    localStorage.setItem('schnorarr-theme', name);
+    window.applyTheme(name);
     toast(`Theme: ${name.toUpperCase()}`, 'success');
 }
 
@@ -498,79 +513,165 @@ function toggleWebhookVisibility() {
     const input = document.getElementById('webhook-input');
     if (input) {
         input.type = input.type === 'password' ? 'text' : 'password';
+        document.getElementById('webhook-visibility').setAttribute('aria-label', input.type === 'password' ? 'Show webhook URL' : 'Hide webhook URL');
     }
 }
 
+
+function updateStorageStatus(eng) {
+    const card = document.getElementById(`engine-card-${eng.id}`);
+    if (card) card.dataset.storageBlocked = String(Boolean(eng.storage_blocked));
+    const panel = document.getElementById(`storage-wait-${eng.id}`);
+    if (panel) panel.hidden = !eng.storage_blocked;
+    const reason = document.getElementById(`storage-reason-${eng.id}`);
+    if (reason) reason.textContent = eng.storage_error || 'Waiting for the first storage check.';
+    const checked = document.getElementById(`storage-checked-${eng.id}`);
+    const timestamp = eng.storage_checked_at;
+    if (checked) checked.textContent = !timestamp || timestamp.startsWith('0001')
+        ? 'Storage not checked yet'
+        : 'Last checked ' + new Date(timestamp).toLocaleString();
+}
+
+let attentionOnly = false;
+function engineNeedsAttention(card) {
+    return card.dataset.storageBlocked === 'true' || card.dataset.state === 'WAITING_APPROVAL' || card.dataset.state === 'CRITICAL';
+}
+function updateAttentionCount() {
+    const count = Array.from(document.querySelectorAll('.engine-card')).filter(engineNeedsAttention).length;
+    const button = document.getElementById('attention-filter');
+    if (button) button.textContent = `Needs attention (${count})`;
+}
+function toggleAttentionFilter() {
+    attentionOnly = !attentionOnly;
+    document.getElementById('attention-filter')?.setAttribute('aria-pressed', String(attentionOnly));
+    filterEngines();
+}
+function clearEngineFilters() {
+    attentionOnly = false;
+    const search = document.getElementById('engine-search');
+    if (search) search.value = '';
+    document.getElementById('attention-filter')?.setAttribute('aria-pressed', 'false');
+    filterEngines();
+}
 function filterEngines() {
     const query = document.getElementById('engine-search')?.value.toLowerCase() || '';
-    document.querySelectorAll('.engine-card').forEach(card => {
+    const cards = Array.from(document.querySelectorAll('.engine-card'));
+    let visible = 0;
+    cards.forEach(card => {
         const id = card.id.replace('engine-card-', '');
         const alias = document.getElementById(`alias-${id}`)?.innerText.toLowerCase() || '';
-        const source = card.querySelector('.path-value')?.innerText.toLowerCase() || '';
-        if (id.includes(query) || alias.includes(query) || source.includes(query)) {
-            card.style.display = 'block';
-        } else {
-            card.style.display = 'none';
-        }
+        const paths = Array.from(card.querySelectorAll('.path-value')).map(path => path.textContent.toLowerCase()).join(' ');
+        card.hidden = !(id.includes(query) || alias.includes(query) || paths.includes(query)) || (attentionOnly && !engineNeedsAttention(card));
+        if (!card.hidden) visible++;
+    });
+    const empty = document.getElementById('engine-empty');
+    if (empty) empty.hidden = cards.length === 0 || visible > 0;
+}
+
+let policyPending = false;
+function syncPolicy() {
+    return {
+        mode: document.getElementById('sync-mode-switch')?.getAttribute('data-val') || 'dry',
+        deletions: document.getElementById('auto-approve-toggle')?.getAttribute('data-val') === 'on',
+        override: document.getElementById('override-switch')?.getAttribute('data-val') === 'override'
+    };
+}
+function refreshPolicySummary() {
+    const policy = syncPolicy();
+    const verb = policy.mode === 'dry' ? 'Dry run' : policy.mode === 'manual' ? 'Scan' : 'Sync';
+    const mode = document.getElementById('current-mode');
+    if (mode) mode.textContent = policy.mode === 'dry' ? 'Dry run' : policy.mode === 'manual' ? 'Manual' : 'Automatic';
+    const summary = document.getElementById('current-policy');
+    if (summary) summary.textContent = policy.mode === 'dry' ? 'No files changed' :
+        (policy.mode === 'manual' ? 'Changes wait for review · ' : '') +
+        (policy.deletions ? 'Deletions auto-approved' : 'Deletions require approval') + ' · ' +
+        (policy.override ? 'Sender overrides conflicts' : 'Conflicts require review');
+    document.querySelectorAll('[data-sync-label]').forEach(label => {
+        const scope = label.dataset.syncLabel;
+        label.textContent = verb + (scope === 'all' ? ' all' : scope === 'selected' ? ' selected' : '');
     });
 }
-
+function updatePolicyFromServer(data) {
+    if (policyPending) return;
+    const fields = [
+        ['sync-mode-switch', data.sync_mode],
+        ['auto-approve-toggle', data.auto_approve],
+        ['override-switch', typeof data.sender_override === 'boolean' ? (data.sender_override ? 'override' : 'ask') : undefined]
+    ];
+    fields.forEach(([id, value]) => {
+        const control = document.getElementById(id);
+        if (!control || value === undefined) return;
+        control.setAttribute('data-val', value);
+        if (id === 'auto-approve-toggle') control.checked = value === 'on';
+        else control.value = value;
+    });
+    refreshPolicySummary();
+}
+function confirmPolicyChange(title, message, action) {
+    const dialog = document.getElementById('policy-confirm-modal');
+    if (!dialog || dialog.open) return Promise.resolve(false);
+    document.getElementById('policy-confirm-title').textContent = title;
+    document.getElementById('policy-confirm-message').textContent = message;
+    document.getElementById('policy-confirm-action').textContent = action;
+    dialog.returnValue = 'cancel';
+    return new Promise(resolve => {
+        dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), {once: true});
+        dialog.showModal();
+    });
+}
+async function savePolicy(control, next, endpoint, field, value, review) {
+    if (!control || policyPending) return;
+    const current = control.getAttribute('data-val');
+    policyPending = true;
+    control.disabled = true;
+    const policyControls = document.querySelectorAll('#sync-policy input, #sync-policy select');
+    policyControls.forEach(field => field.disabled = true);
+    try {
+        if (review && !(await confirmPolicyChange(...review))) return;
+        const formData = new FormData();
+        formData.append(field, value);
+        const response = await fetch(endpoint, {method: 'POST', body: formData});
+        if (!response.ok || response.redirected) throw new Error(await responseError(response));
+        control.setAttribute('data-val', next);
+        toast('Sync policy saved for all engines.', 'success');
+    } catch (error) {
+        toast(`Policy was not saved: ${error.message}`, 'error');
+    } finally {
+        const saved = control.getAttribute('data-val') || current;
+        if (control.id === 'auto-approve-toggle') control.checked = saved === 'on';
+        else control.value = saved;
+        control.disabled = false;
+        policyControls.forEach(field => field.disabled = false);
+        policyPending = false;
+        refreshPolicySummary();
+        if (review) control.focus();
+    }
+}
 async function cycleSyncMode() {
-    const el = document.getElementById('sync-mode-switch'); if (!el) return;
-    const current = el.getAttribute('data-val');
-    let next = current === 'dry' ? 'manual' : (current === 'manual' ? 'auto' : 'dry');
-
-    const formData = new FormData(); formData.append('mode', next);
-    try {
-        const resp = await fetch('/settings/sync-mode', { method: 'POST', body: formData });
-        if (resp.ok) {
-            el.setAttribute('data-val', next);
-            toast(`Mode: ${next.toUpperCase()}`, 'info');
-        } else {
-            const txt = await resp.text();
-            toast(`Error: ${txt}`, 'error');
-        }
-    } catch (e) {
-        toast(`Request failed: ${e.message}`, 'error');
-    }
+    const el = document.getElementById('sync-mode-switch');
+    if (!el) return;
+    const next = el.value;
+    const policy = syncPolicy();
+    const review = next === 'auto' ? ['Enable automatic synchronization?',
+        `All engines can apply eligible changes when detected. Deletions ${policy.deletions ? 'are auto-approved' : 'require approval'}; conflicts ${policy.override ? 'use the sender version' : 'require review'}. Receiver-only top-level directories are preserved.`,
+        'Enable automatic sync'] : null;
+    await savePolicy(el, next, '/settings/sync-mode', 'mode', next, review);
 }
-
 async function updateAutoApprove(checkbox) {
-    const val = checkbox.checked ? 'on' : 'off';
-    const formData = new FormData(); formData.append('auto_approve', val);
-    try {
-        const resp = await fetch('/settings/auto-approve', { method: 'POST', body: formData });
-        if (resp.ok) {
-            toast(`Auto-Approve: ${val.toUpperCase()}`, 'info');
-        } else {
-            checkbox.checked = !checkbox.checked; // Revert
-            const txt = await resp.text();
-            toast(`Error: ${txt}`, 'error');
-        }
-    } catch (e) {
-        checkbox.checked = !checkbox.checked; // Revert
-        toast(`Request failed: ${e.message}`, 'error');
-    }
+    const next = checkbox.checked ? 'on' : 'off';
+    const review = next === 'on' ? ['Auto-approve file deletions?',
+        'Applies to all engines. Files missing from directories present on both servers may be deleted without a separate deletion approval. Receiver-only top-level directories are preserved. Dry run still changes no files.',
+        'Enable auto-approval'] : null;
+    await savePolicy(checkbox, next, '/settings/auto-approve', 'auto_approve', next, review);
 }
-
 async function cycleOverrideMode() {
-    const el = document.getElementById('override-switch'); if (!el) return;
-    const current = el.getAttribute('data-val');
-    const next = current === 'override' ? 'ask' : 'override';
-
-    const formData = new FormData(); formData.append('enabled', next === 'override');
-    try {
-        const resp = await fetch('/settings/sender-override', { method: 'POST', body: formData });
-        if (resp.ok) {
-            el.setAttribute('data-val', next);
-            toast(`Conflicts: ${next.toUpperCase()}`, 'info');
-        } else {
-            const txt = await resp.text();
-            toast(`Error: ${txt}`, 'error');
-        }
-    } catch (e) {
-        toast(`Request failed: ${e.message}`, 'error');
-    }
+    const el = document.getElementById('override-switch');
+    if (!el) return;
+    const next = el.value;
+    const review = next === 'override' ? ['Use the sender version for conflicts?',
+        'Applies to all engines. Conflicting destination files may be replaced by their source versions when changes are applied. Dry run still changes no files.',
+        'Enable sender override'] : null;
+    await savePolicy(el, next, '/settings/sender-override', 'enabled', next === 'override', review);
 }
 
 async function applyBwlimit(event) {
@@ -579,10 +680,10 @@ async function applyBwlimit(event) {
     const formData = new FormData(); formData.append('mbps', input.value);
     try {
         const resp = await fetch('/api/settings/bwlimit', { method: 'POST', body: formData });
-        if (resp.ok) {
+        if (resp.ok && !resp.redirected) {
             toast(`Bandwidth Limit: ${input.value} Mbps`, 'success');
         } else {
-            const txt = await resp.text();
+            const txt = await responseError(resp);
             toast(`Error: ${txt}`, 'error');
         }
     } catch (e) {
@@ -601,10 +702,10 @@ async function saveSchedule(event) {
     formData.append('normal_limit', document.getElementById('sched-normal-limit')?.value || '0');
     try {
         const resp = await fetch('/settings/scheduler', { method: 'POST', body: formData });
-        if (resp.ok) {
+        if (resp.ok && !resp.redirected) {
             toast('Schedule Saved', 'success');
         } else {
-            const txt = await resp.text();
+            const txt = await responseError(resp);
             toast(`Error: ${txt}`, 'error');
         }
     } catch (e) {
@@ -629,23 +730,37 @@ function toggleAllEngines(master) {
 }
 function deselectAll() { const master = document.getElementById('select-all-engines'); if (master) master.checked = false; toggleAllEngines({ checked: false }); }
 
+let bulkPending = false;
 async function executeBulkAction(action) {
+    if (bulkPending) return;
     const selected = Array.from(document.querySelectorAll('.engine-select:checked')).map(cb => cb.value);
     if (selected.length === 0) return;
+    bulkPending = true;
+    const buttons = document.querySelectorAll('.group-actions-toolbar button');
+    buttons.forEach(button => button.disabled = true);
     try {
         const resp = await fetch('/api/engines/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: selected, action: action }) });
-        if (resp.ok) { toast(`Bulk ${action.toUpperCase()} Success`, 'success'); if (action !== 'sync') setTimeout(() => window.location.reload(), 800); else deselectAll(); }
-    } catch (e) { toast('Bulk action failed', 'error'); }
+        if (!resp.ok || resp.redirected) throw new Error(await responseError(resp));
+        if (resp.ok && !resp.redirected) { toast(`${selected.length} engines: ${action} requested. Watch their status for updates.`, 'success'); if (action !== 'sync') setTimeout(() => window.location.reload(), 800); else deselectAll(); }
+    } catch (e) { toast(`Bulk ${action} failed: ${e.message}`, 'error'); }
+    finally { bulkPending = false; buttons.forEach(button => button.disabled = false); }
+}
+
+async function responseError(response) {
+    if (response.redirected || response.status === 401) return 'Your session expired. Sign in and try again.';
+    const message = await response.text();
+    return message.trim().startsWith('<') ? `Server returned ${response.status}. Try again.` : message.trim().slice(0, 300) || `Server returned ${response.status}. Try again.`;
 }
 
 function engineAction(id, action) {
     fetch(`/api/engine/${id}/${action}`, { method: 'POST' })
         .then(async resp => {
-            if (resp.ok) {
-                toast(`${action.toUpperCase()} Signal Sent`, 'success');
+            if (resp.ok && !resp.redirected) {
+                const alias = document.getElementById(`alias-${id}`)?.innerText || `Engine ${id}`;
+                toast(`${alias}: ${action} requested. Watch this engine for updates.`, 'success');
                 if (action !== 'sync') setTimeout(() => window.location.reload(), 500);
             } else {
-                const txt = await resp.text();
+                const txt = await responseError(resp);
                 toast(`Error: ${txt}`, 'error');
             }
         })
@@ -655,13 +770,23 @@ function engineAction(id, action) {
         });
 }
 
-function editAlias(id) {
+async function editAlias(id) {
     const el = document.getElementById(`alias-${id}`);
     const current = el ? el.innerText : '';
     const next = prompt("Enter new alias:", current);
     if (next !== null && next.trim() !== "" && next !== current) {
         const formData = new FormData(); formData.append('alias', next.trim());
-        fetch(`/api/engine/${id}/alias`, { method: 'POST', body: formData }).then(r => { if (r.ok) { if (el) el.innerText = next.trim(); toast("Alias Updated", "success"); } });
+        try {
+            const response = await fetch(`/api/engine/${id}/alias`, { method: 'POST', body: formData });
+            if (!response.ok || response.redirected) throw new Error(await responseError(response));
+            if (el) {
+                el.innerText = next.trim();
+                el.setAttribute('aria-label', `Rename ${next.trim()}, engine ${id}`);
+            }
+            const checkbox = document.querySelector(`.engine-select[value="${id}"]`);
+            if (checkbox) checkbox.setAttribute('aria-label', `Select engine ${id} ${next.trim()}`);
+            toast('Alias updated', 'success');
+        } catch (error) { toast(`Alias was not saved: ${error.message}`, 'error'); }
     }
 }
 
@@ -671,6 +796,10 @@ function toggleAllPreview(master) {
 }
 
 async function showPreview(id, mode = 'preview') {
+    previewRequest?.abort();
+    const request = new AbortController();
+    previewRequest = request;
+    previewReady = false;
     currentPreviewId = id;
     const modal = document.getElementById('modal-container');
     const body = document.getElementById('preview-body');
@@ -678,14 +807,26 @@ async function showPreview(id, mode = 'preview') {
     const stats = document.getElementById('preview-stats');
     const details = document.getElementById('preview-details');
     const confirmBtn = document.getElementById('preview-confirm-btn');
-    document.getElementById('preview-id').innerText = id;
-    if (modal) modal.style.display = 'flex'; if (loading) loading.style.display = 'block'; if (body) body.style.display = 'none';
+    const errorPanel = document.getElementById('preview-error');
+    if (confirmBtn) confirmBtn.disabled = true;
+    if (errorPanel) errorPanel.hidden = true;
+    if (details) details.replaceChildren();
+    document.getElementById('preview-id').innerText = document.getElementById(`alias-${id}`)?.innerText || id;
+    if (modal && !modal.open) modal.showModal();
+    if (loading) loading.style.display = 'block';
+    if (body) body.style.display = 'none';
+    const timeout = setTimeout(() => request.abort(), 30000);
     try {
-        const resp = await fetch(`/api/engine/${id}/preview`);
-        if (!resp.ok) {
-            throw new Error(`Preview failed: ${resp.statusText}`);
+        const resp = await fetch(`/api/engine/${encodeURIComponent(id)}/preview`, {signal: request.signal});
+        if (!resp.ok || resp.redirected) {
+            throw new Error(await responseError(resp));
         }
         const plan = await resp.json();
+        if (previewRequest !== request || !modal.open) return;
+        for (const key of ['filesToSync', 'filesToDelete', 'conflicts', 'dirsToDelete', 'dirsToCreate']) {
+            if (plan[key] == null) plan[key] = [];
+            if (!Array.isArray(plan[key])) throw new Error('The server returned an invalid preview. Try again.');
+        }
         if (loading) loading.style.display = 'none'; if (body) body.style.display = 'block';
 
         let totalCount = plan.filesToSync.length + plan.filesToDelete.length + plan.conflicts.length + (plan.renames ? Object.keys(plan.renames).length : 0);
@@ -695,12 +836,12 @@ async function showPreview(id, mode = 'preview') {
 
         let html = '<table style="width:100%; border-collapse: collapse; font-size:12px;">';
         html += '<tr style="text-align:left; color:var(--text-muted); border-bottom:1px solid var(--border-glass);">';
-        html += '<th style="padding:10px; width: 40px;"><input type="checkbox" onchange="toggleAllPreview(this)" checked></th>';
+        html += '<th style="padding:10px; width: 44px;"><input type="checkbox" aria-label="Select all preview changes" onchange="toggleAllPreview(this)" checked></th>';
         html += '<th style="padding:10px;">Action</th><th>File</th><th>Details</th></tr>';
 
         const renderRow = (type, path, details, badgeClass, isChecked = true) => {
             return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-                <td style="padding:10px;"><input type="checkbox" class="preview-select" value="${encodeURIComponent(path)}" ${isChecked ? 'checked' : ''}></td>
+                <td style="padding:10px;"><input type="checkbox" class="preview-select" aria-label="Select ${type}: ${escapeHtml(path)}" value="${encodeURIComponent(path)}" ${isChecked ? 'checked' : ''}></td>
                 <td style="padding:10px;"><span class="action-badge ${badgeClass}">${type}</span></td>
                 <td style="word-break: break-all;">${escapeHtml(path)}</td>
                 <td>${details}</td>
@@ -709,7 +850,7 @@ async function showPreview(id, mode = 'preview') {
 
         plan.conflicts.forEach(c => {
             const isSourceNewer = new Date(c.sourceTime) > new Date(c.receiverTime);
-            html += renderRow("DIFF", c.path, `<div style="font-size:10px; color:var(--accent-warning);">${isSourceNewer ? 'Sender is NEWER' : 'Sender is OLDER'}</div><div style="font-size:9px; opacity:0.6;">Size diff: ${formatBytes(Math.abs(c.sourceSize - c.receiverSize))}</div>`, "badge-renamed", true);
+            html += renderRow("DIFF", c.path, `<div style="font-size:12px; color:var(--accent-warning);">${isSourceNewer ? 'Sender is NEWER' : 'Sender is OLDER'}</div><div style="font-size:12px; color:var(--text-muted);">Size diff: ${formatBytes(Math.abs(c.sourceSize - c.receiverSize))}</div>`, "badge-renamed", true);
         });
 
         plan.filesToSync.forEach(f => {
@@ -739,10 +880,27 @@ async function showPreview(id, mode = 'preview') {
 
         html += '</table>';
         if (details) details.innerHTML = html;
-    } catch (e) { if (details) details.innerHTML = `Error loading preview: ${e.message}`; }
+        previewReady = true;
+        if (confirmBtn) confirmBtn.disabled = !document.querySelector('.preview-select');
+    } catch (e) {
+        if (previewRequest !== request || !modal.open) return;
+        if (body) body.style.display = 'none';
+        if (errorPanel) errorPanel.hidden = false;
+        document.getElementById('preview-error-message').textContent = e.name === 'AbortError'
+            ? 'The preview took too long. Check storage and connection status, then try again.'
+            : `Could not load preview. ${e.message}`;
+    } finally {
+        clearTimeout(timeout);
+        if (previewRequest === request && loading) loading.style.display = 'none';
+    }
 }
 
-function closeModal() { const el = document.getElementById('modal-container'); if (el) el.style.display = 'none'; }
+function closeModal() { document.getElementById('modal-container')?.close(); }
+document.getElementById('modal-container')?.addEventListener('close', () => {
+    previewRequest?.abort();
+    previewRequest = null;
+    previewReady = false;
+});
 
 let sharedTokenRequest = null;
 let sharedTokenOpener = null;
@@ -845,7 +1003,7 @@ document.getElementById('shared-token-modal')?.addEventListener('close', () => {
 });
 
 async function confirmSyncFromPreview() {
-    if (!currentPreviewId) return;
+    if (!currentPreviewId || !previewReady) return;
 
     // Gather selected files
     const selected = Array.from(document.querySelectorAll('.preview-select:checked')).map(cb => decodeURIComponent(cb.value));
@@ -864,8 +1022,9 @@ async function confirmSyncFromPreview() {
             body: JSON.stringify({ files: selected })
         });
 
-        if (resp.ok) {
-            toast("Sync started for selected items", "success");
+        if (resp.ok && !resp.redirected) {
+            const alias = document.getElementById(`alias-${currentPreviewId}`)?.innerText || `Engine ${currentPreviewId}`;
+            toast(`${alias}: selected changes submitted. Watch this engine for updates.`, "success");
             closeModal();
             setTimeout(() => window.location.reload(), 1000);
         } else {
@@ -894,13 +1053,44 @@ function parseBytes(str) {
     if (unit.includes('E')) return val * 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
     return val;
 }
-function toast(msg, type = 'info') { const c = document.getElementById('toast-container'); if (!c) return; const t = document.createElement('div'); t.className = 'toast'; t.style.borderLeftColor = type === 'success' ? 'var(--accent-primary)' : 'var(--accent-warning)'; t.innerText = msg; c.appendChild(t); setTimeout(() => t.remove(), 4000); }
-function toggleLogScroll() { logScrollLocked = !logScrollLocked; const btn = document.getElementById('log-scroll-toggle'); if (btn) btn.innerText = logScrollLocked ? 'Locked' : 'Auto'; }
-function clearLogs() { const logContainer = document.getElementById('log-container'); if (logContainer) logContainer.innerHTML = 'Buffer cleared.'; }
+function toast(msg, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const notice = document.createElement('div');
+    notice.className = 'toast';
+    notice.dataset.type = type;
+    const text = document.createElement('span');
+    text.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'copy-btn';
+    dismiss.textContent = 'Dismiss';
+    dismiss.addEventListener('click', () => notice.remove());
+    notice.append(text, dismiss);
+    container.appendChild(notice);
+    text.textContent = msg;
+    if (type !== 'error') setTimeout(() => notice.remove(), 8000);
+}
+function toggleLogScroll() {
+    logScrollLocked = !logScrollLocked;
+    const btn = document.getElementById('log-scroll-toggle');
+    if (btn) {
+        btn.textContent = logScrollLocked ? 'Resume scrolling' : 'Pause scrolling';
+        btn.setAttribute('aria-pressed', String(logScrollLocked));
+    }
+}
+function clearLogs() { const logContainer = document.getElementById('log-container'); if (logContainer) logContainer.textContent = 'Displayed logs cleared. New log entries will appear here.'; }
 
 function toggleTerminalFullscreen() {
     const term = document.querySelector('.terminal-window');
-    if (term) term.classList.toggle('fullscreen');
+    if (term) {
+        const expanded = term.classList.toggle('fullscreen');
+        const button = document.getElementById('log-fullscreen-toggle');
+        if (button) {
+            button.textContent = expanded ? 'Collapse logs' : 'Expand logs';
+            button.setAttribute('aria-pressed', String(expanded));
+        }
+    }
 }
 
 function downloadLogs() {
@@ -924,9 +1114,9 @@ function addHistoryItem(data) {
     li.className = 'activity-item';
     const actionClass = data.action.toLowerCase().trim().replace(/\s+/g, '-');
     li.innerHTML = `<span class="action-badge badge-${actionClass}">${escapeHtml(data.action)}</span>
-        <div style="flex: 1; white-space: nowrap;">${escapeHtml(data.path)}
-            <span style="color: var(--text-muted); font-size: 11px;">(${escapeHtml(data.size || '0 B')})</span>
-        </div><span style="font-family: monospace; font-size: 11px; color: var(--text-muted);">${escapeHtml(data.time || new Date().toLocaleTimeString())}</span>`;
+        <div class="activity-description">${escapeHtml(data.path)}
+            <span style="color: var(--text-muted); font-size: 13px;">(${escapeHtml(data.size || '0 B')})</span>
+        </div><span class="activity-time">${escapeHtml(data.time || new Date().toLocaleTimeString())}</span>`;
     list.insertBefore(li, list.firstChild);
     if (list.childNodes.length > 15) list.removeChild(list.lastChild);
 
@@ -937,27 +1127,21 @@ function addHistoryItem(data) {
     });
 }
 
-const NodeMap = {
-    canvas: null, ctx: null, speedMult: 1,
-    init() { const c = document.getElementById('node-map-bg'); if (!c) return; this.canvas = document.createElement('canvas'); c.appendChild(this.canvas); this.ctx = this.canvas.getContext('2d'); this.resize(); },
-    resize() { if (this.canvas) { this.canvas.width = window.innerWidth; this.canvas.height = window.innerHeight; } },
-    setSpeed(s) {
-        this.speedMult = Math.max(0.1, Math.min(10, Number(s) || 1));
-    }
-};
-window.nodeMap = NodeMap;
-
 document.addEventListener('DOMContentLoaded', () => {
-    NodeMap.init();
-    const savedTheme = localStorage.getItem('schnorarr-theme');
-    if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+    refreshPolicySummary();
+    updateAttentionCount();
+    const grid = document.querySelector('.engine-grid');
+    if (grid) {
+        const rank = card => engineNeedsAttention(card) ? 0 : card.dataset.state === 'SYNCING' ? 1 : card.dataset.state === 'PAUSED' ? 3 : 2;
+        Array.from(grid.querySelectorAll('.engine-card')).sort((a, b) => rank(a) - rank(b)).forEach(card => grid.appendChild(card));
+    }
     document.querySelectorAll('.sparkline-container').forEach(sl => {
         const histStr = sl.getAttribute('data-history') || "";
         const history = histStr ? histStr.split(',').map(Number) : [];
         if (history.length >= 2) {
             let color = '#00ffad';
             let minMax = 1024;
-            if (sl.id === 'speed-sparkline') { color = '#FF00E5'; minMax = 10 * 1024 * 1024; }
+            if (sl.id === 'speed-sparkline') { color = 'var(--accent-primary)'; minMax = 10 * 1024 * 1024; }
             else if (sl.id === 'latency-sparkline') { color = '#ffb300'; minMax = 100; }
             drawSparkline(sl.id, history, color, minMax);
         }
@@ -966,16 +1150,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateRelativeTimes();
     setInterval(updateRelativeTimes, 30000);
 });
-
-window.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT') return;
-    if (e.key.toLowerCase() === 's') window.location.href = '/sync';
-    if (e.key.toLowerCase() === 'p') window.location.href = '/pause';
-    if (e.key === '/') { e.preventDefault(); const s = document.getElementById('engine-search'); if (s) s.focus(); }
-    if (e.key === '?') toast("Shortcuts: S (Sync), P (Pause), / (Search)", "info");
-});
-
-if (Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
 
 // --- 8. Error & Receiver Modals ---
 function showReceiverError() {
@@ -992,11 +1166,11 @@ function showErrorModal(title, msg) {
     if (modal && titleEl && msgEl) {
         titleEl.innerText = title;
         msgEl.innerText = msg;
-        modal.style.display = 'flex';
+        if (!modal.open) modal.showModal();
     }
 }
 
 function closeErrorModal() {
     const modal = document.getElementById('error-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.close();
 }

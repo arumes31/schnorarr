@@ -1,0 +1,17 @@
+.history-page .main-content { max-width: 1600px; }
+.search-container { position: relative; max-width: 500px; margin-bottom: 24px; }
+.history-page .search-input { width: 100%; padding-inline-start: 44px; }
+.search-icon { position: absolute; left: 14px; top: 14px; width: 20px; height: 20px; color: var(--text-muted); pointer-events: none; }
+.history-card { min-width: 0; overflow: auto; background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: 16px; padding: 24px; }
+.history-card table { width: 100%; border-collapse: collapse; text-align: left; }
+.history-card th { padding: 12px 16px; color: var(--text-muted); font-size: 12px; }
+.history-card td { padding: 16px; border-top: 1px solid var(--border-glass); font-size: 14px; }
+.timestamp { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.path-cell { overflow-wrap: anywhere; color: var(--accent-secondary); }
+.pagination { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; }
+@media (max-width: 600px) {
+    .history-card { padding: 8px; }
+    .history-card table { min-width: 540px; }
+    .history-card td, .history-card th { padding: 12px; }
+    .pagination { gap: 12px; }
+}
