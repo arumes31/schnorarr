@@ -32,6 +32,10 @@ failure includes the source/destination error, last check, and shared-token help
 The active mode and deletion/conflict policy appear beside global controls.
 **Change policy** opens the settings section. Enabling automatic synchronization,
 automatic deletion approval, or sender override requires a review of its scope.
+Mode and conflict choices use segmented controls; deletion approval uses a switch.
+An animated packet travels from source to destination during live transfers. It
+pauses when updates are stale or the connection is offscreen; reduced-motion
+users see a static highlighted arrow.
 **Bandwidth & quiet hours** configures transfer limits; the live effective limit
 also appears beside Speed. **Appearance** contains themes shared with History.
 

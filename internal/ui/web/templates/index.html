@@ -146,6 +146,9 @@
                 </div>
                 <div class="path-box">
                     <div class="engine-path"><span class="path-label">Source</span><span class="path-value">{{.Source}}</span><button type="button" class="copy-btn" onclick="copyToClipboard('{{.Source}}', this)" aria-label="Copy source path for {{.Alias}}">Copy</button></div>
+                    <div id="flow-{{.ID}}" class="endpoint-flow" data-active="{{and (gt .CurrentPercent 0.0) (not .IsPaused) (not .StorageBlocked) (not .WaitingForApproval)}}" data-visible="false" aria-hidden="true">
+                        <svg viewBox="0 0 64 16" fill="none"><path class="endpoint-flow-track" d="M4 8H58M52 3L58 8L52 13"/><circle cx="4" cy="8" r="3" fill="currentColor"/><circle class="endpoint-flow-packet" cx="4" cy="8" r="3" fill="currentColor"/></svg>
+                    </div>
                     <div class="engine-path"><span class="path-label">Destination</span><span class="path-value">{{.Target}}</span><button type="button" class="copy-btn" onclick="copyToClipboard('{{.Target}}', this)" aria-label="Copy destination path for {{.Alias}}">Copy</button></div>
                 </div>
                 <div id="engine-progress-container-{{.ID}}" {{if not (gt .CurrentPercent 0.0)}}hidden{{end}}>
@@ -237,22 +240,27 @@
             <h3 id="sync-policy-title">Sync policy</h3>
             <p class="helper-text">Applies to all engines. Changes save immediately after any required review.</p>
             <div class="sync-preferences">
-                <div><label for="sync-mode-switch">Sync mode</label>
-                    <select id="sync-mode-switch" data-val="{{.SyncMode}}" onchange="cycleSyncMode()" aria-describedby="sync-mode-help">
-                        <option value="dry" {{if eq .SyncMode "dry"}}selected{{end}}>Dry run</option>
-                        <option value="manual" {{if eq .SyncMode "manual"}}selected{{end}}>Manual</option>
-                        <option value="auto" {{if eq .SyncMode "auto"}}selected{{end}}>Automatic</option>
-                    </select>
+                <div><fieldset id="sync-mode-switch" class="policy-choice" data-val="{{.SyncMode}}" aria-describedby="sync-mode-help">
+                    <legend>Sync mode</legend>
+                    <div class="segmented-control">
+                        <label><input type="radio" name="sync-mode" value="dry" onchange="cycleSyncMode(this.value)" {{if eq .SyncMode "dry"}}checked{{end}} aria-label="Dry run"><span>Dry</span></label>
+                        <label><input type="radio" name="sync-mode" value="manual" onchange="cycleSyncMode(this.value)" {{if eq .SyncMode "manual"}}checked{{end}} aria-label="Manual"><span>Man</span></label>
+                        <label><input type="radio" name="sync-mode" value="auto" onchange="cycleSyncMode(this.value)" {{if eq .SyncMode "auto"}}checked{{end}} aria-label="Automatic"><span>Auto</span></label>
+                    </div>
+                    </fieldset>
                     <p id="sync-mode-help" class="helper-text">Dry run checks changes without applying them. Manual waits for review. Automatic applies eligible changes as they are detected.</p>
                 </div>
-                <div><label class="setting-check" for="auto-approve-toggle"><input type="checkbox" id="auto-approve-toggle" data-val="{{.AutoApproveDeletions}}" onchange="updateAutoApprove(this)" {{if eq .AutoApproveDeletions "on"}}checked{{end}} aria-describedby="deletion-help">Auto-approve deletions</label>
+                <div><div class="policy-label">Safety controls</div>
+                    <label class="policy-toggle" for="auto-approve-toggle"><span>Auto-approve</span><span class="policy-toggle-control"><input type="checkbox" role="switch" id="auto-approve-toggle" data-val="{{.AutoApproveDeletions}}" onchange="updateAutoApprove(this)" {{if eq .AutoApproveDeletions "on"}}checked{{end}} aria-label="Auto-approve deletions" aria-describedby="deletion-help"><span class="policy-toggle-track" aria-hidden="true"></span></span></label>
                     <p id="deletion-help" class="helper-text">Allows eligible file deletions without a separate deletion approval. Receiver-only top-level directories are preserved; files missing from shared directories may be deleted.</p>
                 </div>
-                <div><label for="override-switch">Conflicting files</label>
-                    <select id="override-switch" data-val="{{if .SenderOverride}}override{{else}}ask{{end}}" onchange="cycleOverrideMode()" aria-describedby="override-help">
-                        <option value="ask" {{if not .SenderOverride}}selected{{end}}>Ask before overriding</option>
-                        <option value="override" {{if .SenderOverride}}selected{{end}}>Override with sender</option>
-                    </select>
+                <div><fieldset id="override-switch" class="policy-choice" data-val="{{if .SenderOverride}}override{{else}}ask{{end}}" aria-describedby="override-help">
+                    <legend>Conflicts</legend>
+                    <div class="segmented-control">
+                        <label><input type="radio" name="conflict-mode" value="ask" onchange="cycleOverrideMode(this.value)" {{if not .SenderOverride}}checked{{end}} aria-label="Ask before overriding"><span>Ask</span></label>
+                        <label><input type="radio" name="conflict-mode" value="override" onchange="cycleOverrideMode(this.value)" {{if .SenderOverride}}checked{{end}} aria-label="Override with sender"><span>Override</span></label>
+                    </div>
+                    </fieldset>
                     <p id="override-help" class="helper-text">Sender override lets the source replace conflicting destination files. Dry run still makes no file changes.</p>
                 </div>
             </div>

@@ -265,6 +265,11 @@ function updateSpeedSparkline(speedStr) {
     drawSparkline('speed-sparkline', history, 'var(--accent-primary)', 10 * 1024 * 1024);
 }
 
+function updateEndpointFlow(eng) {
+    const flow = document.getElementById(`flow-${eng.id}`);
+    if (flow) flow.dataset.active = String(Boolean(eng.is_active && !eng.is_paused && !eng.storage_blocked && !eng.is_waiting_approval));
+}
+
 function updateProgress(data) {
     if (data.state) {
         const badge = document.getElementById('main-status-badge');
@@ -327,6 +332,7 @@ function updateProgress(data) {
     if (data.engines) {
         data.engines.forEach(eng => {
             updateStorageStatus(eng);
+            updateEndpointFlow(eng);
             const card = document.getElementById(`engine-card-${eng.id}`);
             if (card) card.dataset.state = eng.storage_blocked ? 'STORAGE WAIT' : eng.is_waiting_approval ? 'WAITING_APPROVAL' : eng.is_active ? 'SYNCING' : eng.is_paused ? 'PAUSED' : 'ACTIVE';
             const preview = document.getElementById(`engine-preview-${eng.id}`);
@@ -591,6 +597,10 @@ function refreshPolicySummary() {
         label.textContent = verb + (scope === 'all' ? ' all' : scope === 'selected' ? ' selected' : '');
     });
 }
+function setPolicySelection(control, value) {
+    if (control.id === 'auto-approve-toggle') control.checked = value === 'on';
+    else control.querySelectorAll('input[type="radio"]').forEach(input => input.checked = input.value === value);
+}
 function updatePolicyFromServer(data) {
     if (policyPending) return;
     const fields = [
@@ -602,8 +612,7 @@ function updatePolicyFromServer(data) {
         const control = document.getElementById(id);
         if (!control || value === undefined) return;
         control.setAttribute('data-val', value);
-        if (id === 'auto-approve-toggle') control.checked = value === 'on';
-        else control.value = value;
+        setPolicySelection(control, value);
     });
     refreshPolicySummary();
 }
@@ -624,7 +633,7 @@ async function savePolicy(control, next, endpoint, field, value, review) {
     const current = control.getAttribute('data-val');
     policyPending = true;
     control.disabled = true;
-    const policyControls = document.querySelectorAll('#sync-policy input, #sync-policy select');
+    const policyControls = document.querySelectorAll('#sync-policy input');
     policyControls.forEach(field => field.disabled = true);
     try {
         if (review && !(await confirmPolicyChange(...review))) return;
@@ -638,19 +647,17 @@ async function savePolicy(control, next, endpoint, field, value, review) {
         toast(`Policy was not saved: ${error.message}`, 'error');
     } finally {
         const saved = control.getAttribute('data-val') || current;
-        if (control.id === 'auto-approve-toggle') control.checked = saved === 'on';
-        else control.value = saved;
+        setPolicySelection(control, saved);
         control.disabled = false;
         policyControls.forEach(field => field.disabled = false);
         policyPending = false;
         refreshPolicySummary();
-        if (review) control.focus();
+        if (review || document.activeElement === document.body) (control.querySelector('input:checked') || control).focus();
     }
 }
-async function cycleSyncMode() {
+async function cycleSyncMode(next) {
     const el = document.getElementById('sync-mode-switch');
     if (!el) return;
-    const next = el.value;
     const policy = syncPolicy();
     const review = next === 'auto' ? ['Enable automatic synchronization?',
         `All engines can apply eligible changes when detected. Deletions ${policy.deletions ? 'are auto-approved' : 'require approval'}; conflicts ${policy.override ? 'use the sender version' : 'require review'}. Receiver-only top-level directories are preserved.`,
@@ -664,10 +671,9 @@ async function updateAutoApprove(checkbox) {
         'Enable auto-approval'] : null;
     await savePolicy(checkbox, next, '/settings/auto-approve', 'auto_approve', next, review);
 }
-async function cycleOverrideMode() {
+async function cycleOverrideMode(next) {
     const el = document.getElementById('override-switch');
     if (!el) return;
-    const next = el.value;
     const review = next === 'override' ? ['Use the sender version for conflicts?',
         'Applies to all engines. Conflicting destination files may be replaced by their source versions when changes are applied. Dry run still changes no files.',
         'Enable sender override'] : null;
@@ -1130,6 +1136,18 @@ function addHistoryItem(data) {
 document.addEventListener('DOMContentLoaded', () => {
     refreshPolicySummary();
     updateAttentionCount();
+    const flows = document.querySelectorAll('.endpoint-flow');
+    if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver(entries => {
+            entries.forEach(entry => entry.target.dataset.visible = String(entry.isIntersecting));
+        });
+        flows.forEach(flow => observer.observe(flow));
+    } else {
+        flows.forEach(flow => flow.dataset.visible = 'true');
+    }
+    const updatePageVisibility = () => document.documentElement.dataset.pageHidden = String(document.hidden);
+    updatePageVisibility();
+    document.addEventListener('visibilitychange', updatePageVisibility);
     const grid = document.querySelector('.engine-grid');
     if (grid) {
         const rank = card => engineNeedsAttention(card) ? 0 : card.dataset.state === 'SYNCING' ? 1 : card.dataset.state === 'PAUSED' ? 3 : 2;

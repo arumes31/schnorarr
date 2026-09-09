@@ -14,6 +14,8 @@ function dashboard(fetch = async () => ({ ok: false, status: 503, statusText: 'S
             classList: { add() {}, remove() {}, toggle() {} },
             setAttribute(name, value) { this[name] = value; },
             getAttribute(name) { return this[name]; },
+            querySelectorAll() { return this.children; },
+            querySelector() { return this.children.find(child => child.checked) || null; },
             addEventListener(name, callback) { this.handlers[name] = callback; },
             appendChild(child) { this.children.push(child); },
             append(...children) { this.children.push(...children); },
@@ -143,11 +145,39 @@ test('failed policy save retains the confirmed mode and summary', async () => {
     const {context, element} = dashboard();
     context.confirmPolicyChange = async () => true;
     element('sync-mode-switch').setAttribute('data-val', 'dry');
-    element('sync-mode-switch').value = 'auto';
-    await context.cycleSyncMode();
-    assert.equal(element('sync-mode-switch').value, 'dry');
+    const dry = element('mode-dry'); dry.value = 'dry'; dry.checked = false;
+    const auto = element('mode-auto'); auto.value = 'auto'; auto.checked = true;
+    element('sync-mode-switch').children = [dry, auto];
+    await context.cycleSyncMode('auto');
+    assert.equal(dry.checked, true);
+    assert.equal(auto.checked, false);
     assert.equal(element('sync-mode-switch').getAttribute('data-val'), 'dry');
     assert.equal(element('current-mode').textContent, 'Dry run');
+});
+
+test('server policy updates select the matching segment without a request', () => {
+    const {context, element} = dashboard(() => { throw new Error('Unexpected policy write'); });
+    const ask = element('conflict-ask'); ask.value = 'ask'; ask.checked = true;
+    const override = element('conflict-override'); override.value = 'override'; override.checked = false;
+    element('override-switch').children = [ask, override];
+    context.updatePolicyFromServer({sender_override: true});
+    assert.equal(ask.checked, false);
+    assert.equal(override.checked, true);
+});
+
+test('endpoint motion follows transferring, paused, blocked, and idle states', () => {
+    const {context, element} = dashboard();
+    const cases = [
+        {is_active: true, expected: 'true'},
+        {is_active: true, is_paused: true, expected: 'false'},
+        {is_active: true, storage_blocked: true, expected: 'false'},
+        {is_active: true, is_waiting_approval: true, expected: 'false'},
+        {is_active: false, expected: 'false'},
+    ];
+    for (const state of cases) {
+        context.updateEndpointFlow({id: '1', ...state});
+        assert.equal(element('flow-1').dataset.active, state.expected);
+    }
 });
 
 test('storage recovery clears the visible failure without inventing an unchecked timestamp', () => {
