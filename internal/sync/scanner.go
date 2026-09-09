@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"schnorarr/internal/storage"
 	"strings"
 	"sync"
 	"time"
@@ -175,6 +176,9 @@ func (s *Scanner) ScanLocal(root string) (*Manifest, error) {
 
 // shouldExclude checks if a path matches any exclusion pattern
 func (s *Scanner) shouldExclude(path string) bool {
+	if storage.Reserved(path) {
+		return true
+	}
 	for _, pattern := range s.ExcludePatterns {
 		if matched, _ := filepath.Match(pattern, filepath.Base(path)); matched {
 			return true

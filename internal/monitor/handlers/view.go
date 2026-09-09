@@ -87,6 +87,9 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			if engine.IsWaitingForApproval() {
 				engineViews[len(engineViews)-1].State = "WAITING_APPROVAL"
 			}
+			if engine.IsStorageBlocked() && !engine.IsPaused() {
+				engineViews[len(engineViews)-1].State = "STORAGE WAIT"
+			}
 		}
 
 		traffic := database.GetTrafficStats()
@@ -134,8 +137,8 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			CurrentSpeed: currentSpeed, ETA: eta, SyncMode: database.GetSetting("sync_mode", "dry"), AutoApproveDeletions: database.GetSetting("auto_approve", "off"),
 			Engines: engineViews, ReceiverHealthy: h_rec,
 			ReceiverVersion: rVer, ReceiverUptime: rUp, SenderOverride: h.healthState.IsOverrideEnabled(),
-			Timestamp: time.Now().Unix(),
-			IsSender:  os.Getenv("MODE") == "sender",
+			Timestamp:   time.Now().Unix(),
+			IsSender:    os.Getenv("MODE") == "sender",
 			BwlimitMbps: bwlimitMbps, SchedulerEnabled: h.config.SchedulerEnabled,
 			QuietStart: h.config.QuietStart, QuietEnd: h.config.QuietEnd,
 			QuietLimit: h.config.QuietLimit, NormalLimit: h.config.NormalLimit,

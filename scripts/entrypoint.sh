@@ -65,12 +65,8 @@ elif [ "$MODE" = "sender" ]; then
         exit 1
     fi
 
-    # Wait for receiver to be ready
-    echo "Waiting for receiver $DEST_HOST:873..."
-    while ! nc -z "$DEST_HOST" 873; do
-        echo "Receiver not ready, sleeping 5s..."
-        sleep 5
-    done
+    # Keep the dashboard available for shared-token setup. Each engine waits
+    # for its source and receiver token files before starting sync work.
 
     # Start Monitor with embedded sync engine
     # The monitor binary now includes the custom sync engine

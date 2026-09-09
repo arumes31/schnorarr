@@ -620,6 +620,60 @@ body {
     border-color: rgba(255, 255, 255, 0.3);
 }
 
+.shared-token-button { min-height: 40px; align-self: flex-start; padding: 8px 12px; gap: 8px; }
+.shared-token-dialog {
+    box-sizing: border-box;
+    margin: 0;
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    padding: 28px;
+    color: var(--text-main);
+    background: var(--bg-modal);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    overflow-y: auto;
+}
+.shared-token-dialog::backdrop { background: rgba(0, 0, 0, 0.72); }
+.shared-token-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.shared-token-heading h2 { font-size: 22px; line-height: 1.25; margin: 0; }
+.shared-token-close { flex-shrink: 0; width: 40px; height: 40px; }
+.shared-token-dialog p { line-height: 1.6; font-size: 14px; }
+#shared-token-intro, .shared-token-help { color: var(--text-muted); }
+#shared-token-status { color: var(--accent-primary); min-height: 22px; margin: 16px 0; }
+#shared-token-status[data-error="true"] { color: var(--accent-error); }
+.shared-token-dialog label { display: block; font-size: 13px; margin-bottom: 8px; }
+#shared-token-value {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 78px;
+    padding: 12px;
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    background: var(--bg-deep);
+    color: var(--text-main);
+    font: 14px/1.7 'JetBrains Mono', monospace;
+    overflow-wrap: anywhere;
+    resize: none;
+}
+.shared-token-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.shared-token-actions .ctrl-btn { min-height: 44px; padding: 10px 16px; font-size: 13px; }
+.shared-token-download { color: var(--accent-primary); }
+.shared-token-dialog h3 { font-size: 16px; margin: 28px 0 8px; }
+.shared-token-filename { margin: 0 0 18px; overflow-wrap: anywhere; }
+.shared-token-folders { margin: 0; }
+.shared-token-folders dt { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+.shared-token-folders dd { font: 13px/1.6 'JetBrains Mono', monospace; margin: 0 0 16px; overflow-wrap: anywhere; }
+.shared-token-dialog :focus-visible, .shared-token-button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 3px; }
+@media (max-width: 600px) {
+    .shared-token-dialog { padding: 20px; }
+    .shared-token-heading h2 { font-size: 20px; }
+    .shared-token-actions .ctrl-btn { flex: 1; }
+}
+
 /* Terminal */
 .terminal-window {
     background: var(--bg-terminal);
@@ -649,7 +703,6 @@ body {
     font-size: 13px;
     color: var(--text-terminal);
     position: relative;
-    animation: flicker 0.15s infinite;
     white-space: pre-wrap;
     word-break: break-all;
 }
@@ -690,20 +743,6 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--accent-secondary);
-}
-
-@keyframes flicker {
-    0% {
-        opacity: 0.97;
-    }
-
-    10% {
-        opacity: 0.9;
-    }
-
-    100% {
-        opacity: 1;
-    }
 }
 
 .terminal-window.fullscreen {

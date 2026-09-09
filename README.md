@@ -89,6 +89,57 @@ services:
 
 ## 🔄 Sync Capabilities & Rules
 
+### SMB / network share readiness
+
+Each engine has a **Shared token** button. Its popup shows a persistent token,
+the source and destination folders, and **Copy token** / **Download token file**
+controls. No storage environment variables are required.
+
+1. Open **Shared token** on the engine.
+2. Download `.schnorarr-shared-token`, or create a plain text file with that
+   exact name and paste only the displayed token into it. A trailing newline
+   is allowed; do not add `.txt` to the filename.
+3. Place the same file directly in this engine's **source folder** and
+   **destination folder**, on their connected shares. For example, a movies
+   engine needs the file inside each movies folder, not just the share root.
+
+Schnorarr never creates these files on a share automatically: doing so could
+make an unmounted local directory look valid. Both files must match the engine's
+token. Token files and temporary probes are excluded from synchronization and
+protected from deletion. Each independently mounted sync folder needs its file.
+
+The dashboard remains available before setup. Engines show **STORAGE WAIT** and
+wait for their token files at startup. Once an update is found, storage is
+checked immediately before each new copy, after waiting for a transfer slot,
+and before retries. Renames, deletions, and directory creation are guarded too.
+The sender checks read access; the destination also performs a temporary
+write/flush/remove probe. The receiver remembers verified folder/token pairs
+in `/config/storage-tokens.json`, checks known folders at startup, and uses
+those expected tokens to independently guard each rsync transfer.
+
+Failed checks stop the current plan. Pending work retries on the existing
+`POLL_INTERVAL` and rescans after recovery; storage failures do not enter the
+one-hour per-file retry delay. Failed destination scans abort both previews
+and syncs instead of pretending the destination is empty.
+
+There is **no Docker healthcheck or idle storage probe**. `/health` remains
+a liveness endpoint. `/api/storage-ready` verifies a specific folder on demand;
+the sender sends the expected token in a header. The rsync hook uses
+`monitor --check-storage` to check its transfer path without opening the database.
+A probe has a five-second caller deadline; an SMB kernel call
+may take longer to unwind, and the process permits only one outstanding probe.
+These checks gate new work, not a transfer already in progress, and cannot
+make the check and subsequent filesystem operation atomic. A sender marker
+read can also be served from the SMB client's cache.
+
+Tokens survive restarts in the sender's `/config/history.db`. Keep the config
+volume; replacing it generates new tokens and requires updating the folder
+files. Both sender and receiver must run the updated version.
+
+This replaces `.schnorarr-share-id` and the previous `STORAGE_N_PATH` /
+`STORAGE_N_ID` variables. Old markers no longer satisfy readiness checks; use
+the token from the engine popup in the new filename instead.
+
 Schnorarr uses a **Smart Sync** strategy designed specifically for media libraries, minimizing the risk of accidental data loss.
 
 ### The "Smart Deletion" Logic

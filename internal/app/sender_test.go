@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,32 +23,20 @@ func TestStartSyncEngines_LoopCapture(t *testing.T) {
 	}
 
 	// Setup Env
-	_ = os.Setenv("SYNC_1_SOURCE", src1)
-	_ = os.Setenv("SYNC_1_TARGET", "/tmp/tgt1")
-	_ = os.Setenv("SYNC_1_RULE", "flat")
+	t.Setenv("DEST_HOST", "")
+	t.Setenv("SYNC_1_SOURCE", src1)
+	t.Setenv("SYNC_1_TARGET", t.TempDir())
+	t.Setenv("SYNC_1_RULE", "flat")
 
-	_ = os.Setenv("SYNC_2_SOURCE", src2)
-	_ = os.Setenv("SYNC_2_TARGET", "/tmp/tgt2")
-	_ = os.Setenv("SYNC_2_RULE", "series")
-
-	defer os.Clearenv() // Clean up all envs
-	// Restoring original envs might be better but Clearenv is safe for test process isolation usually.
-	// Actually, careful with Clearenv if other tests run in parallel.
-	// But defer os.Unsetenv is safer.
-	defer func() {
-		_ = os.Unsetenv("SYNC_1_SOURCE")
-		_ = os.Unsetenv("SYNC_1_TARGET")
-		_ = os.Unsetenv("SYNC_1_RULE")
-		_ = os.Unsetenv("SYNC_2_SOURCE")
-		_ = os.Unsetenv("SYNC_2_TARGET")
-		_ = os.Unsetenv("SYNC_2_RULE")
-	}()
+	t.Setenv("SYNC_2_SOURCE", src2)
+	t.Setenv("SYNC_2_TARGET", t.TempDir())
+	t.Setenv("SYNC_2_RULE", "series")
 
 	// Mock health state
 	healthState := &health.State{}
 
 	// We pass nil for wsHub, notifier and bwManager as they are only used in callbacks
-	engines := startSyncEngines(nil, healthState, nil, nil)
+	engines := startSyncEngines(nil, healthState, nil, nil, func(id string) (string, error) { return strings.Repeat(id, 64), nil })
 
 	// Cleanup engines (stop watchers)
 	defer func() {

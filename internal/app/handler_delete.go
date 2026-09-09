@@ -1,11 +1,11 @@
 package app
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
+	"schnorarr/internal/storage"
 )
 
 // DeleteHandler handles requests to delete files or directories
@@ -23,31 +23,27 @@ func (a *App) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	isDir := r.URL.Query().Get("dir") == "true"
 
-	rootDir := os.Getenv("SOURCE_DIR")
-	if rootDir == "" {
-		rootDir = "/data"
+	if a.Storage == nil {
+		http.Error(w, "storage readiness is not configured", http.StatusServiceUnavailable)
+		return
 	}
-
-	// Sanitize path to prevent traversal
-	cleanPath := filepath.Clean(queryPath)
-	if strings.Contains(cleanPath, "..") {
+	if storage.Reserved(queryPath) {
+		http.Error(w, "storage markers and share roots are protected", http.StatusForbidden)
+		return
+	}
+	fullPath, pathErr := a.Storage.Resolve(queryPath)
+	if pathErr != nil {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-
-	fullPath := filepath.Join(rootDir, cleanPath)
-
-	// Heuristic for module mapping (same as ManifestHandler)
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		parts := strings.SplitN(cleanPath, "/", 2)
-		if len(parts) > 1 {
-			fullPath = filepath.Join(rootDir, parts[1])
-		} else {
-			fullPath = rootDir
+	if err := a.Storage.CheckTarget(r.Context(), queryPath, true); err != nil {
+		status := http.StatusServiceUnavailable
+		if errors.Is(err, storage.ErrProtected) {
+			status = http.StatusForbidden
 		}
+		http.Error(w, err.Error(), status)
+		return
 	}
-
-	log.Printf("[DeleteHandler] Request to delete %s (isDir=%v) resolved to %s", queryPath, isDir, fullPath)
 
 	var err error
 	if isDir {

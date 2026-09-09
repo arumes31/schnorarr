@@ -12,6 +12,7 @@ import (
 
 	"schnorarr/internal/monitor/database"
 	"schnorarr/internal/monitor/health"
+	"schnorarr/internal/storage"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -58,7 +59,8 @@ type Engine struct {
 	deletionAllowed    bool
 
 	// Retry Delay
-	failedFiles map[string]time.Time
+	failedFiles    map[string]time.Time
+	storageBlocked bool
 }
 
 // NewEngine creates a new sync engine
@@ -68,16 +70,18 @@ func NewEngine(config SyncConfig) *Engine {
 	scanner.IncludePatterns = config.IncludePatterns
 
 	e := &Engine{
-		config:       config,
-		scanner:      scanner,
-		stopCh:       make(chan struct{}),
-		alias:        database.GetSetting("alias_"+config.ID, "Engine #"+config.ID),
-		speedHistory: make([]int64, 60),
-		failedFiles:  make(map[string]time.Time),
+		config:         config,
+		scanner:        scanner,
+		stopCh:         make(chan struct{}),
+		alias:          database.GetSetting("alias_"+config.ID, "Engine #"+config.ID),
+		speedHistory:   make([]int64, 60),
+		failedFiles:    make(map[string]time.Time),
+		storageBlocked: config.CheckStorage != nil,
 	}
 
 	transferer := NewTransferer(TransferOptions{
 		BandwidthLimit: config.BandwidthLimit,
+		CheckStorage:   e.checkStorage,
 		CheckPaused: func() bool {
 			return e.IsPaused()
 		},
@@ -220,10 +224,32 @@ func (e *Engine) Start() error {
 		return fmt.Errorf("failed to create watcher: %w", err)
 	}
 	e.watcher = watcher
-	if err := e.addWatchRecursive(e.config.SourceDir); err != nil {
-		return fmt.Errorf("failed to add watches: %w", err)
+	go e.startWhenReady()
+	log.Printf("Sync engine started: %s -> %s", e.config.SourceDir, e.config.TargetDir)
+	return nil
+}
+
+func (e *Engine) startWhenReady() {
+	for {
+		select {
+		case <-e.stopCh:
+			return
+		default:
+		}
+		err := e.checkStorage()
+		if err == nil {
+			err = e.addWatchRecursive(e.config.SourceDir)
+		}
+		if err == nil {
+			break
+		}
+		log.Printf("[%s] Waiting for storage at startup: %v", e.config.ID, err)
+		select {
+		case <-e.stopCh:
+			return
+		case <-time.After(5 * time.Second):
+		}
 	}
-	go func() { _ = e.RunSync(nil) }()
 	go e.watchLoop()
 	if e.config.WatchInterval > 0 {
 		go e.periodicSyncLoop()
@@ -232,8 +258,22 @@ func (e *Engine) Start() error {
 		go e.sourcePollLoop()
 	}
 	go e.failedRetryLoop()
-	log.Printf("Sync engine started: %s -> %s", e.config.SourceDir, e.config.TargetDir)
-	return nil
+	_ = e.RunSync(nil)
+}
+
+func (e *Engine) checkStorage() error {
+	if e.config.CheckStorage == nil {
+		return nil
+	}
+	err := e.config.CheckStorage()
+	e.pausedMu.Lock()
+	e.storageBlocked = err != nil
+	e.pausedMu.Unlock()
+	if err != nil {
+		err = fmt.Errorf("%w: %w", storage.ErrUnavailable, err)
+		database.ReportEngineError(e.config.ID, err.Error())
+	}
+	return err
 }
 
 func (e *Engine) Stop() {
@@ -268,7 +308,7 @@ func (e *Engine) PreviewSync() (*SyncPlan, error) {
 	targetManifest, err := e.scanner.ScanLocal(e.config.TargetDir)
 	ReleaseScanLock()
 	if err != nil {
-		targetManifest = NewManifest(e.config.TargetDir)
+		return nil, fmt.Errorf("failed to scan destination: %w", err)
 	}
 
 	plan := CompareManifests(sourceManifest, targetManifest, e.config.Rule, e.IsRemoteScan())
@@ -309,6 +349,16 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	}()
 
 	start := time.Now()
+	e.pausedMu.RLock()
+	blocked := e.storageBlocked
+	e.pausedMu.RUnlock()
+	if blocked {
+		if err := e.checkStorage(); err != nil {
+			return err
+		}
+		// Discard queued snapshots after a storage outage.
+		sourceManifest = nil
+	}
 	if sourceManifest == nil {
 		AcquireScanLock()
 		e.pausedMu.Lock()
@@ -329,7 +379,7 @@ func (e *Engine) RunSync(sourceManifest *Manifest) error {
 	targetManifest, err := e.scanner.ScanLocal(e.config.TargetDir)
 	ReleaseScanLock()
 	if err != nil {
-		targetManifest = NewManifest(e.config.TargetDir)
+		return fmt.Errorf("failed to scan destination: %w", err)
 	}
 
 	plan := CompareManifests(sourceManifest, targetManifest, e.config.Rule, e.IsRemoteScan())
@@ -552,6 +602,9 @@ func (e *Engine) watchLoop() {
 			if !ok {
 				return
 			}
+			if storage.Reserved(event.Name) {
+				continue
+			}
 			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
 				continue
 			}
@@ -578,6 +631,13 @@ func (e *Engine) sourcePollLoop() {
 			return
 		case <-ticker.C:
 			if e.IsPaused() {
+				continue
+			}
+			e.pausedMu.RLock()
+			blocked := e.storageBlocked
+			e.pausedMu.RUnlock()
+			if blocked {
+				_ = e.RunSync(nil)
 				continue
 			}
 			AcquireScanLock()
@@ -728,6 +788,9 @@ func (e *Engine) GetStatus() string {
 	e.pausedMu.RLock()
 	defer e.pausedMu.RUnlock()
 	status := "Running"
+	if e.storageBlocked {
+		status = "Waiting for shared token files"
+	}
 	if e.paused {
 		status = "Paused"
 	}
@@ -768,6 +831,12 @@ func (e *Engine) GetAlias() string {
 	e.pausedMu.RLock()
 	defer e.pausedMu.RUnlock()
 	return e.alias
+}
+
+func (e *Engine) IsStorageBlocked() bool {
+	e.pausedMu.RLock()
+	defer e.pausedMu.RUnlock()
+	return e.storageBlocked
 }
 func (e *Engine) SetAlias(alias string) {
 	e.pausedMu.Lock()

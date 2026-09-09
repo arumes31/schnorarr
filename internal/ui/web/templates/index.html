@@ -248,6 +248,7 @@
                         {{if .WaitingForApproval}}{{$engClass = "pill-waiting"}}
                         {{else if (gt .CurrentPercent 0.0)}}{{$engClass = "pill-syncing"}}
                         {{else if eq .State "ACTIVE"}}{{$engClass = "pill-active"}}
+                        {{else if eq .State "STORAGE WAIT"}}{{$engClass = "pill-waiting"}}
                         {{else if eq .State "PAUSED"}}{{$engClass = "pill-paused"}}{{end}}
                         <span id="engine-status-{{.ID}}" class="status-pill {{$engClass}}">
                             {{if (gt .CurrentPercent 0.0)}}SYNCING{{else}}{{.State}}{{end}}
@@ -336,6 +337,11 @@
                         onclick="engineAction('{{.ID}}', '{{if .IsPaused}}resume{{else}}pause{{end}}')"
                         class="ctrl-btn">{{if .IsPaused}}▶️ Resume{{else}}⏸️ Pause{{end}}</button>{{end}}
                 </div>
+                <button type="button" class="ctrl-btn shared-token-button" onclick="showSharedToken('{{.ID}}', this)"
+                    aria-haspopup="dialog" aria-controls="shared-token-modal">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 3-3m-6 0 3-3"/></svg>
+                    Shared token
+                </button>
             </div>
             {{end}}
         </section>
@@ -537,6 +543,33 @@
             </div>
         </div>
     </div>
+
+    <dialog id="shared-token-modal" class="shared-token-dialog" aria-labelledby="shared-token-title" aria-describedby="shared-token-intro">
+        <div class="shared-token-heading">
+            <h2 id="shared-token-title">Shared folder token</h2>
+            <button type="button" class="ctrl-btn shared-token-close" onclick="closeSharedToken()" aria-label="Close shared token dialog">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>
+            </button>
+        </div>
+        <p id="shared-token-intro">Place the same token file in this engine’s source and destination folders.</p>
+        <p id="shared-token-status" role="status" aria-live="polite">Loading token…</p>
+        <div id="shared-token-content" hidden>
+            <label for="shared-token-value">Token for <span id="shared-token-engine"></span></label>
+            <textarea id="shared-token-value" readonly rows="2" spellcheck="false"></textarea>
+            <div class="shared-token-actions">
+                <button type="button" class="ctrl-btn" onclick="copySharedToken()">Copy token</button>
+                <button type="button" class="ctrl-btn shared-token-download" onclick="downloadSharedToken()">Download token file</button>
+            </div>
+            <h3>Save in both folders</h3>
+            <p class="shared-token-filename">Filename: <code>.schnorarr-shared-token</code></p>
+            <dl class="shared-token-folders">
+                <dt>Source folder</dt><dd id="shared-token-source"></dd>
+                <dt>Destination folder</dt><dd id="shared-token-target"></dd>
+            </dl>
+            <p class="shared-token-help">Create the file on each connected share, directly in the folders above. Paste only the token into it, or use the downloaded file in both places.</p>
+            <p class="shared-token-help">Sync waits until both files match. The token stays the same after a restart.</p>
+        </div>
+    </dialog>
 
     <script>window.lastSystemError = "{{.LastErrorMsg}}";</script>
     <script src="/static/js/dashboard.js?v={{.Timestamp}}"></script>

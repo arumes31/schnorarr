@@ -37,6 +37,8 @@ type TransferOptions struct {
 	OnComplete func(path string, size int64, err error)
 	// CheckPaused returns true if the transfer should be interrupted
 	CheckPaused func() bool
+	// CheckStorage runs after acquiring a transfer slot and before every attempt.
+	CheckStorage func() error
 }
 
 // Transferer handles file transfer operations
@@ -66,6 +68,9 @@ func (t *Transferer) CopyFile(src, dst string) error {
 	}
 	pool.Acquire()
 	defer pool.Release()
+	if err := t.checkStorage(); err != nil {
+		return err
+	}
 
 	log.Printf("[Transferer] Copying %s -> %s", src, dst)
 
@@ -113,6 +118,9 @@ func (t *Transferer) CopyFile(src, dst string) error {
 			sleep := time.Duration(1<<uint(i)) * time.Second
 			log.Printf("[Transferer] Retry %d/%d for %s...", i, maxRetries, src)
 			time.Sleep(sleep)
+			if err := t.checkStorage(); err != nil {
+				return err
+			}
 
 			// Reset for retry
 			if _, err := srcFile.Seek(0, io.SeekStart); err != nil {
@@ -236,6 +244,9 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		}
 
 		log.Printf("[Transferer] Executing rsync: %s", strings.Join(args, " "))
+		if err := t.checkStorage(); err != nil {
+			return err
+		}
 		cmd := exec.Command("rsync", args...)
 		cmd.Env = os.Environ()
 		if pass := os.Getenv("RSYNC_PASSWORD"); pass != "" {
@@ -638,6 +649,16 @@ func (t *Transferer) CreateDir(path string) error {
 		return nil
 	}
 	return os.MkdirAll(path, 0755)
+}
+
+func (t *Transferer) checkStorage() error {
+	if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
+		return fmt.Errorf("transfer interrupted by pause")
+	}
+	if t.opts.CheckStorage != nil {
+		return t.opts.CheckStorage()
+	}
+	return nil
 }
 func (t *Transferer) DeleteFile(path string) error {
 	if strings.Contains(path, "::") || strings.HasPrefix(path, "rsync://") {

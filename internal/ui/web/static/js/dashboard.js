@@ -386,6 +386,10 @@ function updateProgress(data) {
                     statusPill.innerText = 'SYNCING';
                     statusPill.className = 'status-pill pill-syncing';
                 }
+                else if (eng.storage_blocked) {
+                    statusPill.innerText = 'STORAGE WAIT';
+                    statusPill.className = 'status-pill pill-waiting';
+                }
                 else {
                     statusPill.innerText = 'ACTIVE';
                     statusPill.className = 'status-pill pill-active';
@@ -739,6 +743,106 @@ async function showPreview(id, mode = 'preview') {
 }
 
 function closeModal() { const el = document.getElementById('modal-container'); if (el) el.style.display = 'none'; }
+
+let sharedTokenRequest = null;
+let sharedTokenOpener = null;
+let sharedTokenScroll = '';
+let sharedTokenScrollLocked = false;
+
+function positionSharedToken() {
+    const dialog = document.getElementById('shared-token-modal');
+    const viewport = window.visualViewport;
+    if (!dialog || !viewport) return;
+    dialog.style.left = `${viewport.offsetLeft + viewport.width / 2}px`;
+    dialog.style.top = `${viewport.offsetTop + viewport.height / 2}px`;
+    dialog.style.maxWidth = `${viewport.width - 32}px`;
+    dialog.style.maxHeight = `${viewport.height - 32}px`;
+}
+window.visualViewport?.addEventListener('resize', positionSharedToken);
+window.visualViewport?.addEventListener('scroll', positionSharedToken);
+
+async function showSharedToken(id, opener) {
+    const dialog = document.getElementById('shared-token-modal');
+    const content = document.getElementById('shared-token-content');
+    const status = document.getElementById('shared-token-status');
+    if (!dialog || !content || !status) return;
+    if (sharedTokenRequest) sharedTokenRequest.abort();
+    const request = new AbortController();
+    sharedTokenRequest = request;
+    sharedTokenOpener = opener;
+    content.hidden = true;
+    document.getElementById('shared-token-value').value = '';
+    status.textContent = 'Loading token…';
+    status.dataset.error = 'false';
+    if (!dialog.open) {
+        if (!sharedTokenScrollLocked) {
+            sharedTokenScroll = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            sharedTokenScrollLocked = true;
+        }
+        positionSharedToken();
+        dialog.showModal();
+    }
+    const timeout = setTimeout(() => request.abort(), 10000);
+    try {
+        const response = await fetch(`/api/engine/${encodeURIComponent(id)}/shared-token`, { signal: request.signal, cache: 'no-store' });
+        if (!response.ok || response.redirected) throw new Error('Token unavailable');
+        const data = await response.json();
+        if (!/^[a-f0-9]{64}$/.test(data.token)) throw new Error('Invalid token');
+        if (sharedTokenRequest !== request || !dialog.open) return;
+        document.getElementById('shared-token-value').value = data.token;
+        document.getElementById('shared-token-engine').textContent = data.engine;
+        document.getElementById('shared-token-source').textContent = data.source;
+        document.getElementById('shared-token-target').textContent = data.target;
+        content.hidden = false;
+        status.textContent = 'Use this token in both folders.';
+    } catch (error) {
+        if (sharedTokenRequest !== request || !dialog.open) return;
+        status.dataset.error = 'true';
+        status.textContent = 'Couldn’t load the token. Close this dialog and try again. If your session expired, sign in first.';
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function closeSharedToken() { document.getElementById('shared-token-modal')?.close(); }
+
+async function copySharedToken() {
+    const field = document.getElementById('shared-token-value');
+    const status = document.getElementById('shared-token-status');
+    if (!field?.value) return;
+    try {
+        await navigator.clipboard.writeText(field.value);
+        status.textContent = 'Token copied.';
+    } catch {
+        field.focus();
+        field.select();
+        status.textContent = 'Token selected. Use your browser’s Copy command.';
+    }
+}
+
+function downloadSharedToken() {
+    const token = document.getElementById('shared-token-value')?.value;
+    if (!token) return;
+    const url = URL.createObjectURL(new Blob([token + '\n'], { type: 'text/plain' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '.schnorarr-shared-token';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    document.getElementById('shared-token-status').textContent = 'Save the downloaded file in both folders.';
+}
+
+document.getElementById('shared-token-modal')?.addEventListener('close', () => {
+    if (document.getElementById('shared-token-modal').open) return;
+    sharedTokenRequest?.abort();
+    sharedTokenRequest = null;
+    document.body.style.overflow = sharedTokenScroll;
+    sharedTokenScrollLocked = false;
+    sharedTokenOpener?.focus({ preventScroll: true });
+});
 
 async function confirmSyncFromPreview() {
     if (!currentPreviewId) return;

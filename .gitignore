@@ -61,3 +61,5 @@ graphify-out/
 
 # Local design docs - never committed
 docs/
+.impeccable/
+PRODUCT.md

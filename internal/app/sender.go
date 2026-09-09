@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,13 +17,14 @@ import (
 	"schnorarr/internal/monitor/health"
 	"schnorarr/internal/monitor/notification"
 	"schnorarr/internal/monitor/websocket"
+	"schnorarr/internal/storage"
 	"schnorarr/internal/sync"
 )
 
 func (a *App) startSenderServices() {
 	// Shared latency variable
 	var latency int64
-	engines := startSyncEngines(a.WSHub, a.HealthState, a.Notifier, a.BWManager)
+	engines := startSyncEngines(a.WSHub, a.HealthState, a.Notifier, a.BWManager, database.EngineStorageToken)
 
 	a.engineMu.Lock()
 	a.SyncEngines = engines
@@ -31,7 +34,7 @@ func (a *App) startSenderServices() {
 	go checkReceiverHealth(a.HealthState, engines, &latency)
 }
 
-func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier *notification.Service, bwManager *sync.BandwidthManager) []*sync.Engine {
+func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier *notification.Service, bwManager *sync.BandwidthManager, tokenForEngine func(string) (string, error)) []*sync.Engine {
 	var engines []*sync.Engine
 	for i := 1; i <= 10; i++ {
 		id := strconv.Itoa(i) // Capture loop variable
@@ -93,8 +96,39 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			}
 		}
 
+		token, err := tokenForEngine(id)
+		if err != nil {
+			fmt.Printf("Failed to load engine %s shared token: %v\n", id, err)
+			continue
+		}
+		shares := []storage.Share{{Path: src, ID: token}}
+		host, remotePath := sync.ParseRemoteDestination(resolvedTgt)
+		storageChecker, err := storage.New(shares, false)
+		if err != nil {
+			fmt.Printf("Failed to configure engine %s storage: %v\n", id, err)
+			continue
+		}
+		var localTarget *storage.Checker
+		if host == "" {
+			localTarget, err = storage.New([]storage.Share{{Path: resolvedTgt, ID: token}}, true)
+			if err != nil {
+				fmt.Printf("Failed to configure engine %s destination: %v\n", id, err)
+				continue
+			}
+		}
+		checkStorage := func() error {
+			if err := storageChecker.Check(context.Background()); err != nil {
+				return err
+			}
+			if host != "" {
+				return storage.CheckRemote(context.Background(), fmt.Sprintf("http://%s:8080/api/storage-ready?path=%s", host, url.QueryEscape(remotePath)), token)
+			}
+			return localTarget.Check(context.Background())
+		}
 		engine := sync.NewEngine(sync.SyncConfig{
-			ID: id, SourceDir: src, TargetDir: resolvedTgt, Rule: rule,
+			SharedToken:  token,
+			CheckStorage: checkStorage,
+			ID:           id, SourceDir: src, TargetDir: resolvedTgt, Rule: rule,
 			ExcludePatterns: []string{".git", ".DS_Store", "Thumbs.db"},
 			IncludePatterns: includePatterns,
 			BWManager:       bwManager,
@@ -111,13 +145,12 @@ func startSyncEngines(wsHub *websocket.Hub, healthState *health.State, notifier 
 			OnError: func(msg string) { healthState.ReportError(msg, notifier.Send) },
 		})
 
+		engine.SetHealthState(healthState)
+		if database.GetSetting("engine_paused_"+id, "false") == "true" {
+			engine.Pause()
+		}
 		if err := engine.Start(); err == nil {
-			engine.SetHealthState(healthState)
 			engines = append(engines, engine)
-			// Only pause if successfully started
-			if database.GetSetting("engine_paused_"+id, "false") == "true" {
-				engine.Pause()
-			}
 		} else {
 			fmt.Printf("Failed to start engine %s: %v\n", id, err)
 		}
@@ -151,6 +184,7 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 			LastSync          string  `json:"last_sync"`
 			IsRemoteScan      bool    `json:"is_remote_scan"`
 			IsWaitingApproval bool    `json:"is_waiting_approval"`
+			StorageBlocked    bool    `json:"storage_blocked"`
 		}
 		engineStats := make([]EngineProgress, 0)
 		for _, engine := range syncEngines {
@@ -198,6 +232,7 @@ func startSyncStatusBroadcaster(wsHub *websocket.Hub, syncEngines []*sync.Engine
 				ID: engine.GetConfig().ID, File: filepath.Base(file), Percent: percent, Speed: database.FormatBytes(speed) + "/s", Today: database.FormatBytes(stats.Today), Total: database.FormatBytes(stats.Total), IsActive: speed > 0, ETA: etaStr, QueueCount: queuedCount, IsScanning: engine.IsScanning(),
 				AvgSpeed: database.FormatBytes(avgSpeed) + "/s", Elapsed: elapsedStr, SpeedHistory: engine.GetSpeedHistory(), IsPaused: isPaused, LastSync: engine.GetLastSyncTime().Format(time.RFC3339), IsRemoteScan: engine.IsRemoteScan(),
 				IsWaitingApproval: engine.IsWaitingForApproval(),
+				StorageBlocked:    engine.IsStorageBlocked(),
 			})
 		}
 		state := "ACTIVE"
