@@ -40,6 +40,10 @@ type SyncConfig struct {
 	OnSyncEvent func(timestamp, action, path string, size int64)
 	// OnError callback for errors
 	OnError func(msg string)
+	// CheckStorage checks local and receiver storage at startup and before work.
+	CheckStorage func() error
+	// SharedToken is the persistent identity shown in the engine setup modal.
+	SharedToken string
 }
 
 // GetConfig returns the engine configuration
