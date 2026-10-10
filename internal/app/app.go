@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -15,8 +16,10 @@ import (
 	"schnorarr/internal/monitor/handlers"
 	"schnorarr/internal/monitor/health"
 	"schnorarr/internal/monitor/notification"
+	"schnorarr/internal/monitor/scheduler"
 	"schnorarr/internal/monitor/tailer"
 	ws "schnorarr/internal/monitor/websocket"
+	"schnorarr/internal/storage"
 	syncpkg "schnorarr/internal/sync"
 	"schnorarr/internal/ui"
 	"sync"
@@ -28,6 +31,8 @@ type App struct {
 	WSHub       *ws.Hub
 	Notifier    *notification.Service
 	SyncEngines []*syncpkg.Engine
+	BWManager   *syncpkg.BandwidthManager
+	Storage     *storage.Receiver
 	engineMu    sync.RWMutex
 }
 
@@ -36,9 +41,19 @@ func New() (*App, error) {
 	if err := database.Init(); err != nil {
 		return nil, fmt.Errorf("db init failed: %w", err)
 	}
+	initialBps := int64(0)
+	if cfg.BwlimitMbps != nil {
+		if bps, err := config.MbpsToBps(*cfg.BwlimitMbps); err == nil {
+			initialBps = bps
+		} else {
+			log.Printf("Ignoring persisted bwlimit_mbps: %v", err)
+		}
+	}
 	app := &App{
 		Config: cfg, HealthState: health.New(), WSHub: ws.New(),
-		Notifier: notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
+		Notifier:  notification.New(cfg.DiscordWebhook, cfg.TelegramToken, cfg.TelegramChatID),
+		BWManager: syncpkg.NewBandwidthManager(initialBps),
+		Storage:   storage.ReceiverFromEnv(),
 	}
 
 	// Load persisted settings
@@ -60,13 +75,23 @@ func (a *App) Start(port string) error {
 	go a.startHousekeeping()
 	if os.Getenv("MODE") == "sender" {
 		go a.startSenderServices()
+		sched := scheduler.New(a.Config, a.BWManager)
+		go sched.Start()
+	} else {
+		go func() {
+			if err := a.Storage.CheckKnown(context.Background()); err != nil {
+				log.Printf("Receiver storage is waiting for shared token files: %v", err)
+			}
+		}()
 	}
 
-	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.GetSyncEngines)
+	h := handlers.New(a.Config, a.HealthState, a.WSHub, database.DB, a.Notifier, a.GetSyncEngines, a.BWManager)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", h.Index)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(ui.StaticFS))))
 	mux.HandleFunc("/health", h.Health)
+	// On-demand only: never called by the periodic liveness check.
+	mux.Handle("/api/storage-ready", a.Storage)
 	mux.HandleFunc("/history", h.History)
 	mux.HandleFunc("/history/export", h.ExportHistory)
 	mux.HandleFunc("/sync", h.ManualSync)
@@ -79,6 +104,7 @@ func (a *App) Start(port string) error {
 	mux.HandleFunc("/settings/sync-mode", h.UpdateSyncMode)
 	mux.HandleFunc("/settings/auto-approve", h.UpdateAutoApprove)
 	mux.HandleFunc("/settings/sender-override", h.UpdateSenderOverride)
+	mux.HandleFunc("/api/settings/bwlimit", h.UpdateBwlimit)
 
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
@@ -99,6 +125,8 @@ func (a *App) Start(port string) error {
 			h.EnginePreview(w, r)
 		} else if strings.HasSuffix(r.URL.Path, "/alias") {
 			h.EngineAlias(w, r)
+		} else if strings.HasSuffix(r.URL.Path, "/shared-token") {
+			h.EngineSharedToken(w, r)
 		} else {
 			h.EngineAction(w, r)
 		}

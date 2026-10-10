@@ -1,9 +1,11 @@
 package sync
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
+	"schnorarr/internal/storage"
 	"time"
 )
 
@@ -26,6 +28,9 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 		if isDryRun {
 			e.reportEvent(timestamp, "DRY-Created", dirPath, 0)
 		} else {
+			if err := e.checkStorage(); err != nil {
+				return touchedDirs, err
+			}
 			if err := e.transferer.CreateDir(fullPath); err != nil {
 				log.Printf("[%s] Error: Failed to create dir %s: %v", e.config.ID, dirPath, err)
 				e.reportError(fmt.Sprintf("Failed to create dir %s: %v", dirPath, err))
@@ -44,6 +49,9 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 		if isDryRun {
 			e.reportEvent(timestamp, "DRY-Renamed", fmt.Sprintf("%s -> %s", oldPath, newPath), 0)
 		} else {
+			if err := e.checkStorage(); err != nil {
+				return touchedDirs, err
+			}
 			oldFullPath, newFullPath := filepath.Join(e.config.TargetDir, oldPath), filepath.Join(e.config.TargetDir, newPath)
 			if err := e.transferer.RenameFile(oldFullPath, newFullPath); err == nil {
 				if file, exists := targetManifest.Files[oldPath]; exists {
@@ -79,6 +87,9 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 			}
 
 			if isConflict {
+				if err := e.checkStorage(); err != nil {
+					return touchedDirs, err
+				}
 				log.Printf("[%s] Conflict detected for %s, deleting target first to ensure override", e.config.ID, file.Path)
 				if err := e.transferer.DeleteFile(dstPath); err != nil {
 					log.Printf("[%s] Warning: Failed to delete conflict target %s: %v", e.config.ID, file.Path, err)
@@ -86,6 +97,9 @@ func (e *Engine) executeSyncPhase(plan *SyncPlan, targetManifest *Manifest) (map
 			}
 
 			if err := e.transferer.CopyFile(srcPath, dstPath); err != nil {
+				if errors.Is(err, storage.ErrUnavailable) {
+					return touchedDirs, err
+				}
 				if err.Error() == "transfer interrupted by pause" {
 					return touchedDirs, err
 				}
@@ -126,6 +140,9 @@ func (e *Engine) executeCleanupPhase(plan *SyncPlan, targetManifest *Manifest, t
 		if isDryRun {
 			e.reportEvent(timestamp, "DRY-Deleted", filePath, 0)
 		} else {
+			if err := e.checkStorage(); err != nil {
+				return err
+			}
 			if err := e.transferer.DeleteFile(filepath.Join(e.config.TargetDir, filePath)); err == nil {
 				delete(targetManifest.Files, filePath)
 				e.reportEvent(timestamp, "Deleted", filePath, 0)
@@ -144,6 +161,9 @@ func (e *Engine) executeCleanupPhase(plan *SyncPlan, targetManifest *Manifest, t
 		if isDryRun {
 			e.reportEvent(timestamp, "DRY-Deleted", dirPath, 0)
 		} else {
+			if err := e.checkStorage(); err != nil {
+				return err
+			}
 			if err := e.transferer.DeleteDir(filepath.Join(e.config.TargetDir, dirPath)); err == nil {
 				delete(targetManifest.Dirs, dirPath)
 				delete(targetManifest.Files, dirPath)

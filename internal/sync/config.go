@@ -22,6 +22,10 @@ type SyncConfig struct {
 	IncludePatterns []string
 	// BandwidthLimit in bytes per second (0 = unlimited)
 	BandwidthLimit int64
+	// BWManager, when set, coordinates the bandwidth limit as a shared pool
+	// across engines; the manager pushes per-engine shares at runtime and
+	// overrides the static BandwidthLimit above.
+	BWManager *BandwidthManager
 	// WatchInterval is how often to perform full scans (0 = only on file changes)
 	WatchInterval time.Duration
 	// PollInterval is how often to poll the source directory for changes (for Docker/Windows compatibility)
@@ -36,6 +40,10 @@ type SyncConfig struct {
 	OnSyncEvent func(timestamp, action, path string, size int64)
 	// OnError callback for errors
 	OnError func(msg string)
+	// CheckStorage checks local and receiver storage at startup and before work.
+	CheckStorage func() error
+	// SharedToken is the persistent identity shown in the engine setup modal.
+	SharedToken string
 }
 
 // GetConfig returns the engine configuration
