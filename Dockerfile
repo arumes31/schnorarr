@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build Stage
-FROM golang:alpine AS builder
+FROM golang:1.27.2-alpine AS builder
 WORKDIR /app
 
 # Copy dependency files first for better layer caching

@@ -70,7 +70,7 @@
             opacity: 0.6;
             /* Increased visibility */
             mix-blend-mode: screen;
-            animation: orbMove 15s infinite alternate ease-in-out;
+
         }
 
         .orb-1 {
@@ -96,30 +96,12 @@
             width: 1000px;
             height: 1000px;
             opacity: 0.4;
-            animation: orbPulse 8s infinite alternate ease-in-out;
+
         }
 
-        @keyframes orbMove {
-            0% {
-                transform: translate(0, 0) scale(1);
-            }
 
-            100% {
-                transform: translate(20%, 15%) scale(1.1);
-            }
-        }
 
-        @keyframes orbPulse {
-            0% {
-                transform: translate(-50%, -50%) scale(0.9);
-                opacity: 0.3;
-            }
 
-            100% {
-                transform: translate(-50%, -50%) scale(1.1);
-                opacity: 0.6;
-            }
-        }
 
         /* Vibrant Dynamic Grid */
         .mesh-grid {
@@ -131,20 +113,12 @@
             background-size: 80px 80px;
             transform: perspective(400px) rotateX(60deg) scale(2);
             transform-origin: center top;
-            animation: gridMove 6s linear infinite;
+
             opacity: 0.4;
             filter: drop-shadow(0 0 10px var(--accent-green));
         }
 
-        @keyframes gridMove {
-            0% {
-                background-position: 0 0;
-            }
 
-            100% {
-                background-position: 0 80px;
-            }
-        }
 
         /* Glass Login Container */
         .login-card {
@@ -161,21 +135,11 @@
             box-shadow:
                 0 32px 128px rgba(0, 0, 0, 0.9),
                 inset 0 0 0 1px rgba(0, 255, 115, 0.1);
-            animation: cardFadeIn 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+
             text-align: center;
         }
 
-        @keyframes cardFadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(30px) scale(0.97);
-            }
 
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
 
         .logo-area {
             margin-bottom: 48px;
@@ -354,6 +318,33 @@
             font-weight: 700;
             margin-right: 4px;
         }
+        html { height: auto; min-height: 100%; overflow: auto; display: block; background: #000814; color-scheme: dark; }
+        body { min-height: 100svh; height: auto; overflow: visible; padding: 24px 16px; }
+        .login-card { flex-shrink: 0; padding: 40px 32px; animation: none; background: #06180e; backdrop-filter: none; -webkit-backdrop-filter: none; }
+        .logo-area { margin-bottom: 32px; }
+        .logo-area h1 { letter-spacing: -0.03em; }
+        .logo-area svg, .logo-area:hover svg { transform: none; }
+        .orb { width: min(60vw, 600px); height: min(60vw, 600px); filter: blur(60px); animation: none; }
+        .orb-3, .mesh-grid { animation: none; }
+        .password-toggle { min-width: 44px; min-height: 44px; right: 8px; }
+        #password { padding-right: 60px; }
+        .error-pill { color: #ff8fba; }
+        .footer { opacity: 1; margin-top: 32px; }
+        :focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 4px; }
+        input:focus { transform: none; }
+        button.unlock-btn:hover { transform: none; }
+        ::selection { background: var(--accent-green); color: #000; }
+        @media (max-height: 600px), (max-width: 420px) {
+            .login-card { padding: 24px; }
+            .logo-area { margin-bottom: 24px; }
+            .logo-area svg { width: 44px; height: 44px; margin-bottom: 12px; }
+            .form-group { margin-bottom: 24px; }
+            input { padding-block: 18px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .error-pill { animation: none; }
+            input, label, button.unlock-btn, .logo-area svg { transition: color 150ms, background-color 150ms, border-color 150ms; }
+        }
     </style>
 </head>
 
@@ -365,7 +356,7 @@
         <div class="mesh-grid"></div>
     </div>
 
-    <div class="login-card">
+    <main class="login-card">
         <div class="logo-area">
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
                 <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="var(--accent-green)" />
@@ -377,21 +368,21 @@
             <h1>schnor<span>arr</span></h1>
         </div>
 
-        {{if .Error}}<div class="error-pill">{{.Error}}</div>{{end}}
+        {{if .Error}}<div class="error-pill" role="alert">{{.Error}}</div>{{end}}
 
         <form action="/login" method="POST">
             <div class="form-group">
                 <div class="input-box">
-                    <input type="text" name="username" id="username" placeholder=" " required autofocus>
+                    <input type="text" name="username" id="username" autocomplete="username" placeholder=" " required autofocus>
                     <label for="username">USERNAME</label>
                 </div>
             </div>
 
             <div class="form-group">
                 <div class="input-box">
-                    <input type="password" name="password" id="password" placeholder=" " required>
+                    <input type="password" name="password" id="password" autocomplete="current-password" placeholder=" " required>
                     <label for="password">PASSWORD</label>
-                    <button type="button" class="password-toggle" onclick="togglePassword()">
+                    <button type="button" class="password-toggle" aria-label="Show password" aria-controls="password" onclick="togglePassword()">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -407,13 +398,14 @@
         <div class="footer">
             <span>schnorarr &bull;</span> Distributed Sync Mesh Node v2.0
         </div>
-    </div>
+    </main>
 
     <script>
         function togglePassword() {
             const input = document.getElementById('password');
             const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
             input.setAttribute('type', type);
+            document.querySelector('.password-toggle').setAttribute('aria-label', type === 'password' ? 'Show password' : 'Hide password');
         }
     </script>
 </body>
