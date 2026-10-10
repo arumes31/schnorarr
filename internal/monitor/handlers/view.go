@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -34,23 +35,25 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 		}
 
 		type EngineView struct {
-			ID, Source, Target         string
-			Status, State              string
-			IsPaused                   bool
-			LastSync                   string
-			TrafficToday, TrafficTotal string
-			Rule                       string
-			PendingDeletions           int
-			WaitingForApproval         bool
-			IsSyncing                  bool
-			CurrentFile                string
-			CurrentPercent             float64
-			CurrentSpeed               string
-			AvgSpeed                   string
-			SpeedHistory               string
-			Alias                      string
-			HealthGrade, HealthColor   string
-			IsRemoteScan               bool
+			ID, Source, Target             string
+			Status, State                  string
+			IsPaused                       bool
+			LastSync                       string
+			TrafficToday, TrafficTotal     string
+			Rule                           string
+			PendingDeletions               int
+			WaitingForApproval             bool
+			IsSyncing                      bool
+			CurrentFile                    string
+			CurrentPercent                 float64
+			CurrentSpeed                   string
+			AvgSpeed                       string
+			SpeedHistory                   string
+			Alias                          string
+			HealthGrade, HealthColor       string
+			IsRemoteScan                   bool
+			StorageBlocked                 bool
+			StorageError, StorageCheckedAt string
 		}
 		var engineViews []EngineView
 		for _, engine := range h.engineProvider() {
@@ -68,6 +71,7 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			}
 
 			grade, color := database.GetEngineHealth(cfg.ID)
+			blocked, storageError, checkedAt := engine.GetStorageStatus()
 
 			engineViews = append(engineViews, EngineView{
 				ID: cfg.ID, Source: cfg.SourceDir, Target: cfg.TargetDir, Status: engine.GetStatus(), State: "ACTIVE", IsPaused: engine.IsPaused(),
@@ -76,6 +80,7 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 				CurrentFile: filepath.Base(file), CurrentPercent: percent, CurrentSpeed: database.FormatBytes(speed) + "/s", SpeedHistory: strings.Join(historyStrings, ","),
 				AvgSpeed: database.FormatBytes(avg) + "/s", Alias: engine.GetAlias(),
 				HealthGrade: grade, HealthColor: color, IsRemoteScan: engine.IsRemoteScan(),
+				StorageBlocked: blocked, StorageError: storageError, StorageCheckedAt: checkedAt.Format(time.RFC3339),
 			})
 			if isSyncing {
 				engineViews[len(engineViews)-1].State = "SYNCING"
@@ -85,6 +90,9 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			}
 			if engine.IsWaitingForApproval() {
 				engineViews[len(engineViews)-1].State = "WAITING_APPROVAL"
+			}
+			if blocked && !engine.IsPaused() {
+				engineViews[len(engineViews)-1].State = "STORAGE WAIT"
 			}
 		}
 
@@ -97,6 +105,11 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h_rec, _, rVer, rUp := h.healthState.GetReceiverStatus()
+
+		bwlimitMbps := 0
+		if h.config.BwlimitMbps != nil {
+			bwlimitMbps = *h.config.BwlimitMbps
+		}
 
 		data := struct {
 			Time, LastErrorMsg, Progress, LsyncdStatus string
@@ -116,6 +129,11 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			ReceiverVersion, ReceiverUptime            string
 			SenderOverride                             bool
 			Timestamp                                  int64
+			IsSender                                   bool
+			BwlimitMbps                                int
+			SchedulerEnabled                           bool
+			QuietStart, QuietEnd                       string
+			QuietLimit, NormalLimit                    int
 		}{
 			Time: time.Now().Format("2006-01-02 15:04:05"), Healthy: healthy, State: state, LastErrorMsg: lastErr, Progress: progress, LsyncdStatus: status, Queued: queued, History: history,
 			TrafficToday: database.FormatBytes(traffic.Today), TrafficTotal: database.FormatBytes(traffic.Total), TrafficYesterday: database.FormatBytes(yesterday),
@@ -123,7 +141,11 @@ func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
 			CurrentSpeed: currentSpeed, ETA: eta, SyncMode: database.GetSetting("sync_mode", "dry"), AutoApproveDeletions: database.GetSetting("auto_approve", "off"),
 			Engines: engineViews, ReceiverHealthy: h_rec,
 			ReceiverVersion: rVer, ReceiverUptime: rUp, SenderOverride: h.healthState.IsOverrideEnabled(),
-			Timestamp: time.Now().Unix(),
+			Timestamp:   time.Now().Unix(),
+			IsSender:    os.Getenv("MODE") == "sender",
+			BwlimitMbps: bwlimitMbps, SchedulerEnabled: h.config.SchedulerEnabled,
+			QuietStart: h.config.QuietStart, QuietEnd: h.config.QuietEnd,
+			QuietLimit: h.config.QuietLimit, NormalLimit: h.config.NormalLimit,
 		}
 
 		funcMap := template.FuncMap{"lower": strings.ToLower}

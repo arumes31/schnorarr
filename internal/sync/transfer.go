@@ -37,16 +37,28 @@ type TransferOptions struct {
 	OnComplete func(path string, size int64, err error)
 	// CheckPaused returns true if the transfer should be interrupted
 	CheckPaused func() bool
+	// CheckStorage runs after acquiring a transfer slot and before every attempt.
+	CheckStorage func() error
 }
 
 // Transferer handles file transfer operations
 type Transferer struct {
+	// mu guards opts.BandwidthLimit, which is updated at runtime by the
+	// BandwidthManager while transfers are in flight.
+	mu   sync.RWMutex
 	opts TransferOptions
 }
 
 // NewTransferer creates a new file transferer
 func NewTransferer(opts TransferOptions) *Transferer {
 	return &Transferer{opts: opts}
+}
+
+// BandwidthLimit returns the current bandwidth limit in bytes/sec (0 = unlimited).
+func (t *Transferer) BandwidthLimit() int64 {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.opts.BandwidthLimit
 }
 
 // CopyFile copies a file from src to dst with bandwidth limiting and progress reporting
@@ -56,6 +68,9 @@ func (t *Transferer) CopyFile(src, dst string) error {
 	}
 	pool.Acquire()
 	defer pool.Release()
+	if err := t.checkStorage(); err != nil {
+		return err
+	}
 
 	log.Printf("[Transferer] Copying %s -> %s", src, dst)
 
@@ -88,8 +103,10 @@ func (t *Transferer) CopyFile(src, dst string) error {
 	tmpDst := dst + ".tmp"
 
 	// We only support parallel transfers for new files > threshold
-	// Resumption currently falls back to sequential for simplicity
-	useParallel := totalSize > ParallelThreshold && t.opts.BandwidthLimit == 0
+	// Resumption currently falls back to sequential for simplicity.
+	// Parallel stays enabled when a bandwidth limit is set: each stream
+	// throttles to its divided share of the limit (see copyParallel).
+	useParallel := totalSize > ParallelThreshold
 
 	var bytesTransferred int64
 	var copyErr error
@@ -101,6 +118,10 @@ func (t *Transferer) CopyFile(src, dst string) error {
 			sleep := time.Duration(1<<uint(i)) * time.Second
 			log.Printf("[Transferer] Retry %d/%d for %s...", i, maxRetries, src)
 			time.Sleep(sleep)
+			if err := t.checkStorage(); err != nil {
+				_ = os.Remove(tmpDst)
+				return err
+			}
 
 			// Reset for retry
 			if _, err := srcFile.Seek(0, io.SeekStart); err != nil {
@@ -119,9 +140,9 @@ func (t *Transferer) CopyFile(src, dst string) error {
 		if useParallel {
 			bytesTransferred, copyErr = t.copyParallel(filepath.Base(src), srcFile, dstFile, totalSize)
 		} else {
-			// Sequential copy (used for small files or bandwidth limited transfers)
-			if t.opts.BandwidthLimit > 0 {
-				bytesTransferred, copyErr = t.copyWithBandwidthLimit(filepath.Base(src), srcFile, dstFile, totalSize, 0)
+			// Sequential copy (used for small files)
+			if bw := t.BandwidthLimit(); bw > 0 {
+				bytesTransferred, copyErr = t.copyWithBandwidthLimit(filepath.Base(src), srcFile, dstFile, totalSize, 0, bw)
 			} else {
 				bytesTransferred, copyErr = t.copyWithProgress(filepath.Base(src), srcFile, dstFile, totalSize, 0)
 			}
@@ -202,8 +223,8 @@ func (t *Transferer) copyRemote(src, dst string) error {
 	// --mkpath: create missing parent directories on destination (rsync 3.2.3+)
 	args := []string{"-a", "--inplace", "--append-verify", "--protect-args", "--mkpath"}
 
-	if t.opts.BandwidthLimit > 0 {
-		kbps := t.opts.BandwidthLimit / 1024
+	if bw := t.BandwidthLimit(); bw > 0 {
+		kbps := bw / 1024
 		if kbps > 0 {
 			args = append(args, fmt.Sprintf("--bwlimit=%d", kbps))
 		}
@@ -224,6 +245,9 @@ func (t *Transferer) copyRemote(src, dst string) error {
 		}
 
 		log.Printf("[Transferer] Executing rsync: %s", strings.Join(args, " "))
+		if err := t.checkStorage(); err != nil {
+			return err
+		}
 		cmd := exec.Command("rsync", args...)
 		cmd.Env = os.Environ()
 		if pass := os.Getenv("RSYNC_PASSWORD"); pass != "" {
@@ -461,6 +485,16 @@ func (t *Transferer) copyParallel(filename string, srcFile, dstFile *os.File, to
 	numStreams := DefaultNumStreams
 	chunkSize := (totalSize + int64(numStreams) - 1) / int64(numStreams)
 
+	// When a bandwidth limit is set, each stream throttles to its divided
+	// share. No per-stream floor here: a minimum would let
+	// numStreams x floor exceed the engine's assigned share. (The engine-level
+	// floor MinShareBps exists only because rsync treats --bwlimit=0 as
+	// unlimited; Go-side throttling has no such constraint.)
+	perStreamRate := int64(0)
+	if bw := t.BandwidthLimit(); bw > 0 {
+		perStreamRate = bw / int64(numStreams)
+	}
+
 	var wg sync.WaitGroup
 	var errOnce sync.Once
 	var firstErr error
@@ -486,6 +520,7 @@ func (t *Transferer) copyParallel(filename string, srcFile, dstFile *os.File, to
 
 			buf := make([]byte, ChunkSize)
 			offset := start
+			lastTime := time.Now()
 
 			for offset < end {
 				if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
@@ -515,6 +550,14 @@ func (t *Transferer) copyParallel(filename string, srcFile, dstFile *os.File, to
 						t.opts.OnProgress(filename, currentTotal, totalSize)
 					}
 					offset += int64(nw)
+
+					if perStreamRate > 0 {
+						expected := time.Duration(float64(nw) / float64(perStreamRate) * float64(time.Second))
+						if elapsed := time.Since(lastTime); elapsed < expected {
+							time.Sleep(expected - elapsed)
+						}
+						lastTime = time.Now()
+					}
 				}
 				if err != nil && err != io.EOF && offset < end {
 					errOnce.Do(func() { firstErr = err })
@@ -561,10 +604,10 @@ func (t *Transferer) copyWithProgress(filename string, src io.Reader, dst io.Wri
 	return written, nil
 }
 
-func (t *Transferer) copyWithBandwidthLimit(filename string, src io.Reader, dst io.Writer, totalSize, offset int64) (int64, error) {
+func (t *Transferer) copyWithBandwidthLimit(filename string, src io.Reader, dst io.Writer, totalSize, offset int64, rateBps int64) (int64, error) {
 	buf := make([]byte, 32*1024)
 	var written int64
-	sleepDuration := time.Duration(float64(len(buf)) / float64(t.opts.BandwidthLimit) * float64(time.Second))
+	sleepDuration := time.Duration(float64(len(buf)) / float64(rateBps) * float64(time.Second))
 	lastTime := time.Now()
 
 	for {
@@ -607,6 +650,16 @@ func (t *Transferer) CreateDir(path string) error {
 		return nil
 	}
 	return os.MkdirAll(path, 0755)
+}
+
+func (t *Transferer) checkStorage() error {
+	if t.opts.CheckPaused != nil && t.opts.CheckPaused() {
+		return fmt.Errorf("transfer interrupted by pause")
+	}
+	if t.opts.CheckStorage != nil {
+		return t.opts.CheckStorage()
+	}
+	return nil
 }
 func (t *Transferer) DeleteFile(path string) error {
 	if strings.Contains(path, "::") || strings.HasPrefix(path, "rsync://") {
@@ -688,4 +741,12 @@ func (t *Transferer) RenameFile(oldPath, newPath string) error {
 
 	return os.Remove(oldPath)
 }
-func (t *Transferer) SetBandwidthLimit(limit int64) { t.opts.BandwidthLimit = limit }
+
+// SetBandwidthLimit updates the bandwidth limit in bytes/sec (0 = unlimited).
+// Safe to call while transfers are in flight; the new value takes effect at
+// the next file (rsync) or buffer chunk (local copies).
+func (t *Transferer) SetBandwidthLimit(limit int64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.opts.BandwidthLimit = limit
+}
