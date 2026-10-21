@@ -1,0 +1,39 @@
+name: Review GHCR Cleanup
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Report unreferenced versions older than 30 days without deletion
+        type: boolean
+        required: true
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: ghcr-cleanup-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Review unreferenced OCI manifests
+        # Verified v3.1.0 protects architecture and attestation children of kept
+        # tagged indexes and clears deletion candidates on incomplete lookups.
+        uses: docker://ghcr.io/snok/container-retention-policy@sha256:884037f146d6ef574b61fbcc59bef490f887322e6b9dc2eefcf364cb4e9b4112
+        with:
+          args: >-
+            --account=user
+            --token=${{ secrets.GITHUB_TOKEN }}
+            --image-names=schnorarr
+            --image-tags=
+            --shas-to-skip=
+            --tag-selection=untagged
+            --keep-n-most-recent=30
+            --timestamp-to-use=updated_at
+            --cut-off=30d
+            --dry-run=${{ inputs.dry_run }}
+        env:
+          RUST_LOG: container_retention_policy=INFO
