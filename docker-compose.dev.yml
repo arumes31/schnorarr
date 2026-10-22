@@ -7,10 +7,11 @@ services:
       # - TS_HOSTNAME=schnorarr-receiver
       # - TAILSCALE_UP_ARGS=--accept-routes
       - RSYNC_USER=syncuser
-      - RSYNC_PASSWORD=secretpassword
+      - RSYNC_PASSWORD=${RSYNC_PASSWORD:?Set RSYNC_PASSWORD to a strong shared secret}
     volumes:
       - ./receiver:/data
       - receiver_config:/config
+    # NET_ADMIN and /dev/net/tun are only needed when TAILSCALE_AUTHKEY is set.
     cap_add:
       - NET_ADMIN
     devices:
@@ -26,7 +27,7 @@ services:
       - SYNC_INCLUDE=*.mkv,*.mp4,*.avi
       - DRY_RUN=false
       - RSYNC_USER=syncuser
-      - RSYNC_PASSWORD=secretpassword
+      - RSYNC_PASSWORD=${RSYNC_PASSWORD:?Set RSYNC_PASSWORD to a strong shared secret}
       - BWLIMIT_MBPS=50
       - MIN_DISK_SPACE_GB=0
       # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
@@ -39,12 +40,14 @@ services:
       - POLL_INTERVAL=60
       - AUTH_ENABLED=true
       - ADMIN_USER=admin
-      - ADMIN_PASS=schnorarr
+      # Leave ADMIN_PASS empty to get a temporary password in the startup log.
+      - ADMIN_PASS=${ADMIN_PASS:-}
     ports:
       - "8080:8080"
     volumes:
       - ./sender:/data
       - sender_config:/config
+    # NET_ADMIN and /dev/net/tun are only needed when TAILSCALE_AUTHKEY is set.
     cap_add:
       - NET_ADMIN
     devices:

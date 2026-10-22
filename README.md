@@ -93,6 +93,9 @@ services:
       - SYNC_1_TARGET=media/movies
       - SYNC_1_RULE=series
       - BWLIMIT_MBPS=100
+      - RSYNC_USER=syncuser
+      - RSYNC_PASSWORD=change-me-to-a-long-random-secret # must match the receiver
+      - ADMIN_PASS=change-me # dashboard login (user: admin)
       - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
       # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
       # - TAILSCALE_UP_ARGS=--accept-routes
@@ -112,6 +115,10 @@ services:
       - "8080:8080"
     environment:
       - MODE=receiver
+      - RSYNC_USER=syncuser
+      - RSYNC_PASSWORD=change-me-to-a-long-random-secret # must match the sender
+      - ADMIN_PASS=change-me
+      # - RSYNC_HOSTS_ALLOW=100.64.0.0/10 # restrict rsync to the sender / tailnet
       # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
       # - TAILSCALE_UP_ARGS=--accept-routes
     volumes:
@@ -196,6 +203,10 @@ Regardless of the configured rule name (`series`, `flat`, etc.), the engine curr
 | `PUID` / `PGID` | User/Group ID for file permissions | `1000` |
 | `TAILSCALE_AUTHKEY` | Optional: Tailscale Auth Key for built-in mesh VPN | - |
 | `TAILSCALE_UP_ARGS` | Optional: Extra arguments for `tailscale up` | - |
+| `AUTH_ENABLED` | Dashboard login. Only the literal `false` disables it | `true` |
+| `ADMIN_USER` / `ADMIN_PASS` | Dashboard credentials. If `ADMIN_PASS` is unset (or the old default `schnorarr`), a temporary password is generated and printed in the container log at each start | `admin` / generated |
+| `RSYNC_PASSWORD` | **Required.** Shared secret for rsync auth; also authenticates the sender's calls to the receiver API | - |
+| `ENGINE_API_KEY` | Optional: separate shared secret for the receiver API (`/api/manifest`, `/api/stat`, `/api/delete`). Defaults to `RSYNC_PASSWORD`; must match on both sides | `RSYNC_PASSWORD` |
 
 ### Sender Specific
 
@@ -290,7 +301,11 @@ graph LR
 
 *   **Zero-Exposure**: Schnorarr does *not* require port forwarding. When used with the built-in **Tailscale** integration, your data stays within your private WireGuard® mesh.
 *   **Encrypted Data**: All synchronization traffic over Tailscale is end-to-end encrypted.
-*   **Authentication**: Supports `RSYNC_PASSWORD` for an extra layer of security between the sender and receiver.
+*   **Authentication**: `RSYNC_PASSWORD` is required on the receiver (the container refuses to start without it, or with the old `secretpassword` default). The same secret (or `ENGINE_API_KEY`) authenticates the sender's manifest, stat and delete calls to the receiver API.
+*   **Dashboard login**: Enabled by default. Set `ADMIN_PASS`; otherwise a temporary password is printed in the container log. Failed logins are rate-limited per IP. The session cookie is marked `Secure` only when the request arrives over HTTPS (directly or via a proxy sending `X-Forwarded-Proto: https`); put the dashboard behind a TLS reverse proxy if it is reachable beyond your LAN.
+*   **Rsync daemon**: rsync on port 873 is unencrypted. Run it over Tailscale/VPN, and restrict it with `RSYNC_HOSTS_ALLOW` (rsync `hosts allow` syntax, default `*`). `RSYNC_UID` / `RSYNC_GID` (default `root`) set the user the daemon writes files as.
+*   **Notifications**: The dashboard only accepts `https://discord.com/api/webhooks/...` URLs; notification requests do not follow redirects.
+*   **Capabilities**: `NET_ADMIN` and `/dev/net/tun` are only needed for the built-in Tailscale; drop them from your compose file if you do not use it.
 *   **Minimal Footprint**: The binary is statically compiled with no external dependencies (except rsync).
 
 ## 💡 Best Practices
@@ -319,7 +334,9 @@ Beyond the basic setup, you can fine-tune Schnorarr using these environment vari
 | `MAX_RETRIES` | (Sender) Number of attempts to connect to receiver before failing. | `30` |
 | `CONFIG_DIR` | Path to store logs and database. | `/config` |
 | `BWLIMIT_MBPS` | Initial global bandwidth limit for all transfers in Mbps. Shared across active engines and adjustable at runtime from Bandwidth & quiet hours; the saved dashboard value wins over this env var. | `0` (Unlimited) |
-| `RSYNC_PASSWORD` | Optional: Password for authenticated rsync transfers. | - |
+| `RSYNC_PASSWORD` | Required: shared password for rsync transfers and the receiver API. | - |
+| `RSYNC_HOSTS_ALLOW` | (Receiver) rsync `hosts allow` value, e.g. the sender IP or `100.64.0.0/10`. | `*` |
+| `RSYNC_UID` / `RSYNC_GID` | (Receiver) user/group the rsync daemon writes files as. | `root` |
 | `POLL_INTERVAL` | (Sender) Frequency in seconds to check for file changes. | `60` |
 | `WATCH_INTERVAL` | (Sender) Frequency in seconds for a full safety reconciliation scan. | `43200` (12h) |
 

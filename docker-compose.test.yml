@@ -4,7 +4,7 @@ services:
     environment:
       - MODE=receiver
       - RSYNC_USER=syncuser
-      - RSYNC_PASSWORD=secretpassword
+      - RSYNC_PASSWORD=${RSYNC_PASSWORD:?Set RSYNC_PASSWORD to a strong shared secret}
     volumes:
       # Map shared test root to /data so subdirs land in correct place
       - ./testfiles:/data
@@ -17,14 +17,15 @@ services:
     environment:
       - MODE=sender
       - RSYNC_USER=syncuser
-      - RSYNC_PASSWORD=secretpassword
+      - RSYNC_PASSWORD=${RSYNC_PASSWORD:?Set RSYNC_PASSWORD to a strong shared secret}
       - BWLIMIT_MBPS=500
       - POLL_INTERVAL=10
       - DEST_HOST=receiver
       - DEST_MODULE=video-sync
       - AUTH_ENABLED=true
       - ADMIN_USER=admin
-      - ADMIN_PASS=schnorarr
+      # Leave ADMIN_PASS empty to get a temporary password in the startup log.
+      - ADMIN_PASS=${ADMIN_PASS:-}
 
       # 1. Sender 1 -> Receiver 1 (Series Profile)
       - SYNC_1_SOURCE=/data/sender1
