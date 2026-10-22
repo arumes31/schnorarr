@@ -242,7 +242,6 @@ func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
 	apiURL := fmt.Sprintf("http://%s:8080/api/manifest?path=%s", destHost, url.QueryEscape(remotePath))
 
 	log.Printf("[Scanner] Requesting remote manifest from API: %s", apiURL)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -251,8 +250,8 @@ func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	setEngineAPIKey(req)
-
-	resp, err := engineHTTPClient.Do(req)
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to contact receiver API at %s: %w", destHost, err)
 	}

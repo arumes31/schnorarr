@@ -1,7 +1,6 @@
 package sync
 
 import (
-	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
 	"os"
@@ -38,7 +37,5 @@ func ValidEngineAPIKey(r *http.Request) bool {
 	if want == "" {
 		return false
 	}
-	got := sha256.Sum256([]byte(r.Header.Get(EngineAPIHeader)))
-	exp := sha256.Sum256([]byte(want))
-	return subtle.ConstantTimeCompare(got[:], exp[:]) == 1
+	return subtle.ConstantTimeCompare([]byte(r.Header.Get(EngineAPIHeader)), []byte(want)) == 1
 }

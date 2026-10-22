@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"html/template"
@@ -81,7 +80,7 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	user := r.FormValue("username")
 	pass := r.FormValue("password")
 
-	// Compare fixed-length digests in constant time; evaluate both to avoid short-circuit timing.
+	// Constant-time compares; evaluate both to avoid short-circuit timing.
 	userOK := constantTimeEqual(user, AdminUser)
 	passOK := constantTimeEqual(pass, AdminPass)
 	if userOK && passOK {
@@ -212,9 +211,7 @@ func (l *loginLimiter) reset(ip string) {
 }
 
 func constantTimeEqual(a, b string) bool {
-	ha := sha256.Sum256([]byte(a))
-	hb := sha256.Sum256([]byte(b))
-	return subtle.ConstantTimeCompare(ha[:], hb[:]) == 1
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
 func clientIP(r *http.Request) string {
