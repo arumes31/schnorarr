@@ -88,5 +88,9 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(ConfigPath, data, 0644)
+	// The config holds the webhook URL and Telegram token: owner-only.
+	if err := os.WriteFile(ConfigPath, data, 0600); err != nil {
+		return err
+	}
+	return os.Chmod(ConfigPath, 0600)
 }

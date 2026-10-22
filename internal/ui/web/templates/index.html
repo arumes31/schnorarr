@@ -106,9 +106,9 @@
                 <a href="#sync-policy" class="text-link">Change policy</a>
             </div>
             <div class="global-actions">
-                <a href="/sync" class="btn-premium btn-sync-all" data-sync-label="all">{{if eq .SyncMode "dry"}}Dry run all{{else if eq .SyncMode "manual"}}Scan all{{else}}Sync all{{end}}</a>
-                <a href="/pause" class="btn-premium btn-outline">Pause all</a>
-                <a href="/resume" class="btn-premium btn-outline">Resume all</a>
+                <form method="POST" action="/sync" style="display: contents;"><button type="submit" class="btn-premium btn-sync-all" data-sync-label="all">{{if eq .SyncMode "dry"}}Dry run all{{else if eq .SyncMode "manual"}}Scan all{{else}}Sync all{{end}}</button></form>
+                <form method="POST" action="/pause" style="display: contents;"><button type="submit" class="btn-premium btn-outline">Pause all</button></form>
+                <form method="POST" action="/resume" style="display: contents;"><button type="submit" class="btn-premium btn-outline">Resume all</button></form>
             </div>
         </section>
 
@@ -341,8 +341,8 @@
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px;"><button type="submit" class="btn-premium btn-outline"
-                            style="flex: 1; justify-content: center;">Save</button><a href="/test-notify"
-                            class="btn-premium btn-outline">Test notification</a>
+                            style="flex: 1; justify-content: center;">Save</button><button type="submit" formaction="/test-notify" formnovalidate
+                            class="btn-premium btn-outline">Test notification</button>
                     </div>
                 </form>
             </div>

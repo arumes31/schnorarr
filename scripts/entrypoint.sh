@@ -30,19 +30,35 @@ fi
 if [ "$MODE" = "receiver" ]; then
     echo "Starting rsync daemon (Receiver MODE)..."
     
-    # Handle authentication
-    if [ -n "$RSYNC_USER" ] && [ -n "$RSYNC_PASSWORD" ]; then
-        echo "Configuring authentication for user: $RSYNC_USER"
-        echo "$RSYNC_USER:$RSYNC_PASSWORD" > /config/rsyncd.secrets
-        chmod 600 /config/rsyncd.secrets
-        sed -i "s/auth users = .*/auth users = $RSYNC_USER/" /scripts/rsyncd.conf
-        sed -i "/auth users/a \    secrets file = /config/rsyncd.secrets" /scripts/rsyncd.conf
+    # Refuse to run the writable rsync module without a real password.
+    RSYNC_USER=${RSYNC_USER:-syncuser}
+    if [ -z "$RSYNC_PASSWORD" ] || [ "$RSYNC_PASSWORD" = "secretpassword" ]; then
+        echo "Error: RSYNC_PASSWORD must be set to a strong, unique value on the receiver (the old default 'secretpassword' is rejected)."
+        exit 1
+    fi
+    if [ "${#RSYNC_PASSWORD}" -lt 12 ]; then
+        echo "WARNING: RSYNC_PASSWORD is shorter than 12 characters; use a longer random value."
+    fi
+
+    echo "Configuring authentication for user: $RSYNC_USER"
+    echo "$RSYNC_USER:$RSYNC_PASSWORD" > /config/rsyncd.secrets
+    chmod 600 /config/rsyncd.secrets
+
+    # Render the daemon config from the template on every start.
+    RSYNCD_CONF=/tmp/rsyncd.conf
+    sed -e "s|^\( *auth users = \).*|\1$RSYNC_USER|" \
+        -e "s|^\( *hosts allow = \).*|\1${RSYNC_HOSTS_ALLOW:-*}|" \
+        -e "s|^\( *uid = \).*|\1${RSYNC_UID:-root}|" \
+        -e "s|^\( *gid = \).*|\1${RSYNC_GID:-root}|" \
+        /scripts/rsyncd.conf > "$RSYNCD_CONF"
+    if [ -z "$RSYNC_HOSTS_ALLOW" ]; then
+        echo "WARNING: rsync accepts connections from any host. Set RSYNC_HOSTS_ALLOW (e.g. the sender IP or 100.64.0.0/10 for Tailscale) and keep port 873 off untrusted networks; rsync traffic is unencrypted unless it runs over Tailscale or a VPN."
     fi
 
     # Start monitor in background for health checks and status reporting
     /usr/local/bin/monitor &
 
-    exec rsync --no-detach --daemon --config=/scripts/rsyncd.conf
+    exec rsync --no-detach --daemon --config="$RSYNCD_CONF"
 elif [ "$MODE" = "sender" ]; then
     echo "Starting custom sync engine (Sender MODE)..."
     
@@ -50,6 +66,8 @@ elif [ "$MODE" = "sender" ]; then
     if [ -n "$RSYNC_PASSWORD" ]; then
         echo "$RSYNC_PASSWORD" > /config/rsync.pass
         chmod 600 /config/rsync.pass
+    else
+        echo "WARNING: RSYNC_PASSWORD is not set; rsync transfers and receiver API calls will be rejected."
     fi
 
     # Monitor will be started at the end with exec
