@@ -250,9 +250,9 @@ func (s *Scanner) ScanRemote(uri string) (*Manifest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+	setEngineAPIKey(req)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := engineHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to contact receiver API at %s: %w", destHost, err)
 	}

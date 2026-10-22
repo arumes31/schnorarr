@@ -355,6 +355,7 @@ func getRemoteFileSizeWithContext(ctx context.Context, host, path string) int64 
 	if err != nil {
 		return 0
 	}
+	setEngineAPIKey(req)
 
 	client := &http.Client{
 		Timeout: 5 * time.Second,
@@ -451,7 +452,12 @@ func getRemoteFileSize(host, path string) int64 {
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(apiURL)
+	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
+	if err != nil {
+		return 0
+	}
+	setEngineAPIKey(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("[Transferer] DEBUG: API request failed: %v", err)
 		return 0
@@ -703,7 +709,12 @@ func (t *Transferer) deleteRemote(uri string, isDir bool) error {
 
 	log.Printf("[Transferer] Requesting remote delete: %s", apiURL)
 
-	resp, err := http.Post(apiURL, "application/json", nil)
+	req, err := http.NewRequest(http.MethodPost, apiURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to build receiver API request: %w", err)
+	}
+	setEngineAPIKey(req)
+	resp, err := engineHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to contact receiver API: %w", err)
 	}

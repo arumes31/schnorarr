@@ -116,9 +116,13 @@ func (a *App) Start(port string) error {
 	mux.HandleFunc("/logout", h.Logout)
 
 	// Engine API
-	mux.HandleFunc("/api/manifest", a.ManifestHandler)
-	mux.HandleFunc("/api/delete", a.DeleteHandler)
-	mux.HandleFunc("/api/stat", a.StatHandler)
+	// Sender <-> receiver calls require the shared engine API key.
+	if syncpkg.EngineAPIKey() == "" {
+		log.Printf("WARNING: neither ENGINE_API_KEY nor RSYNC_PASSWORD is set; the engine API (/api/manifest, /api/stat, /api/delete) will reject all requests")
+	}
+	mux.HandleFunc("/api/manifest", engineAuth(a.ManifestHandler))
+	mux.HandleFunc("/api/delete", engineAuth(a.DeleteHandler))
+	mux.HandleFunc("/api/stat", engineAuth(a.StatHandler))
 	mux.HandleFunc("/api/engines/bulk", h.BulkAction)
 	mux.HandleFunc("/api/engine/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/preview") {
@@ -133,7 +137,28 @@ func (a *App) Start(port string) error {
 	})
 
 	log.Printf("Monitor starting on port %s", port)
-	return http.ListenAndServe(":"+port, mux)
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	return srv.ListenAndServe()
+}
+
+// engineAuth rejects engine API requests without the shared engine API key.
+func engineAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if syncpkg.EngineAPIKey() == "" {
+			http.Error(w, "engine API key is not configured (set ENGINE_API_KEY or RSYNC_PASSWORD)", http.StatusServiceUnavailable)
+			return
+		}
+		if !syncpkg.ValidEngineAPIKey(r) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (a *App) startLogTailer() {
