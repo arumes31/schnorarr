@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"schnorarr/internal/monitor/config"
 	"schnorarr/internal/monitor/database"
+	"schnorarr/internal/monitor/notification"
 	"schnorarr/internal/sync"
 )
 
@@ -65,6 +67,9 @@ func (h *Handlers) GetProgressInfo() (progress, speed, eta string, queued int, s
 
 func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !requirePOST(w, r) {
+			return
+		}
 		for _, e := range h.engineProvider() {
 			e.Resume()
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "false")
@@ -75,6 +80,9 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GlobalPause(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !requirePOST(w, r) {
+			return
+		}
 		for _, e := range h.engineProvider() {
 			e.Pause()
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "true")
@@ -91,6 +99,9 @@ func (h *Handlers) GlobalPause(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GlobalResume(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !requirePOST(w, r) {
+			return
+		}
 		for _, e := range h.engineProvider() {
 			e.Resume()
 			_ = database.SaveSetting("engine_paused_"+e.GetConfig().ID, "false")
@@ -176,6 +187,9 @@ func (h *Handlers) EnginePreview(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) EngineAction(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !requirePOST(w, r) {
+			return
+		}
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(parts) < 4 {
 			http.Error(w, "Invalid", 400)
@@ -252,6 +266,9 @@ func (h *Handlers) EngineAlias(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) UpdateSyncMode(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !requirePOST(w, r) {
+			return
+		}
 		mode := r.FormValue("mode")
 		if mode != "dry" && mode != "manual" && mode != "auto" {
 			http.Error(w, "Invalid", 400)
@@ -270,6 +287,9 @@ func (h *Handlers) UpdateSyncMode(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) UpdateAutoApprove(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !requirePOST(w, r) {
+			return
+		}
 		val := r.FormValue("auto_approve")
 		_ = database.SaveSetting("auto_approve", val)
 		for _, e := range h.engineProvider() {
@@ -308,6 +328,9 @@ func (h *Handlers) UpdateSenderOverride(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handlers) TestNotify(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !requirePOST(w, r) {
+			return
+		}
 		go h.notifier.Send("Test from Dashboard", "INFO")
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
@@ -406,7 +429,15 @@ func (h *Handlers) SetScheduler(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) SetNotifications(w http.ResponseWriter, r *http.Request) {
 	h.auth(func(w http.ResponseWriter, r *http.Request) {
-		h.config.DiscordWebhook = r.FormValue("webhook_url")
+		if !requirePOST(w, r) {
+			return
+		}
+		webhook := strings.TrimSpace(r.FormValue("webhook_url"))
+		if err := notification.ValidateDiscordWebhook(webhook); err != nil {
+			http.Error(w, "Invalid webhook URL: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		h.config.DiscordWebhook = webhook
 		_ = h.config.Save()
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})(w, r)
@@ -417,13 +448,24 @@ func (h *Handlers) ExportHistory(w http.ResponseWriter, r *http.Request) {
 		history, _ := database.GetHistory(0, 0, "")
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", "attachment;filename=schnorarr-history.csv")
-		if _, err := fmt.Fprintln(w, "Timestamp,Action,Path,Size"); err != nil {
+		cw := csv.NewWriter(w)
+		if err := cw.Write([]string{"Timestamp", "Action", "Path", "Size"}); err != nil {
 			return
 		}
 		for _, item := range history {
-			if _, err := fmt.Fprintf(w, "%s,%s,\"%s\",%s\n", item.Time, item.Action, item.Path, item.Size); err != nil {
+			row := []string{csvCell(item.Time), csvCell(item.Action), csvCell(item.Path), csvCell(item.Size)}
+			if err := cw.Write(row); err != nil {
 				return
 			}
 		}
+		cw.Flush()
 	})(w, r)
+}
+
+// csvCell neutralises spreadsheet formulas in exported cells (CSV injection).
+func csvCell(v string) string {
+	if v != "" && strings.ContainsRune("=+-@\t\r", rune(v[0])) {
+		return "'" + v
+	}
+	return v
 }

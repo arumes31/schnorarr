@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
+	"log"
 	"net/http"
 	"os"
 
@@ -23,8 +26,11 @@ var (
 	AdminPass   string
 )
 
+// legacyDefaultAdminPass was shipped as the default ADMIN_PASS and is rejected.
+const legacyDefaultAdminPass = "schnorarr"
+
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: sameOrigin,
 }
 
 type Session struct {
@@ -43,19 +49,25 @@ type Handlers struct {
 	bwManager      *syncpkg.BandwidthManager
 	sessions       map[string]Session
 	sessionMu      sync.RWMutex
+	loginLimiter   loginLimiter
 }
 
 // New creates a new handlers instance
 func New(cfg *config.Config, healthState *health.State, wsHub *ws.Hub, db *sql.DB, notifier *notification.Service, engines func() []*syncpkg.Engine, bwManager *syncpkg.BandwidthManager) *Handlers {
-	// Load auth settings from env
-	AuthEnabled = os.Getenv("AUTH_ENABLED") == "true"
+	// Load auth settings from env. Auth is on unless explicitly disabled.
+	AuthEnabled = os.Getenv("AUTH_ENABLED") != "false"
+	if !AuthEnabled {
+		log.Printf("WARNING: dashboard authentication is disabled (AUTH_ENABLED=false); anyone who can reach the dashboard can control sync")
+	}
 	AdminUser = os.Getenv("ADMIN_USER")
 	if AdminUser == "" {
 		AdminUser = "admin"
 	}
 	AdminPass = os.Getenv("ADMIN_PASS")
-	if AdminPass == "" {
-		AdminPass = "schnorarr"
+	if AuthEnabled && (AdminPass == "" || AdminPass == legacyDefaultAdminPass) {
+		// Never fall back to a well-known password: generate one for this run.
+		AdminPass = generatePassword()
+		log.Printf("WARNING: ADMIN_PASS is unset or uses the old default; generated a temporary dashboard password for user %q: %s (set ADMIN_PASS to choose your own)", AdminUser, AdminPass)
 	}
 
 	return &Handlers{
@@ -93,4 +105,12 @@ func (h *Handlers) GetUser(r *http.Request) string {
 	}
 
 	return session.User
+}
+
+func generatePassword() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatalf("failed to generate dashboard password: %v", err)
+	}
+	return hex.EncodeToString(b)
 }

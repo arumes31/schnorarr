@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"schnorarr/internal/sync"
 )
 
 func TestHandlers_Login(t *testing.T) {
@@ -29,6 +31,7 @@ func TestHandlers_Login(t *testing.T) {
 	form.Add("password", "password")
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Forwarded-Proto", "https")
 	w := httptest.NewRecorder()
 
 	h.Login(w, req)
@@ -54,7 +57,10 @@ func TestHandlers_Login(t *testing.T) {
 		t.Error("Expected cookie to be HttpOnly")
 	}
 	if !sessionCookie.Secure {
-		t.Error("Expected cookie to be Secure")
+		t.Error("Expected cookie to be Secure behind HTTPS")
+	}
+	if sessionCookie.SameSite != http.SameSiteStrictMode {
+		t.Error("Expected cookie to be SameSite=Strict")
 	}
 
 	// Verify session storage
@@ -149,5 +155,144 @@ func TestHandlers_GetUser(t *testing.T) {
 	user = h.GetUser(req)
 	if user != "unknown" {
 		t.Errorf("Expected unknown, got %s", user)
+	}
+}
+
+func loginRequest(user, pass string) *http.Request {
+	form := url.Values{"username": {user}, "password": {pass}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return req
+}
+
+func TestHandlers_LoginPlainHTTPCookieNotSecure(t *testing.T) {
+	t.Setenv("ADMIN_PASS", "password")
+	h := New(nil, nil, nil, nil, nil, nil, nil)
+	w := httptest.NewRecorder()
+	h.Login(w, loginRequest("admin", "password"))
+	cookies := w.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Secure {
+		t.Fatalf("expected one non-Secure session cookie on plain HTTP, got %+v", cookies)
+	}
+}
+
+func TestHandlers_AuthDefaults(t *testing.T) {
+	t.Setenv("AUTH_ENABLED", "")
+	t.Setenv("ADMIN_PASS", "")
+	New(nil, nil, nil, nil, nil, nil, nil)
+	if !AuthEnabled {
+		t.Error("auth must be enabled by default")
+	}
+	if AdminPass == "" || AdminPass == legacyDefaultAdminPass {
+		t.Errorf("expected a generated password, got %q", AdminPass)
+	}
+	t.Setenv("ADMIN_PASS", legacyDefaultAdminPass)
+	New(nil, nil, nil, nil, nil, nil, nil)
+	if AdminPass == legacyDefaultAdminPass {
+		t.Error("legacy default password must be rejected")
+	}
+	t.Setenv("AUTH_ENABLED", "false")
+	New(nil, nil, nil, nil, nil, nil, nil)
+	if AuthEnabled {
+		t.Error("AUTH_ENABLED=false must disable auth")
+	}
+}
+
+func TestHandlers_LoginRateLimit(t *testing.T) {
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("ADMIN_PASS", "password")
+	h := New(nil, nil, nil, nil, nil, nil, nil)
+	for i := 0; i < loginMaxFailures; i++ {
+		w := httptest.NewRecorder()
+		h.Login(w, loginRequest("admin", "wrong"))
+		if w.Code != http.StatusOK {
+			t.Fatalf("attempt %d: got %d", i, w.Code)
+		}
+	}
+	w := httptest.NewRecorder()
+	h.Login(w, loginRequest("admin", "password"))
+	if w.Code != http.StatusTooManyRequests || len(w.Result().Cookies()) != 0 {
+		t.Fatalf("expected lockout after %d failures, got %d", loginMaxFailures, w.Code)
+	}
+}
+
+func TestHandlers_LogoutRevokesSession(t *testing.T) {
+	t.Setenv("AUTH_ENABLED", "true")
+	h := New(nil, nil, nil, nil, nil, nil, nil)
+	h.sessions["tok"] = Session{User: "admin", Expires: time.Now().Add(time.Hour)}
+	h.sessions["old"] = Session{User: "admin", Expires: time.Now().Add(-time.Hour)}
+	req := httptest.NewRequest("GET", "/logout", nil)
+	req.AddCookie(&http.Cookie{Name: "schnorarr_session", Value: "tok"})
+	h.Logout(httptest.NewRecorder(), req)
+	if _, ok := h.sessions["tok"]; ok {
+		t.Error("session still valid after logout")
+	}
+	t.Setenv("ADMIN_PASS", "password")
+	h2 := New(nil, nil, nil, nil, nil, nil, nil)
+	h2.sessions["old"] = Session{User: "admin", Expires: time.Now().Add(-time.Hour)}
+	h2.Login(httptest.NewRecorder(), loginRequest("admin", "password"))
+	if _, ok := h2.sessions["old"]; ok {
+		t.Error("expired session not swept on login")
+	}
+}
+
+func TestHandlers_CSRFAndMethod(t *testing.T) {
+	t.Setenv("AUTH_ENABLED", "false")
+	h := New(nil, nil, nil, nil, nil, func() []*sync.Engine { return nil }, nil)
+
+	w := httptest.NewRecorder()
+	h.GlobalPause(w, httptest.NewRequest("GET", "/pause", nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET on mutating route returned %d", w.Code)
+	}
+
+	req := httptest.NewRequest("POST", "http://dash.local/settings/sync-mode", strings.NewReader("mode=auto"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	w = httptest.NewRecorder()
+	h.UpdateSyncMode(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("cross-site POST returned %d", w.Code)
+	}
+
+	req = httptest.NewRequest("POST", "http://dash.local/pause", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	w = httptest.NewRecorder()
+	h.GlobalPause(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("foreign Origin POST returned %d", w.Code)
+	}
+}
+
+func TestSameOriginWebSocket(t *testing.T) {
+	cases := []struct {
+		origin, site string
+		want         bool
+	}{
+		{"", "", true},
+		{"http://dash.local", "", true},
+		{"http://evil.example", "", false},
+		{"", "cross-site", false},
+		{"http://dash.local", "same-origin", true},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest("GET", "http://dash.local/ws", nil)
+		if tc.origin != "" {
+			req.Header.Set("Origin", tc.origin)
+		}
+		if tc.site != "" {
+			req.Header.Set("Sec-Fetch-Site", tc.site)
+		}
+		if got := sameOrigin(req); got != tc.want {
+			t.Errorf("origin=%q site=%q: got %v want %v", tc.origin, tc.site, got, tc.want)
+		}
+	}
+}
+
+func TestCSVCell(t *testing.T) {
+	for in, want := range map[string]string{"=cmd()": "'=cmd()", "+1": "'+1", "@x": "'@x", "-2": "'-2", "movie.mkv": "movie.mkv", "": ""} {
+		if got := csvCell(in); got != want {
+			t.Errorf("csvCell(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

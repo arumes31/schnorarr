@@ -4,7 +4,7 @@ services:
     environment:
       - MODE=receiver
       - RSYNC_USER=${RSYNC_USER:-syncuser}
-      - RSYNC_PASSWORD=${RSYNC_PASSWORD:-secretpassword}
+      - RSYNC_PASSWORD=${RSYNC_PASSWORD:?Set RSYNC_PASSWORD to a strong shared secret}
       # - TAILSCALE_AUTHKEY=tskey-auth-xxxx
       # - TS_HOSTNAME=schnorarr-receiver
       # - TAILSCALE_UP_ARGS=--accept-routes
@@ -12,6 +12,7 @@ services:
       - ./receiver:/data
       - receiver_config:/config
       - receiver_state:/var/lib/tailscale
+    # NET_ADMIN and /dev/net/tun are only needed when TAILSCALE_AUTHKEY is set.
     cap_add:
       - NET_ADMIN
     devices:

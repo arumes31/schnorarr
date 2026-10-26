@@ -7,7 +7,7 @@ services:
       - DEST_MODULE=video-sync
       - SYNC_INCLUDE=*.mkv,*.mp4,*.avi
       - RSYNC_USER=${RSYNC_USER:-syncuser}
-      - RSYNC_PASSWORD=${RSYNC_PASSWORD:-secretpassword}
+      - RSYNC_PASSWORD=${RSYNC_PASSWORD:?Set RSYNC_PASSWORD to a strong shared secret}
       - BWLIMIT_MBPS=${BWLIMIT_MBPS:-50}
       - MIN_DISK_SPACE_GB=${MIN_DISK_SPACE_GB:-0}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
@@ -16,7 +16,8 @@ services:
       - POLL_INTERVAL=${POLL_INTERVAL:-60}
       - AUTH_ENABLED=${AUTH_ENABLED:-true}
       - ADMIN_USER=${ADMIN_USER:-admin}
-      - ADMIN_PASS=${ADMIN_PASS:-schnorarr}
+      # Leave ADMIN_PASS empty to get a temporary password in the startup log.
+      - ADMIN_PASS=${ADMIN_PASS:-}
       - SYNC_1_SOURCE=/data/movies
       - SYNC_1_TARGET=movies
       - SYNC_1_RULE=flat
@@ -36,6 +37,7 @@ services:
     volumes:
       - ./sender:/data
       - sender_config:/config
+    # NET_ADMIN and /dev/net/tun are only needed when TAILSCALE_AUTHKEY is set.
     cap_add:
       - NET_ADMIN
     devices:

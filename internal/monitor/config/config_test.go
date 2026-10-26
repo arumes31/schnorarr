@@ -4,6 +4,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 )
@@ -117,7 +118,11 @@ func TestSave(t *testing.T) {
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save to isolated path failed: %v", err)
 	}
-	if _, err := os.Stat(ConfigPath); err != nil {
+	info, err := os.Stat(ConfigPath)
+	if err != nil {
 		t.Fatalf("Expected config file to exist after Save: %v", err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+		t.Errorf("config holds secrets and must be 0600, got %o", info.Mode().Perm())
 	}
 }
