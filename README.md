@@ -58,7 +58,7 @@ go test ./...
 
 ## 🛠️ Tech Stack
 
-*   **Backend:** Go (Golang) 1.21+
+*   **Backend:** Go (Golang) 1.27.3+
 *   **Database:** SQLite (embedded, zero-conf)
 *   **Frontend:** HTML5, CSS3 (Variables), Vanilla JS (No heavy frameworks)
 *   **Communication:** WebSockets (Gorilla)
@@ -242,7 +242,7 @@ go build -o schnorarr ./cmd/monitor
 ## 🛣️ Path Mapping Guide
 
 It is important to understand how Schnorarr constructs the final rsync destination path. The formula is:
-`RECIEVER_IP / DEST_MODULE / SYNC_N_TARGET`
+`RECEIVER_IP / DEST_MODULE / SYNC_N_TARGET`
 
 | Variable | Scope | Example Value | Resulting Path |
 | :--- | :--- | :--- | :--- |
@@ -333,6 +333,9 @@ Beyond the basic setup, you can fine-tune Schnorarr using these environment vari
 | `MIN_DISK_SPACE_GB` | (Sender) Stop syncing if source disk space falls below this. | `0` (Disabled) |
 | `MAX_RETRIES` | (Sender) Number of attempts to connect to receiver before failing. | `30` |
 | `CONFIG_DIR` | Path to store logs and database. | `/config` |
+| `DB_PATH` | Path to the SQLite database file. | `filepath.Join(CONFIG_DIR, "schnorarr.db")` |
+| `SOURCE_DIR` | (Receiver) Root directory for manifests and synchronized targets. | `/data` |
+| `RSYNC_MODULE_PATH` | (Receiver) Base filesystem path corresponding to the rsync module root. | `/data` |
 | `BWLIMIT_MBPS` | Initial global bandwidth limit for all transfers in Mbps. Shared across active engines and adjustable at runtime from Bandwidth & quiet hours; the saved dashboard value wins over this env var. | `0` (Unlimited) |
 | `RSYNC_PASSWORD` | Required: shared password for rsync transfers and the receiver API. | - |
 | `RSYNC_HOSTS_ALLOW` | (Receiver) rsync `hosts allow` value, e.g. the sender IP or `100.64.0.0/10`. | `*` |
@@ -348,16 +351,33 @@ Schnorarr is optimized for low CPU usage:
 
 ## 🔌 API Reference
 
-Power users can interact with Schnorarr via its REST API:
+Power users can interact with Schnorarr via its HTTP and WebSocket endpoints:
+
+### Sender (Orchestrator) Endpoints
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
 | `/health` | `GET` | Returns JSON status of sender and receiver. |
 | `/history` | `GET` | Returns the last 50 sync events. |
-| `/api/engines/bulk` | `POST` | `{"action": "pause"\|"resume"}` - Controls all engines. |
+| `/history/export` | `GET` | Exports complete sync event history as a downloadable file. |
+| `/api/settings/bwlimit` | `POST` | Updates the global bandwidth limit dynamically. |
+| `/api/storage-ready` | `GET` | Validates target storage readiness and shared token verification. |
+| `/ws` | `GET` | Real-time WebSocket connection for live transfers, events, and log streams. |
+| `/api/engines/bulk` | `POST` | `{"action": "pause"\|"resume"}` - Controls all engines simultaneously. |
 | `/api/engine/:id/sync` | `POST` | Triggers immediate manual sync for engine `id`. |
 | `/api/engine/:id/pause` | `POST` | Pauses a specific engine. |
+| `/api/engine/:id/resume` | `POST` | Resumes a specific engine. |
 | `/api/engine/:id/preview` | `GET` | Returns JSON list of files that *would* be synced (Dry Run). |
+| `/api/engine/:id/alias` | `POST` | Sets a custom alias label for engine `id`. |
+| `/api/engine/:id/shared-token` | `GET` | Retrieves shared token verification file instructions. |
+
+### Receiver Endpoints (Authenticated via `ENGINE_API_KEY` / `RSYNC_PASSWORD`)
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/manifest` | `POST` | Computes and returns directory file manifests and hash digests for diffing. |
+| `/api/stat` | `POST` | Returns metadata and existence status for requested remote files. |
+| `/api/delete` | `POST` | Safely removes deleted or pruned files from remote storage. |
 
 ## 🛠️ Troubleshooting
 
@@ -367,9 +387,7 @@ Power users can interact with Schnorarr via its REST API:
 
 ## 🖼️ Screenshots
 
-<div align="center">
-  <img src="https://via.placeholder.com/800x450/0a0b10/00ffad?text=Dashboard+Preview" alt="Dashboard" width="800"/>
-</div>
+The responsive dark dashboard is served directly by the sender on port `8080` (e.g. `http://localhost:8080`), featuring real-time engine status cards, live transfer gauges, and log inspection.
 
 ## 📜 License
 

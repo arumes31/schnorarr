@@ -61,5 +61,7 @@ graphify-out/
 
 # Local design docs - never committed
 docs/
+.stfolder/
+.stignore
 .impeccable/
 PRODUCT.md
