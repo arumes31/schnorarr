@@ -3,6 +3,12 @@ name: OpenRabbit Reviewer
 on:
   pull_request:
     types: [opened, reopened, edited, synchronize]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.stignore'
 
 permissions:
   contents: read

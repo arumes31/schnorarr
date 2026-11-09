@@ -4,8 +4,20 @@ on:
   push:
     branches: [ "main", "v2_test" ]
     tags: [ 'v*.*.*' ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.stignore'
   pull_request:
     branches: [ "main", "v2_test" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.stignore'
 
 env:
   REGISTRY: ghcr.io

@@ -2,6 +2,12 @@ name: strix-penetration-test
 
 on:
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.stignore'
   workflow_dispatch:
 
 # Read-only by default; only the comment job below gets a write scope.
@@ -35,6 +41,7 @@ jobs:
         timeout-minutes: 5
         with:
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
 
       - name: Check scan configuration
