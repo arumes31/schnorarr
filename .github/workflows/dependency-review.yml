@@ -1,6 +1,12 @@
 name: Dependency Review
 on:
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.stignore'
 permissions:
   contents: read
 concurrency:
