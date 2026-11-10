@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// remoteClient refuses redirects so the shared-token header is never forwarded
+// to another host; the readiness endpoint never redirects.
+var remoteClient = &http.Client{
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
+
 // CheckRemote requires a fresh readiness response, not liveness from /health.
 // Older receivers without the readiness endpoint fail closed.
 func CheckRemote(ctx context.Context, endpoint string, token ...string) error {
@@ -21,7 +27,7 @@ func CheckRemote(ctx context.Context, endpoint string, token ...string) error {
 	if len(token) > 0 {
 		req.Header.Set("X-Schnorarr-Shared-Token", token[0])
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := remoteClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("%w: receiver: %w", ErrUnavailable, err)
 	}
