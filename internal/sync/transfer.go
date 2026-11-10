@@ -373,6 +373,11 @@ func getRemoteFileSizeWithContext(ctx context.Context, host, path string) int64 
 		}
 	}()
 
+	// A refused redirect (or any other error status) carries no size data.
+	if resp.StatusCode != http.StatusOK {
+		return 0
+	}
+
 	var response struct {
 		Exists bool  `json:"exists"`
 		Size   int64 `json:"size"`

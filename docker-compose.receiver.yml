@@ -4,6 +4,7 @@ services:
     environment:
       - MODE=receiver
       - AUTH_ENABLED=${AUTH_ENABLED:-true}
+      - ADMIN_USER=${ADMIN_USER:-admin}
       # Leave ADMIN_PASS empty to get a temporary password in the startup log.
       - ADMIN_PASS=${ADMIN_PASS:-}
       - RSYNC_USER=${RSYNC_USER:-syncuser}
