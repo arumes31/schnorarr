@@ -2,7 +2,7 @@ name: strix-penetration-test
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -169,6 +169,7 @@ jobs:
           SUMMARY: ${{ needs.security-scan.outputs.summary }}
           EXIT_CODE: ${{ needs.security-scan.outputs.exit_code }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         shell: bash
         run: |
           marker='<!-- strix-report -->'
@@ -179,6 +180,9 @@ jobs:
             error) status="scan failed, result inconclusive" ;;
             *) status="scan did not run (missing credentials, install failure or cancellation)" ;;
           esac
+          if [[ "$DRAFT" == true && -z "$OUTCOME" ]]; then
+            status="scan skipped while the PR is a draft; it runs again when marked ready for review"
+          fi
 
           # Scanner output is untrusted: escape Markdown and neutralise HTML and
           # @mentions before it goes into a comment posted by the bot.
