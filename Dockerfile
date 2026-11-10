@@ -64,9 +64,9 @@ ENV TAILSCALE_UP_ARGS=""
 ENV RSYNC_USER=""
 ENV RSYNC_PASSWORD=""
 ENV BWLIMIT_MBPS=""
-ENV MODE=sender \
-    AUTH_ENABLED=false
+# Dashboard auth stays on unless the operator explicitly sets AUTH_ENABLED=false.
+# ADMIN_PASS is intentionally not baked in: when unset, a temporary password is
+# generated and printed in the container log.
 ENV ADMIN_USER="admin"
-ENV ADMIN_PASS="schnorarr"
 
 ENTRYPOINT ["/scripts/entrypoint.sh"]

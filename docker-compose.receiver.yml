@@ -3,6 +3,9 @@ services:
     build: .
     environment:
       - MODE=receiver
+      - AUTH_ENABLED=${AUTH_ENABLED:-true}
+      # Leave ADMIN_PASS empty to get a temporary password in the startup log.
+      - ADMIN_PASS=${ADMIN_PASS:-}
       - RSYNC_USER=${RSYNC_USER:-syncuser}
       - RSYNC_PASSWORD=${RSYNC_PASSWORD:?Set RSYNC_PASSWORD to a strong shared secret}
       # - TAILSCALE_AUTHKEY=tskey-auth-xxxx

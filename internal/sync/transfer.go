@@ -358,7 +358,8 @@ func getRemoteFileSizeWithContext(ctx context.Context, host, path string) int64 
 	setEngineAPIKey(req)
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:       5 * time.Second,
+		CheckRedirect: RefuseRedirect,
 	}
 
 	resp, err := client.Do(req)
@@ -449,7 +450,8 @@ func getRemoteFileSize(host, path string) int64 {
 	log.Printf("[Transferer] DEBUG: Querying stat API: %s", apiURL)
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:       5 * time.Second,
+		CheckRedirect: RefuseRedirect,
 	}
 
 	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
