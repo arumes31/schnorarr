@@ -2,6 +2,7 @@ name: strix-penetration-test
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -21,7 +22,7 @@ concurrency:
 jobs:
   security-scan:
     name: Strix (advisory)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft && github.event.pull_request.user.login != 'dependabot[bot]')
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 90
@@ -148,7 +149,9 @@ jobs:
     # write-capable token. Runs for every same-repo PR scan (the scan job is
     # skipped for forks), including ones that produced no result, so an older
     # comment is never left looking current.
-    if: always() && github.event_name == 'pull_request' && needs.security-scan.result != 'skipped'
+    # Same-repo drafts are skipped by the scan; still update the comment so an
+    # older result is never left looking current.
+    if: always() && github.event_name == 'pull_request' && (needs.security-scan.result != 'skipped' || (github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 5
@@ -166,6 +169,7 @@ jobs:
           SUMMARY: ${{ needs.security-scan.outputs.summary }}
           EXIT_CODE: ${{ needs.security-scan.outputs.exit_code }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         shell: bash
         run: |
           marker='<!-- strix-report -->'
@@ -176,6 +180,9 @@ jobs:
             error) status="scan failed, result inconclusive" ;;
             *) status="scan did not run (missing credentials, install failure or cancellation)" ;;
           esac
+          if [[ "$DRAFT" == true && -z "$OUTCOME" ]]; then
+            status="scan skipped while the PR is a draft; it runs again when marked ready for review"
+          fi
 
           # Scanner output is untrusted: escape Markdown and neutralise HTML and
           # @mentions before it goes into a comment posted by the bot.

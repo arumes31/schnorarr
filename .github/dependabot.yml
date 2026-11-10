@@ -4,10 +4,18 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      gomod-minor-patch:
+        update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    # Keeps codeql-action init/analyze bumps in one PR (split PRs fail CodeQL
+    # on the version mismatch) and all action bumps together.
+    groups:
+      github-actions:
+        patterns: ["*"]
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
