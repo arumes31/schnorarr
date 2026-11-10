@@ -12,7 +12,16 @@ import (
 const EngineAPIHeader = "X-Schnorarr-Engine-Key"
 
 // engineHTTPClient is used for engine API calls without their own deadline.
-var engineHTTPClient = &http.Client{Timeout: 2 * time.Minute}
+var engineHTTPClient = &http.Client{Timeout: 2 * time.Minute, CheckRedirect: RefuseRedirect}
+
+// RefuseRedirect is an http.Client CheckRedirect policy for calls that carry a
+// shared secret header. The engine and storage APIs never redirect, and Go only
+// strips standard credential headers on cross-host redirects, so following one
+// could forward the secret to another host. The redirect response is returned
+// unfollowed and treated as a non-200 by callers.
+func RefuseRedirect(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
+}
 
 // EngineAPIKey returns the shared engine API secret. ENGINE_API_KEY wins;
 // otherwise RSYNC_PASSWORD is used, which both sides already share.
