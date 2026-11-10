@@ -17,6 +17,7 @@ jobs:
   release:
     name: Build & Release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         goos: [linux, windows, darwin]
